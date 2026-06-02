@@ -15,6 +15,53 @@ type QueueRow = {
   title: string
 }
 
+type NowPlayingPayload = {
+  videoId: string
+  title: string
+  artist: string
+  updatedAt: number
+}
+
+type QueueStoreState = {
+  queue: {
+    queueContextParams: string
+    items: unknown[]
+    nextQueueItemId: number
+  }
+}
+
+type QueueDispatch = {
+  dispatch: (action: {
+    type: string
+    payload?: unknown
+  }) => void
+  store: {
+    store: {
+      getState: () => QueueStoreState
+    }
+  }
+}
+
+type QueueElement = HTMLElement & {
+  queue?: QueueDispatch
+}
+
+type YtmApp = HTMLElement & {
+  networkManager?: {
+    fetch: <TResponse, TBody>(path: string, body: TBody) => Promise<TResponse>
+  }
+}
+
+type PlayerBar = HTMLElement & {
+  playerApi?: {
+    getVideoData?: () => { video_id?: string }
+  }
+}
+
+type GetQueueResponse = {
+  queueDatas?: { content?: unknown }[]
+}
+
 function log(msg: string, ...rest: unknown[]) {
   console.log('[YTMQ]', msg, ...rest)
 }
@@ -36,35 +83,139 @@ function readParams(): BridgeParams | null {
   return { roomId, sb, key }
 }
 
-function addVideoToQueue(videoId: string) {
+function getQueueElement(): QueueElement | null {
+  return document.querySelector('#queue')
+}
+
+function getYtmApp(): YtmApp | null {
+  return document.querySelector('ytmusic-app')
+}
+
+function readNowPlaying(): NowPlayingPayload | null {
+  const bar = document.querySelector('ytmusic-player-bar') as PlayerBar | null
+  const title =
+    bar?.querySelector('.title')?.textContent?.trim() ??
+    bar?.querySelector('[title]')?.textContent?.trim() ??
+    ''
+  const artist =
+    bar?.querySelector('.byline')?.textContent?.trim() ??
+    bar?.querySelector('.subtitle')?.textContent?.trim() ??
+    ''
+
+  let videoId = new URLSearchParams(location.search).get('v') ?? ''
+  if (!videoId) {
+    videoId = bar?.playerApi?.getVideoData?.()?.video_id ?? ''
+  }
+
+  if (!videoId && !title) return null
+
+  return {
+    videoId,
+    title: title || 'Unknown track',
+    artist,
+    updatedAt: Date.now(),
+  }
+}
+
+function dispatchQueueAddLegacy(videoId: string): boolean {
   const playerBar = document.querySelector('ytmusic-player-bar')
-  if (!playerBar) {
-    log('Player bar not found — start playing any song, then retry.')
+  if (!playerBar) return false
+
+  const queueTarget = {
+    videoId,
+    onEmptyQueue: { autoFillType: 'AUTO_FILL_TYPE_WATCH' as const },
+  }
+
+  const endpoint = {
+    queueAddEndpoint: {
+      queueTarget,
+      queueInsertPosition: 'INSERT_AT_END' as const,
+    },
+  }
+
+  const detail = {
+    actionName: 'yt-service-request',
+    args: [playerBar, endpoint],
+    optionalAction: false,
+    returnValue: [] as unknown[],
+  }
+
+  for (const target of [
+    getYtmApp(),
+    playerBar,
+    document.querySelector('ytmusic-player'),
+  ]) {
+    if (!target) continue
+    target.dispatchEvent(
+      new CustomEvent('yt-action', {
+        bubbles: true,
+        cancelable: false,
+        composed: true,
+        detail,
+      }),
+    )
+  }
+
+  return true
+}
+
+async function addVideoToQueue(videoId: string): Promise<boolean> {
+  if (!location.hostname.includes('music.youtube.com')) {
+    log('Open music.youtube.com — queue add only works there.')
     return false
   }
 
-  playerBar.dispatchEvent(
-    new CustomEvent('yt-action', {
-      bubbles: true,
-      cancelable: false,
-      composed: true,
-      detail: {
-        actionName: 'yt-service-request',
-        args: [
-          playerBar,
-          {
-            queueAddEndpoint: {
-              queueTarget: { videoId },
-              queueInsertPosition: 'INSERT_AT_END',
-            },
-          },
-        ],
-        optionalAction: false,
-        returnValue: [],
-      },
-    }),
-  )
-  return true
+  const queueEl = getQueueElement()
+  const app = getYtmApp()
+  const innerStore = queueEl?.queue?.store?.store
+
+  if (innerStore && app?.networkManager) {
+    try {
+      const state = innerStore.getState().queue
+      const response = await app.networkManager.fetch<
+        GetQueueResponse,
+        { queueContextParams: string; videoIds: string[] }
+      >('/music/get_queue', {
+        queueContextParams: state.queueContextParams,
+        videoIds: [videoId],
+      })
+
+      const items = (response.queueDatas ?? [])
+        .map((row) => row?.content)
+        .filter(Boolean)
+
+      if (items.length === 0) {
+        log('Track not in YouTube Music catalog:', videoId)
+        return false
+      }
+
+      const index =
+        state.items.length > 0 ? state.items.length - 1 : 0
+
+      queueEl!.queue!.dispatch({
+        type: 'ADD_ITEMS',
+        payload: {
+          nextQueueItemId: state.nextQueueItemId,
+          index,
+          items,
+          shuffleEnabled: false,
+          shouldAssignIds: true,
+        },
+      })
+
+      return true
+    } catch (err) {
+      log('Queue store add failed, trying legacy event', err)
+    }
+  }
+
+  if (!getQueueElement()) {
+    log(
+      'Queue panel not ready — play any song on YouTube Music, open the queue, then retry.',
+    )
+  }
+
+  return dispatchQueueAddLegacy(videoId)
 }
 
 function showToast(message: string) {
@@ -118,6 +269,29 @@ async function runBridge() {
   const syncedIds = new Set<string>()
   const supabase: SupabaseClient = createClient(sb, key)
 
+  let lastPlaybackKey = ''
+
+  const playbackChannel = supabase.channel(`ytmq-playback:${roomId}`)
+
+  function publishNowPlaying() {
+    const current = readNowPlaying()
+    if (!current?.videoId) return
+
+    const key = `${current.videoId}|${current.title}|${current.artist}`
+    if (key === lastPlaybackKey) return
+    lastPlaybackKey = key
+
+    void playbackChannel.send({
+      type: 'broadcast',
+      event: 'now_playing',
+      payload: current,
+    })
+  }
+
+  void playbackChannel.subscribe()
+  const playbackTimer = window.setInterval(publishNowPlaying, 2000)
+  publishNowPlaying()
+
   const { data: initial, error: loadError } = await supabase
     .from('queue_items')
     .select('id, video_id, title')
@@ -144,15 +318,22 @@ async function runBridge() {
         filter: `room_id=eq.${roomId}`,
       },
       (payload) => {
-        const row = payload.new as QueueRow | undefined
-        if (!row?.id || !row?.video_id) return
-        if (syncedIds.has(row.id)) return
-        syncedIds.add(row.id)
+        void (async () => {
+          const row = payload.new as QueueRow | undefined
+          if (!row?.id || !row?.video_id) return
+          if (syncedIds.has(row.id)) return
+          syncedIds.add(row.id)
 
-        if (addVideoToQueue(row.video_id)) {
-          showToast(`Added: ${row.title || 'track'}`)
-          log('Added to queue', row.video_id, row.title)
-        }
+          const ok = await addVideoToQueue(row.video_id)
+          if (ok) {
+            showToast(`Added: ${row.title || 'track'}`)
+            log('Added to queue', row.video_id, row.title)
+          } else {
+            syncedIds.delete(row.id)
+            showToast(`Could not add: ${row.title || 'track'}`)
+            log('Failed to add', row.video_id, row.title)
+          }
+        })()
       },
     )
     .subscribe((status) => {
@@ -181,7 +362,7 @@ async function runBridge() {
       let added = 0
       for (const row of (data ?? []) as QueueRow[]) {
         if (syncedIds.has(row.id)) continue
-        if (addVideoToQueue(row.video_id)) {
+        if (await addVideoToQueue(row.video_id)) {
           syncedIds.add(row.id)
           added += 1
         }
@@ -190,7 +371,9 @@ async function runBridge() {
       return added
     },
     stop() {
+      window.clearInterval(playbackTimer)
       void supabase.removeChannel(channel)
+      void supabase.removeChannel(playbackChannel)
       delete window.__YTMQ_BRIDGE__
       showToast('YTMQ disconnected')
     },

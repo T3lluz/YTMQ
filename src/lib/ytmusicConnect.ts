@@ -27,9 +27,8 @@ export function bridgeScriptFetchUrls(): string[] {
 
   const base = import.meta.env.BASE_URL.replace(/\/$/, '')
   const candidates = [
-    // Branch-based Pages serves repo root — bridge is under public/ until Actions deploy.
-    `${origin}${base}/public/ytmusic-bridge.js`,
     `${origin}${base}/ytmusic-bridge.js`,
+    `${origin}${base}/public/ytmusic-bridge.js`,
     BRIDGE_CDN_URL,
   ]
 

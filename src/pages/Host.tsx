@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { QueueList } from '../components/QueueList'
 import { SharePanel } from '../components/SharePanel'
+import { NowPlaying } from '../components/NowPlaying'
 import { YtMusicConnect } from '../components/YtMusicConnect'
 import { useQueue } from '../hooks/useQueue'
 import {
@@ -127,6 +128,8 @@ export function Host() {
       <SharePanel roomId={roomId} code={room.code} />
 
       <YtMusicConnect roomId={roomId} />
+
+      <NowPlaying roomId={roomId} />
 
       <HostQueueMirror key={roomId} roomId={roomId} />
 

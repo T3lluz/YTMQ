@@ -148,7 +148,10 @@ export function YtMusicConnect({ roomId }: YtMusicConnectProps) {
           </li>
           <li className="flex gap-2">
             <span className="font-semibold text-violet-400">3</span>
-            <span>Paste, Enter — look for “YTMQ connected” toast</span>
+            <span>
+              Paste, Enter — look for “YTMQ connected”. Start playing any song
+              and open the queue panel so guest adds appear in Up next.
+            </span>
           </li>
         </ol>
         {copyError && (

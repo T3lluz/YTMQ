@@ -38,6 +38,8 @@ Shared queue for **YouTube Music**: guests use this web app to search and manage
 
 Live site: `https://t3lluz.github.io/YTMQ/` (includes `ytmusic-bridge.js` for host connect).
 
+Guest links and QR codes point at `/YTMQ/room/<id>`. GitHub Pages needs `public/404.html` (copied to `dist/404.html`) plus the redirect script in `index.html` so those deep links load the app instead of a static 404.
+
 ## E2E tests (Playwright)
 
 Requires `.env.local` and a running or auto-started dev server. See [tests/README.md](tests/README.md).

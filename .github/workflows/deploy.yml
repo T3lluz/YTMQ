@@ -45,8 +45,10 @@ jobs:
       - name: Verify build output
         run: |
           test -f dist/index.html
+          test -f dist/404.html
           test -f dist/ytmusic-bridge.js
           grep -q '/YTMQ/assets/' dist/index.html
+          grep -q 'segmentCount' dist/404.html
           ! grep -q '/src/main.tsx' dist/index.html
 
       - uses: actions/upload-pages-artifact@v3
