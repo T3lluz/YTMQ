@@ -37,7 +37,6 @@ export function Room() {
     busyId,
     addTrack,
     removeItem,
-    moveItem,
   } = useQueue(roomId ?? '')
 
   useEffect(() => {
@@ -96,7 +95,9 @@ export function Room() {
       {tab === 'search' && (
         <SearchTab
           nickname={nickname}
-          onAdd={addTrack}
+          onAdd={async (track) => {
+            await addTrack(track)
+          }}
           onAdded={(title) => showToast(`Added “${title}”`)}
         />
       )}
@@ -115,8 +116,6 @@ export function Room() {
             busyId={busyId}
             editable
             onRemove={(id) => void removeItem(id)}
-            onMoveUp={(id) => void moveItem(id, 'up')}
-            onMoveDown={(id) => void moveItem(id, 'down')}
           />
         </section>
       )}

@@ -11,8 +11,6 @@ type QueueListProps = {
   editable?: boolean
   showYtMusicLink?: boolean
   onRemove?: (itemId: string) => void
-  onMoveUp?: (itemId: string) => void
-  onMoveDown?: (itemId: string) => void
 }
 
 export function QueueList({
@@ -22,8 +20,6 @@ export function QueueList({
   editable = false,
   showYtMusicLink = false,
   onRemove,
-  onMoveUp,
-  onMoveDown,
 }: QueueListProps) {
   if (loading) {
     return <p className="py-8 text-center text-zinc-500">Loading queue…</p>
@@ -80,35 +76,15 @@ export function QueueList({
                 </a>
               )}
               {editable && (
-                <>
-                  <button
-                    type="button"
-                    disabled={isBusy || index === 0}
-                    onClick={() => onMoveUp?.(item.id)}
-                    className="min-h-9 rounded-lg border border-zinc-700 px-2 text-sm disabled:opacity-40"
-                    aria-label="Move up"
-                  >
-                    ↑
-                  </button>
-                  <button
-                    type="button"
-                    disabled={isBusy || index === items.length - 1}
-                    onClick={() => onMoveDown?.(item.id)}
-                    className="min-h-9 rounded-lg border border-zinc-700 px-2 text-sm disabled:opacity-40"
-                    aria-label="Move down"
-                  >
-                    ↓
-                  </button>
-                  <button
-                    type="button"
-                    disabled={isBusy}
-                    onClick={() => onRemove?.(item.id)}
-                    className="min-h-9 rounded-lg border border-red-900/60 px-2 text-sm text-red-400 active:bg-red-950 disabled:opacity-40"
-                    aria-label="Remove"
-                  >
-                    ✕
-                  </button>
-                </>
+                <button
+                  type="button"
+                  disabled={isBusy}
+                  onClick={() => onRemove?.(item.id)}
+                  className="min-h-9 rounded-lg border border-red-900/60 px-3 text-sm text-red-400 active:bg-red-950 disabled:opacity-40"
+                  aria-label="Remove"
+                >
+                  Remove
+                </button>
               )}
             </div>
           </li>

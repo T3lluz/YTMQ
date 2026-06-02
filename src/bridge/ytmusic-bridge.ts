@@ -65,6 +65,10 @@ type GetQueueResponse = {
   queueDatas?: { content?: unknown }[]
 }
 
+const PLAY_NEXT = 'INSERT_AFTER_CURRENT_VIDEO' as const
+
+let queueApiReady = false
+
 function log(msg: string, ...rest: unknown[]) {
   console.log('[YTMQ]', msg, ...rest)
 }
@@ -138,42 +142,94 @@ function notifyHostConnected(roomId: string) {
   }
 }
 
-async function waitForQueueApi(maxMs = 20000): Promise<boolean> {
+async function waitForQueueApi(maxMs = 8000): Promise<boolean> {
+  if (queueApiReady) return true
+  if (maxMs <= 0) {
+    queueApiReady = Boolean(getInnerStore() && getYtmApp()?.networkManager)
+    return queueApiReady
+  }
+
   const deadline = Date.now() + maxMs
   while (Date.now() < deadline) {
-    if (getInnerStore() && getYtmApp()?.networkManager) return true
-    await new Promise((r) => window.setTimeout(r, 250))
+    if (getInnerStore() && getYtmApp()?.networkManager) {
+      queueApiReady = true
+      return true
+    }
+    await new Promise((r) => window.setTimeout(r, 100))
   }
-  return Boolean(getInnerStore() && getYtmApp()?.networkManager)
+
+  queueApiReady = Boolean(getInnerStore() && getYtmApp()?.networkManager)
+  return queueApiReady
 }
 
-function queueItemsIncludeVideo(items: unknown[], videoId: string): boolean {
-  try {
-    return JSON.stringify(items).includes(`"${videoId}"`)
-  } catch {
-    return false
+function queueItemRenderer(item: unknown): Record<string, unknown> | null {
+  if (!item || typeof item !== 'object') return null
+  const obj = item as Record<string, unknown>
+  const direct = obj.playlistPanelVideoRenderer
+  if (direct && typeof direct === 'object') {
+    return direct as Record<string, unknown>
   }
+  const wrapper = obj.playlistPanelVideoWrapperRenderer as
+    | Record<string, unknown>
+    | undefined
+  const primary = wrapper?.primaryRenderer as Record<string, unknown> | undefined
+  const nested = primary?.playlistPanelVideoRenderer
+  if (nested && typeof nested === 'object') {
+    return nested as Record<string, unknown>
+  }
+  return null
 }
 
-async function waitForQueueToInclude(
+function parseVideoIdFromQueueItem(item: unknown): string | null {
+  const renderer = queueItemRenderer(item)
+  const videoId = renderer?.videoId
+  return typeof videoId === 'string' && videoId.length > 0 ? videoId : null
+}
+
+function getSelectedIndexFromItems(items: unknown[]): number {
+  const idx = items.findIndex((item) => queueItemRenderer(item)?.selected === true)
+  if (idx >= 0) return idx
+
+  const innerStore = getInnerStore()
+  const selected = innerStore?.getState().queue.selectedItemIndex
+  if (typeof selected === 'number' && selected >= 0 && selected < items.length) {
+    return selected
+  }
+
+  return 0
+}
+
+function playNextInsertIndex(items: unknown[]): number {
+  const selectedIdx = getSelectedIndexFromItems(items)
+  const nextIndex = selectedIdx + 1
+  return nextIndex || items.length
+}
+
+function isVideoAtPlayNext(items: unknown[], videoId: string): boolean {
+  const targetIndex = playNextInsertIndex(items)
+  if (targetIndex >= items.length) return false
+  return parseVideoIdFromQueueItem(items[targetIndex]) === videoId
+}
+
+async function waitForPlayNextPosition(
   innerStore: InnerQueueStore | null,
   videoId: string,
-  beforeStoreCount: number,
-  beforeDomCount: number,
 ): Promise<boolean> {
-  const deadline = Date.now() + 2000
+  const deadline = Date.now() + 1500
   while (Date.now() < deadline) {
     if (innerStore) {
-      const state = innerStore.getState().queue
-      if (
-        state.items.length > beforeStoreCount ||
-        queueItemsIncludeVideo(state.items, videoId)
-      ) {
-        return true
-      }
+      const items = innerStore.getState().queue.items
+      if (isVideoAtPlayNext(items, videoId)) return true
     }
-    if (countDomQueueItems() > beforeDomCount) return true
-    await new Promise((r) => window.setTimeout(r, 80))
+    if (countDomQueueItems() > 0) {
+      const domItems = document.querySelectorAll('ytmusic-player-queue-item')
+      const selectedIdx = getSelectedIndexFromItems(
+        innerStore?.getState().queue.items ?? [],
+      )
+      const target = domItems[selectedIdx + 1]
+      if (target?.textContent?.includes(videoId)) return true
+    }
+    await new Promise((r) => window.setTimeout(r, 50))
   }
   return false
 }
@@ -221,14 +277,6 @@ function nudgeQueueUi(): void {
   }
 }
 
-function playNextInsertIndex(state: QueueStoreState['queue']): number {
-  const selected = state.selectedItemIndex
-  if (typeof selected === 'number' && selected >= 0) {
-    return selected + 1
-  }
-  return state.items.length > 0 ? 1 : 0
-}
-
 async function addVideoViaStoreApi(videoId: string): Promise<boolean> {
   const queueEl = getQueueElement()
   const app = getYtmApp()
@@ -245,9 +293,14 @@ async function addVideoViaStoreApi(videoId: string): Promise<boolean> {
   try {
     const response = await app.networkManager.fetch<
       GetQueueResponse,
-      { queueContextParams: string; videoIds: string[] }
+      {
+        queueContextParams: string
+        videoIds: string[]
+        queueInsertPosition: typeof PLAY_NEXT
+      }
     >('/music/get_queue', {
       queueContextParams: state.queueContextParams,
+      queueInsertPosition: PLAY_NEXT,
       videoIds: [videoId],
     })
 
@@ -260,8 +313,8 @@ async function addVideoViaStoreApi(videoId: string): Promise<boolean> {
       return false
     }
 
-    const beforeCount = state.items.length
-    const index = playNextInsertIndex(state)
+    const freshState = innerStore.getState().queue
+    const index = playNextInsertIndex(freshState.items)
 
     if (typeof queueEl.dispatch !== 'function') {
       throw new Error('Queue dispatch not available')
@@ -270,7 +323,7 @@ async function addVideoViaStoreApi(videoId: string): Promise<boolean> {
     queueEl.dispatch({
       type: 'ADD_ITEMS',
       payload: {
-        nextQueueItemId: state.nextQueueItemId,
+        nextQueueItemId: freshState.nextQueueItemId,
         index,
         items,
         shuffleEnabled: false,
@@ -278,12 +331,7 @@ async function addVideoViaStoreApi(videoId: string): Promise<boolean> {
       },
     })
 
-    return waitForQueueToInclude(
-      innerStore,
-      videoId,
-      beforeCount,
-      countDomQueueItems(),
-    )
+    return waitForPlayNextPosition(innerStore, videoId)
   } catch (err) {
     log('Queue store add failed', err)
     return false
@@ -295,8 +343,6 @@ async function dispatchQueueAddLegacy(videoId: string): Promise<boolean> {
   if (!playerBar) return false
 
   const innerStore = getInnerStore()
-  const beforeStoreCount = innerStore?.getState().queue.items.length ?? 0
-  const beforeDomCount = countDomQueueItems()
 
   const queueTarget = {
     videoId,
@@ -306,7 +352,7 @@ async function dispatchQueueAddLegacy(videoId: string): Promise<boolean> {
   const endpoint = {
     queueAddEndpoint: {
       queueTarget,
-      queueInsertPosition: 'INSERT_AFTER_CURRENT_VIDEO' as const,
+      queueInsertPosition: PLAY_NEXT,
     },
   }
 
@@ -333,12 +379,7 @@ async function dispatchQueueAddLegacy(videoId: string): Promise<boolean> {
     )
   }
 
-  return waitForQueueToInclude(
-    innerStore,
-    videoId,
-    beforeStoreCount,
-    beforeDomCount,
-  )
+  return waitForPlayNextPosition(innerStore, videoId)
 }
 
 async function addVideoPlayNext(videoId: string): Promise<boolean> {
@@ -347,28 +388,64 @@ async function addVideoPlayNext(videoId: string): Promise<boolean> {
     return false
   }
 
-  await waitForQueueApi(12000)
-
-  if (!getInnerStore()) {
+  if (!(await waitForQueueApi(queueApiReady ? 0 : 4000))) {
     nudgeQueueUi()
-    await new Promise((r) => window.setTimeout(r, 600))
-    await waitForQueueApi(5000)
+    await new Promise((r) => window.setTimeout(r, 300))
+    if (!(await waitForQueueApi(3000))) return false
   }
 
-  if (await dispatchQueueAddLegacy(videoId)) return true
+  if (await addVideoViaStoreApi(videoId)) return true
 
-  return addVideoViaStoreApi(videoId)
+  return dispatchQueueAddLegacy(videoId)
 }
 
 async function addVideoPlayNextWithRetry(
   videoId: string,
-  attempts = 6,
+  attempts = 2,
 ): Promise<boolean> {
   for (let i = 0; i < attempts; i += 1) {
     if (await addVideoPlayNext(videoId)) return true
-    await waitForQueueApi(3000)
-    await new Promise((r) => window.setTimeout(r, 400 * (i + 1)))
+    if (i + 1 < attempts) {
+      await new Promise((r) => window.setTimeout(r, 200 * (i + 1)))
+    }
   }
+  return false
+}
+
+function findRemovableQueueIndex(items: unknown[], videoId: string): number {
+  const selectedIdx = getSelectedIndexFromItems(items)
+
+  for (let i = items.length - 1; i > selectedIdx; i -= 1) {
+    if (parseVideoIdFromQueueItem(items[i]) === videoId) return i
+  }
+
+  for (let i = items.length - 1; i >= 0; i -= 1) {
+    if (parseVideoIdFromQueueItem(items[i]) === videoId) return i
+  }
+
+  return -1
+}
+
+async function removeVideoFromQueue(videoId: string): Promise<boolean> {
+  const queueEl = getQueueElement()
+  const innerStore = getInnerStore()
+  if (!queueEl?.dispatch || !innerStore) return false
+
+  const items = innerStore.getState().queue.items
+  const index = findRemovableQueueIndex(items, videoId)
+  if (index < 0) return true
+
+  const beforeCount = items.length
+  queueEl.dispatch({ type: 'REMOVE_ITEM', payload: index })
+
+  const deadline = Date.now() + 1500
+  while (Date.now() < deadline) {
+    const nextItems = innerStore.getState().queue.items
+    if (nextItems.length < beforeCount) return true
+    if (parseVideoIdFromQueueItem(nextItems[index]) !== videoId) return true
+    await new Promise((r) => window.setTimeout(r, 50))
+  }
+
   return false
 }
 
@@ -431,7 +508,7 @@ async function runBridge() {
         pendingRows.pop()
         continue
       }
-      const ok = await addVideoPlayNextWithRetry(row.video_id, 3)
+      const ok = await addVideoPlayNextWithRetry(row.video_id, 2)
       if (!ok) return
       syncedIds.add(row.id)
       pendingRows.pop()
@@ -442,7 +519,7 @@ async function runBridge() {
 
   async function enqueueToYtm(row: QueueRow) {
     if (syncedIds.has(row.id)) return
-    const ok = await addVideoPlayNextWithRetry(row.video_id)
+    const ok = await addVideoPlayNextWithRetry(row.video_id, 2)
     if (ok) {
       syncedIds.add(row.id)
       showToast(`Play next: ${row.title || 'track'}`)
@@ -457,6 +534,21 @@ async function runBridge() {
       )
     }
     void processPending()
+  }
+
+  async function dequeueFromYtm(row: QueueRow) {
+    syncedIds.delete(row.id)
+    pendingRows.splice(
+      pendingRows.findIndex((p) => p.id === row.id),
+      1,
+    )
+    const ok = await removeVideoFromQueue(row.video_id)
+    if (ok) {
+      log('Removed from YT Music queue', row.video_id, row.title)
+      showToast(`Removed: ${row.title || 'track'}`)
+    } else {
+      log('Could not remove from YT Music queue', row.video_id)
+    }
   }
 
   let lastPlaybackKey = ''
@@ -495,18 +587,6 @@ async function runBridge() {
 
   const existingRows = (initial ?? []) as QueueRow[]
 
-  function markSyncedIfAlreadyInYtm(row: QueueRow): boolean {
-    const innerStore = getInnerStore()
-    if (
-      innerStore &&
-      queueItemsIncludeVideo(innerStore.getState().queue.items, row.video_id)
-    ) {
-      syncedIds.add(row.id)
-      return true
-    }
-    return false
-  }
-
   async function syncExistingQueue() {
     const sessionRows = existingRows.filter((row) =>
       isInPlaybackSession(row.created_at, playbackSince),
@@ -526,7 +606,7 @@ async function runBridge() {
       'track(s)',
     )
     for (const row of [...sessionRows].reverse()) {
-      if (syncedIds.has(row.id) || markSyncedIfAlreadyInYtm(row)) continue
+      if (syncedIds.has(row.id)) continue
       await enqueueToYtm(row)
     }
   }
@@ -549,12 +629,31 @@ async function runBridge() {
         void enqueueToYtm({ ...row, created_at: createdAt })
       },
     )
+    .on(
+      'postgres_changes',
+      {
+        event: 'DELETE',
+        schema: 'public',
+        table: 'queue_items',
+        filter: `room_id=eq.${roomId}`,
+      },
+      (payload) => {
+        const row = payload.old as QueueRow | undefined
+        if (!row?.video_id) return
+        void dequeueFromYtm({
+          id: row.id ?? '',
+          video_id: row.video_id,
+          title: row.title ?? '',
+          created_at: row.created_at ?? '',
+        })
+      },
+    )
     .subscribe((status) => {
       if (status === 'SUBSCRIBED') {
         showToast('YTMQ connected')
         log('Subscribed to room', roomId)
         notifyHostConnected(roomId)
-        void waitForQueueApi(25000).then(async () => {
+        void waitForQueueApi(8000).then(async () => {
           await syncExistingQueue()
           await processPending()
         })
@@ -563,12 +662,13 @@ async function runBridge() {
 
   window.setInterval(() => {
     if (pendingRows.length > 0) void processPending()
-  }, 3000)
+  }, 1500)
 
   window.__YTMQ_BRIDGE__ = {
     roomId,
     syncedIds,
     addVideoPlayNext,
+    removeVideoFromQueue,
     async syncAll() {
       const { data, error } = await supabase
         .from('queue_items')
@@ -584,8 +684,8 @@ async function runBridge() {
       let added = 0
       for (const row of [...((data ?? []) as QueueRow[])].reverse()) {
         if (!isInPlaybackSession(row.created_at, playbackSince)) continue
-        if (syncedIds.has(row.id) || markSyncedIfAlreadyInYtm(row)) continue
-        if (await addVideoPlayNextWithRetry(row.video_id)) {
+        if (syncedIds.has(row.id)) continue
+        if (await addVideoPlayNextWithRetry(row.video_id, 2)) {
           syncedIds.add(row.id)
           added += 1
         }

@@ -9,7 +9,7 @@ import {
 } from './helpers/ui'
 
 /**
- * End-to-end: host creates lobby → guest joins → search/add/reorder → host mirrors queue.
+ * End-to-end: host creates lobby → guest joins → search/add/remove → host mirrors queue.
  */
 test.describe('Full flow', () => {
   test('host and guest share queue end to end', async ({ browser }) => {
@@ -54,17 +54,6 @@ test.describe('Full flow', () => {
       'href',
       /^https:\/\/music\.youtube\.com\/watch\?v=[\w-]+$/,
     )
-
-    const secondTitle = await guestRows
-      .nth(1)
-      .locator('.font-medium')
-      .textContent()
-    await guestRows.nth(1).getByRole('button', { name: 'Move up' }).click()
-
-    await expect(async () => {
-      const top = await guestRows.nth(0).locator('.font-medium').textContent()
-      expect(top).toBe(secondTitle)
-    }).toPass({ timeout: 10_000 })
 
     await guestRows.nth(1).getByRole('button', { name: 'Remove' }).click()
     await expect(guestRows).toHaveCount(1, { timeout: 10_000 })
