@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { resetPlaybackSession } from '../lib/playbackSession'
 import {
+  bridgeSiteRoot,
   buildYtmConnectDeepLink,
   buildYtmConnectSnippet,
   needsHttpsBridgeOrigin,
@@ -22,11 +24,15 @@ export function YtMusicConnect({ roomId }: YtMusicConnectProps) {
     sessionStorage.getItem(doneKey(roomId)) === '1' ? 'done' : 'connect',
   )
   const [showManual, setShowManual] = useState(false)
+  const [playbackSince, setPlaybackSince] = useState<string | null>(null)
 
   const httpsRequired = needsHttpsBridgeOrigin()
-  const snippet = useMemo(() => buildYtmConnectSnippet(roomId), [roomId])
-  const deepLink = useMemo(() => buildYtmConnectDeepLink(roomId), [roomId])
   const userscriptUrl = useMemo(() => ytmUserscriptInstallUrl(), [])
+  const snippet = useMemo(
+    () =>
+      playbackSince ? buildYtmConnectSnippet(roomId, playbackSince) : null,
+    [roomId, playbackSince],
+  )
 
   const markDone = useCallback(() => {
     sessionStorage.setItem(doneKey(roomId), '1')
@@ -47,14 +53,17 @@ export function YtMusicConnect({ roomId }: YtMusicConnectProps) {
   }, [step, roomId, markDone])
 
   const startConnect = useCallback(() => {
+    const since = resetPlaybackSession(roomId)
+    setPlaybackSince(since)
+    const link = buildYtmConnectDeepLink(roomId, since)
     window.open(
-      deepLink ?? 'https://music.youtube.com',
+      link ?? 'https://music.youtube.com',
       '_blank',
       'noopener,noreferrer',
     )
     setStep('waiting')
     setShowManual(false)
-  }, [deepLink])
+  }, [roomId])
 
   const copySnippet = useCallback(async () => {
     if (!snippet) return
@@ -69,7 +78,7 @@ export function YtMusicConnect({ roomId }: YtMusicConnectProps) {
     return null
   }
 
-  if (httpsRequired || !deepLink) {
+  if (httpsRequired || !bridgeSiteRoot()) {
     return (
       <section className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-100">
         <p className="font-medium">HTTPS URL needed for YouTube Music connect</p>
@@ -102,6 +111,7 @@ export function YtMusicConnect({ roomId }: YtMusicConnectProps) {
           type="button"
           onClick={() => {
             sessionStorage.removeItem(doneKey(roomId))
+            setPlaybackSince(null)
             setStep('connect')
           }}
           className="shrink-0 text-xs text-zinc-500 underline"

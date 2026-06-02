@@ -72,3 +72,12 @@ export function shareUrl(roomId: string) {
   const base = import.meta.env.BASE_URL.replace(/\/$/, '')
   return `${window.location.origin}${base}${roomPath(roomId)}`
 }
+
+export async function endLobby(roomId: string, hostToken: string): Promise<boolean> {
+  const { data, error } = await supabase.rpc('end_room', {
+    p_room_id: roomId,
+    p_host_token: hostToken,
+  })
+  if (error) throw error
+  return data === true
+}

@@ -43,16 +43,24 @@ export function bridgeScriptFetchUrls(): string[] {
   return [`${root}/ytmusic-bridge.js`]
 }
 
-/** One-liner for YouTube Music console — fetch + inline inject (Trusted Types safe). */
-export function buildYtmConnectSnippet(roomId: string): string | null {
-  const urls = bridgeScriptFetchUrls()
-  if (urls.length === 0) return null
-
-  const params = JSON.stringify({
+function bridgeParamsJson(roomId: string, playbackSince: string) {
+  return JSON.stringify({
     roomId,
     sb: import.meta.env.VITE_SUPABASE_URL,
     key: import.meta.env.VITE_SUPABASE_ANON_KEY,
+    since: playbackSince,
   })
+}
+
+/** One-liner for YouTube Music console — fetch + inline inject (Trusted Types safe). */
+export function buildYtmConnectSnippet(
+  roomId: string,
+  playbackSince: string,
+): string | null {
+  const urls = bridgeScriptFetchUrls()
+  if (urls.length === 0) return null
+
+  const params = bridgeParamsJson(roomId, playbackSince)
 
   const urlsJson = JSON.stringify(urls)
 
@@ -60,7 +68,10 @@ export function buildYtmConnectSnippet(roomId: string): string | null {
 }
 
 /** Open on music.youtube.com; YTMQ userscript auto-loads the bridge when installed. */
-export function buildYtmConnectDeepLink(roomId: string): string | null {
+export function buildYtmConnectDeepLink(
+  roomId: string,
+  playbackSince: string,
+): string | null {
   const bridgeUrls = bridgeScriptFetchUrls()
   if (bridgeUrls.length === 0) return null
 
@@ -68,6 +79,7 @@ export function buildYtmConnectDeepLink(roomId: string): string | null {
     roomId,
     sb: import.meta.env.VITE_SUPABASE_URL,
     key: import.meta.env.VITE_SUPABASE_ANON_KEY,
+    since: playbackSince,
     ytmqBridge: bridgeUrls.join(','),
   })
   return `https://music.youtube.com/?${q}`

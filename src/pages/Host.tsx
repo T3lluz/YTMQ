@@ -1,11 +1,17 @@
-import { useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { useEffect, useMemo, useState } from 'react'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { QueueList } from '../components/QueueList'
 import { SharePanel } from '../components/SharePanel'
 import { NowPlaying } from '../components/NowPlaying'
 import { YtMusicConnect } from '../components/YtMusicConnect'
 import { useQueue } from '../hooks/useQueue'
 import {
+  clearPlaybackSession,
+  isTrackInPlaybackSession,
+  playbackSinceKey,
+} from '../lib/playbackSession'
+import {
+  endLobby,
   fetchRoom,
   getHostToken,
   type RoomInfo,
@@ -26,8 +32,16 @@ function HostQueueMirror({ roomId }: { roomId: string }) {
   const { items, loading, error } = useQueue(roomId)
   const [copiedIds, setCopiedIds] = useState(false)
 
+  const playbackSince = sessionStorage.getItem(playbackSinceKey(roomId))
+  const sessionItems = useMemo(() => {
+    if (!playbackSince) return items
+    return items.filter((item) =>
+      isTrackInPlaybackSession(item.created_at, playbackSince),
+    )
+  }, [items, playbackSince])
+
   async function copyAllVideoIds() {
-    const ids = items.map((item) => item.video_id).join('\n')
+    const ids = sessionItems.map((item) => item.video_id).join('\n')
     if (!ids) return
     await navigator.clipboard.writeText(ids)
     setCopiedIds(true)
@@ -38,7 +52,7 @@ function HostQueueMirror({ roomId }: { roomId: string }) {
     <section className="space-y-3">
       <div className="flex items-center justify-between gap-2">
         <h2 className="text-lg font-semibold">Queue mirror</h2>
-        {items.length > 0 && (
+        {sessionItems.length > 0 && (
           <button
             type="button"
             onClick={() => void copyAllVideoIds()}
@@ -53,17 +67,25 @@ function HostQueueMirror({ roomId }: { roomId: string }) {
           {error}
         </p>
       )}
-      <QueueList items={items} loading={loading} showYtMusicLink />
+      {!playbackSince && items.length > 0 && (
+        <p className="text-xs text-zinc-500">
+          Connect YouTube Music to start this session’s queue. Older lobby
+          tracks stay in the database until you end the lobby.
+        </p>
+      )}
+      <QueueList items={sessionItems} loading={loading} showYtMusicLink />
     </section>
   )
 }
 
 export function Host() {
+  const navigate = useNavigate()
   const { roomId } = useParams<{ roomId: string }>()
   const hostToken = roomId ? getHostToken(roomId) : null
   const [room, setRoom] = useState<RoomInfo | null>(null)
   const [loading, setLoading] = useState(Boolean(roomId && hostToken))
   const [error, setError] = useState<string | null>(null)
+  const [ending, setEnding] = useState(false)
 
   useEffect(() => {
     if (!roomId || !hostToken) return
@@ -133,12 +155,50 @@ export function Host() {
 
       <HostQueueMirror key={roomId} roomId={roomId} />
 
-      <Link
-        to={`/room/${roomId}`}
-        className="text-center text-sm text-zinc-400 underline"
-      >
-        Open guest view
-      </Link>
+      <div className="flex flex-col gap-3">
+        <Link
+          to={`/room/${roomId}`}
+          className="text-center text-sm text-zinc-400 underline"
+        >
+          Open guest view
+        </Link>
+        <button
+          type="button"
+          disabled={ending}
+          onClick={() => {
+            if (!roomId || !hostToken) return
+            if (
+              !window.confirm(
+                'End this lobby? The queue will be deleted for everyone.',
+              )
+            ) {
+              return
+            }
+            setEnding(true)
+            setError(null)
+            void endLobby(roomId, hostToken)
+              .then((ok) => {
+                if (!ok) {
+                  setError('Could not end lobby')
+                  return
+                }
+                sessionStorage.removeItem(`ytmq_host_${roomId}`)
+                sessionStorage.removeItem(`ytmq_ytm_connected_${roomId}`)
+                clearPlaybackSession(roomId)
+                navigate('/')
+              })
+              .catch((err: unknown) => {
+                setError(
+                  err instanceof Error ? err.message : 'Could not end lobby',
+                )
+              })
+              .finally(() => setEnding(false))
+          }}
+          className="min-h-11 rounded-xl border border-red-500/40 px-4 text-sm font-medium text-red-300 active:bg-red-500/10 disabled:opacity-60"
+        >
+          {ending ? 'Ending…' : 'End lobby & delete queue'}
+        </button>
+      </div>
     </main>
   )
 }

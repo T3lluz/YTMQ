@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         YTMQ — YouTube Music connect
 // @namespace    https://github.com/T3lluz/YTMQ
-// @version      1.3.0
+// @version      1.4.0
 // @description  Auto-connects YTMQ on music.youtube.com (from host link or last session)
 // @match        https://music.youtube.com/*
 // @run-at       document-idle
@@ -21,6 +21,7 @@
   var sb = q.get('sb')
   var key = q.get('key')
   var bridgeList = q.get('ytmqBridge')
+  var since = q.get('since')
 
   if (roomId && sb && key) {
     try {
@@ -30,6 +31,7 @@
           roomId: roomId,
           sb: sb,
           key: key,
+          since: since || '',
           bridgeList: bridgeList || '',
           at: Date.now(),
         }),
@@ -50,6 +52,7 @@
         roomId = stored.roomId
         sb = stored.sb
         key = stored.key
+        since = stored.since || since
         bridgeList = stored.bridgeList || ''
       }
     } catch (e2) {
@@ -60,7 +63,12 @@
   if (!roomId || !sb || !key) return
 
   window.__YTMQ_BRIDGE_LOADING__ = true
-  window.__YTMQ_BRIDGE_PARAMS__ = { roomId: roomId, sb: sb, key: key }
+  window.__YTMQ_BRIDGE_PARAMS__ = {
+    roomId: roomId,
+    sb: sb,
+    key: key,
+    since: since || new Date().toISOString(),
+  }
 
   var urls = (bridgeList || DEFAULT_BRIDGE)
     .split(',')

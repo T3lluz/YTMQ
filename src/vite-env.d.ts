@@ -15,6 +15,7 @@ interface Window {
     roomId: string
     sb: string
     key: string
+    since?: string
   }
   __YTMQ_BRIDGE__?: unknown
 }

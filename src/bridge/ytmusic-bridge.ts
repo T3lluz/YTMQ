@@ -7,12 +7,14 @@ type BridgeParams = {
   roomId: string
   sb: string
   key: string
+  since: string
 }
 
 type QueueRow = {
   id: string
   video_id: string
   title: string
+  created_at: string
 }
 
 type NowPlayingPayload = {
@@ -78,9 +80,15 @@ function readParams(): BridgeParams | null {
   const roomId = inline?.roomId ?? fromQuery.get('roomId')
   const sb = inline?.sb ?? fromQuery.get('sb')
   const key = inline?.key ?? fromQuery.get('key')
+  const since =
+    inline?.since ?? fromQuery.get('since') ?? new Date().toISOString()
 
   if (!roomId || !sb || !key) return null
-  return { roomId, sb, key }
+  return { roomId, sb, key, since }
+}
+
+function isInPlaybackSession(createdAt: string, playbackSince: string): boolean {
+  return new Date(createdAt).getTime() >= new Date(playbackSince).getTime()
 }
 
 function getQueueElement(): QueueElement | null {
@@ -390,7 +398,7 @@ async function runBridge() {
     return
   }
 
-  const { roomId, sb, key } = params
+  const { roomId, sb, key, since: playbackSince } = params
 
   if (!location.hostname.includes('music.youtube.com')) {
     console.error('[YTMQ] Open music.youtube.com and run this script there.')
@@ -467,7 +475,7 @@ async function runBridge() {
 
   const { data: initial, error: loadError } = await supabase
     .from('queue_items')
-    .select('id, video_id, title')
+    .select('id, video_id, title, created_at')
     .eq('room_id', roomId)
     .order('position', { ascending: true })
 
@@ -478,10 +486,38 @@ async function runBridge() {
 
   const existingRows = (initial ?? []) as QueueRow[]
 
+  function markSyncedIfAlreadyInYtm(row: QueueRow): boolean {
+    const innerStore = getInnerStore()
+    if (
+      innerStore &&
+      queueItemsIncludeVideo(innerStore.getState().queue.items, row.video_id)
+    ) {
+      syncedIds.add(row.id)
+      return true
+    }
+    return false
+  }
+
   async function syncExistingQueue() {
-    if (existingRows.length === 0) return
-    log('Syncing existing queue to YouTube Music…', existingRows.length)
+    const sessionRows = existingRows.filter((row) =>
+      isInPlaybackSession(row.created_at, playbackSince),
+    )
+
     for (const row of existingRows) {
+      if (!isInPlaybackSession(row.created_at, playbackSince)) {
+        syncedIds.add(row.id)
+      }
+    }
+
+    if (sessionRows.length === 0) return
+
+    log(
+      'Syncing this session’s queue to YouTube Music…',
+      sessionRows.length,
+      'track(s)',
+    )
+    for (const row of sessionRows) {
+      if (syncedIds.has(row.id) || markSyncedIfAlreadyInYtm(row)) continue
       await enqueueToYtm(row)
     }
   }
@@ -499,7 +535,9 @@ async function runBridge() {
       (payload) => {
         const row = payload.new as QueueRow | undefined
         if (!row?.id || !row?.video_id) return
-        void enqueueToYtm(row)
+        const createdAt = row.created_at ?? new Date().toISOString()
+        if (!isInPlaybackSession(createdAt, playbackSince)) return
+        void enqueueToYtm({ ...row, created_at: createdAt })
       },
     )
     .subscribe((status) => {
@@ -525,7 +563,7 @@ async function runBridge() {
     async syncAll() {
       const { data, error } = await supabase
         .from('queue_items')
-        .select('id, video_id, title')
+        .select('id, video_id, title, created_at')
         .eq('room_id', roomId)
         .order('position', { ascending: true })
 
@@ -536,7 +574,8 @@ async function runBridge() {
 
       let added = 0
       for (const row of (data ?? []) as QueueRow[]) {
-        if (syncedIds.has(row.id)) continue
+        if (!isInPlaybackSession(row.created_at, playbackSince)) continue
+        if (syncedIds.has(row.id) || markSyncedIfAlreadyInYtm(row)) continue
         if (await addVideoToQueueWithRetry(row.video_id)) {
           syncedIds.add(row.id)
           added += 1
