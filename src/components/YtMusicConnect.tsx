@@ -1,7 +1,9 @@
 import { useCallback, useMemo, useState } from 'react'
 import {
+  buildYtmConnectDeepLink,
   buildYtmConnectSnippet,
   needsHttpsBridgeOrigin,
+  ytmUserscriptInstallUrl,
 } from '../lib/ytmusicConnect'
 
 type YtMusicConnectProps = {
@@ -22,6 +24,8 @@ export function YtMusicConnect({ roomId }: YtMusicConnectProps) {
 
   const httpsRequired = needsHttpsBridgeOrigin()
   const snippet = useMemo(() => buildYtmConnectSnippet(roomId), [roomId])
+  const deepLink = useMemo(() => buildYtmConnectDeepLink(roomId), [roomId])
+  const userscriptUrl = useMemo(() => ytmUserscriptInstallUrl(), [])
 
   const startConnect = useCallback(async () => {
     if (!snippet) return
@@ -31,9 +35,13 @@ export function YtMusicConnect({ roomId }: YtMusicConnectProps) {
     } catch {
       setCopyError('Could not copy — use “Copy code” below.')
     }
-    window.open('https://music.youtube.com', '_blank', 'noopener,noreferrer')
+    window.open(
+      deepLink ?? 'https://music.youtube.com',
+      '_blank',
+      'noopener,noreferrer',
+    )
     setStep('paste')
-  }, [snippet])
+  }, [snippet, deepLink])
 
   const markDone = useCallback(() => {
     sessionStorage.setItem(doneKey(roomId), '1')
@@ -106,6 +114,21 @@ export function YtMusicConnect({ roomId }: YtMusicConnectProps) {
     return (
       <section className="space-y-3 rounded-xl border border-violet-500/30 bg-violet-500/5 p-4">
         <p className="font-medium">Finish on the YouTube Music tab</p>
+        {userscriptUrl && (
+          <p className="text-sm text-zinc-400">
+            With{' '}
+            <a
+              href={userscriptUrl}
+              className="text-violet-300 underline"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Tampermonkey
+            </a>{' '}
+            installed, the opened tab should connect by itself. Otherwise use the
+            console steps below.
+          </p>
+        )}
         <ol className="space-y-2 text-sm text-zinc-300">
           <li className="flex gap-2">
             <span className="font-semibold text-violet-400">1</span>
@@ -154,10 +177,27 @@ export function YtMusicConnect({ roomId }: YtMusicConnectProps) {
   }
 
   return (
-    <section className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
-      <p className="mb-3 text-sm text-zinc-400">
-        Link browser YouTube Music so guest picks land in your queue.
+    <section className="space-y-3 rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
+      <p className="text-sm text-zinc-400">
+        Link browser YouTube Music so guest picks land in your queue. Use{' '}
+        <strong className="font-medium text-zinc-300">music.youtube.com</strong>{' '}
+        in Chrome (not the YT Music app).
       </p>
+      {userscriptUrl && (
+        <p className="text-xs text-zinc-500">
+          One-time: install{' '}
+          <a
+            href={userscriptUrl}
+            className="text-violet-300 underline"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            YTMQ helper (Tampermonkey)
+          </a>{' '}
+          on desktop or Android Chrome — then Connect opens a link that loads
+          automatically.
+        </p>
+      )}
       <button
         type="button"
         onClick={() => void startConnect()}

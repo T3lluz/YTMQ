@@ -12,21 +12,34 @@ export function bridgeScriptOrigin(): string | null {
 
 /** Path to bundled bridge on this deployment (no query string — GH Pages 404s some ? URLs). */
 export function bridgeScriptFetchUrl(): string | null {
-  const origin = bridgeScriptOrigin()
-  if (!origin) return null
-
-  const base = import.meta.env.BASE_URL.replace(/\/$/, '')
-  return `${origin}${base}/ytmusic-bridge.js`
+  const urls = bridgeScriptFetchUrls()
+  return urls[0] ?? null
 }
 
-/** Fallback when Pages artifact is missing the bridge file (served from git @ main). */
+/** Fallback when Pages artifact is missing the bridge file (public repo only). */
 export const BRIDGE_CDN_URL =
   'https://cdn.jsdelivr.net/gh/T3lluz/YTMQ@main/public/ytmusic-bridge.js'
 
+/** Ordered bridge URLs for the YT Music console loader (deduped). */
+export function bridgeScriptFetchUrls(): string[] {
+  const origin = bridgeScriptOrigin()
+  if (!origin) return []
+
+  const base = import.meta.env.BASE_URL.replace(/\/$/, '')
+  const candidates = [
+    // Branch-based Pages serves repo root — bridge is under public/ until Actions deploy.
+    `${origin}${base}/public/ytmusic-bridge.js`,
+    `${origin}${base}/ytmusic-bridge.js`,
+    BRIDGE_CDN_URL,
+  ]
+
+  return [...new Set(candidates)]
+}
+
 /** One-liner for YouTube Music console — fetch + inline inject (Trusted Types safe). */
 export function buildYtmConnectSnippet(roomId: string): string | null {
-  const primaryUrl = bridgeScriptFetchUrl()
-  if (!primaryUrl) return null
+  const urls = bridgeScriptFetchUrls()
+  if (urls.length === 0) return null
 
   const params = JSON.stringify({
     roomId,
@@ -34,9 +47,31 @@ export function buildYtmConnectSnippet(roomId: string): string | null {
     key: import.meta.env.VITE_SUPABASE_ANON_KEY,
   })
 
-  const urls = JSON.stringify([primaryUrl, BRIDGE_CDN_URL])
+  const urlsJson = JSON.stringify(urls)
 
-  return `(function(){var p=${params},urls=${urls};window.__YTMQ_BRIDGE_PARAMS__=p;function load(i){if(i>=urls.length){console.error('[YTMQ] Could not load bridge from',urls);return}fetch(urls[i]).then(function(r){if(!r.ok)throw new Error('load '+r.status);return r.text()}).then(function(c){var s=document.createElement('script'),t=window.trustedTypes;if(t&&t.createPolicy){s.text=t.createPolicy('ytmq',{createScript:function(x){return x}}).createScript(c)}else{s.textContent=c}document.head.appendChild(s)}).catch(function(){load(i+1)})}load(0)})();`
+  return `(function(){var p=${params},urls=${urlsJson};window.__YTMQ_BRIDGE_PARAMS__=p;function load(i){if(i>=urls.length){console.error('[YTMQ] Could not load bridge from',urls);return}fetch(urls[i]).then(function(r){if(!r.ok)throw new Error('load '+r.status);return r.text()}).then(function(c){var s=document.createElement('script'),t=window.trustedTypes;if(t&&t.createPolicy){s.text=t.createPolicy('ytmq',{createScript:function(x){return x}}).createScript(c)}else{s.textContent=c}document.head.appendChild(s)}).catch(function(){load(i+1)})}load(0)})();`
+}
+
+/** Open on music.youtube.com; YTMQ userscript auto-loads the bridge when installed. */
+export function buildYtmConnectDeepLink(roomId: string): string | null {
+  const bridgeUrls = bridgeScriptFetchUrls()
+  if (bridgeUrls.length === 0) return null
+
+  const q = new URLSearchParams({
+    roomId,
+    sb: import.meta.env.VITE_SUPABASE_URL,
+    key: import.meta.env.VITE_SUPABASE_ANON_KEY,
+    ytmqBridge: bridgeUrls.join(','),
+  })
+  return `https://music.youtube.com/?${q}`
+}
+
+/** Tampermonkey / Violentmonkey install URL (hosted on your Pages site). */
+export function ytmUserscriptInstallUrl(): string | null {
+  const origin = bridgeScriptOrigin()
+  if (!origin) return null
+  const base = import.meta.env.BASE_URL.replace(/\/$/, '')
+  return `${origin}${base}/ytmq-connect.user.js`
 }
 
 export function needsHttpsBridgeOrigin(): boolean {

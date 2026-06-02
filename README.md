@@ -30,6 +30,7 @@ Shared queue for **YouTube Music**: guests use this web app to search and manage
 2. Under **Build and deployment**, set **Source** to **GitHub Actions** (not “Deploy from a branch”).
    - If the live site shows a blank page or `index.html` references `/src/main.tsx`, Pages is serving the repo root instead of the build — switch to **GitHub Actions** and re-run deploy.
    - A correct deploy’s view-source shows `/YTMQ/assets/index-….js`, not `/src/main.tsx`.
+   - Until then, the YT Music connect script can still load the bridge from `/YTMQ/public/ytmusic-bridge.js` (committed build output).
 3. In [Settings → Secrets and variables → Actions](https://github.com/T3lluz/YTMQ/settings/secrets/actions), add:
    - `VITE_SUPABASE_URL`
    - `VITE_SUPABASE_ANON_KEY`
