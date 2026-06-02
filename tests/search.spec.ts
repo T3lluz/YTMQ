@@ -8,7 +8,7 @@ test.describe('Search', () => {
     await goToGuestRoom(page, lobby.room_id)
 
     await selectTab(page, 'Search')
-    await page.getByPlaceholder(/search songs and artists/i).fill('daft punk')
+    await page.getByPlaceholder(/search songs/i).fill('daft punk')
 
     await expect(page.getByRole('button', { name: 'Add' }).first()).toBeVisible({
       timeout: 20_000,
@@ -16,27 +16,38 @@ test.describe('Search', () => {
     await expect(page.locator('ul li').first()).toBeVisible()
   })
 
-  test('unified search shows artists with open button', async ({ page }) => {
+  test('filter pills switch between songs and artists', async ({ page }) => {
     const lobby = await createLobbyViaApi()
     await goToGuestRoom(page, lobby.room_id)
 
     await selectTab(page, 'Search')
-    await page.getByPlaceholder(/search songs and artists/i).fill('taylor swift')
+    await expect(page.getByRole('tab', { name: 'Songs' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    )
+    await expect(page.getByPlaceholder(/search songs/i)).toBeVisible()
 
-    await expect(
-      page.getByRole('button', { name: 'Open' }).first(),
-    ).toBeVisible({ timeout: 20_000 })
+    await page.getByRole('tab', { name: 'Artists' }).click()
+    await expect(page.getByRole('tab', { name: 'Artists' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    )
+    await expect(page.getByPlaceholder(/search artists/i)).toBeVisible()
+
+    await page.getByRole('tab', { name: 'Songs' }).click()
+    await expect(page.getByPlaceholder(/search songs/i)).toBeVisible()
   })
 
-  test('artist view lists songs and albums', async ({ page }) => {
+  test('artist view lists popular songs', async ({ page }) => {
     const lobby = await createLobbyViaApi()
     await goToGuestRoom(page, lobby.room_id)
 
     await selectTab(page, 'Search')
-    await page.getByPlaceholder(/search songs and artists/i).fill('taylor swift')
-    await page.getByRole('button', { name: 'Open' }).first().click()
+    await page.getByRole('tab', { name: 'Artists' }).click()
+    await page.getByPlaceholder(/search artists/i).fill('taylor swift')
+    await page.getByText('View →').first().click()
 
-    await expect(page.getByRole('heading', { name: 'Songs' })).toBeVisible({
+    await expect(page.getByText('Popular songs')).toBeVisible({
       timeout: 20_000,
     })
     await expect(page.getByRole('button', { name: 'Add' }).first()).toBeVisible()

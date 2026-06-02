@@ -5,21 +5,22 @@ export type SearchResultItem = {
   title: string
   channelTitle: string
   thumbnail: string
-  type: 'song' | 'artist' | 'album'
+  type: 'song' | 'artist'
   subtitle?: string
 }
+
+export type SearchFilter = 'song' | 'artist'
 
 export type ArtistDetail = {
   id: string
   title: string
   thumbnail: string
   songs: SearchResultItem[]
-  albums: SearchResultItem[]
 }
 
 type SearchResponse = {
   results?: SearchResultItem[]
-  artist?: ArtistDetail
+  artist?: ArtistDetail & { albums?: SearchResultItem[] }
   error?: string
 }
 
@@ -35,32 +36,17 @@ async function invokeSearch(
   return data ?? {}
 }
 
-export async function searchYouTube(query: string): Promise<SearchResultItem[]> {
-  let unified: SearchResultItem[] = []
-  try {
-    const data = await invokeSearch({ q: query, type: 'all' })
-    unified = data.results ?? []
-  } catch {
-    /* old deployments may not support type=all */
-  }
+function songsOnly(items: SearchResultItem[]): SearchResultItem[] {
+  return items.filter((item) => item.type === 'song')
+}
 
-  if (unified.length && unified.some((item) => item.type === 'artist')) {
-    return unified
-  }
-
-  const [songs, artists] = await Promise.all([
-    invokeSearch({ q: query, type: 'song' }),
-    invokeSearch({ q: query, type: 'artist' }),
-  ])
-  const seen = new Set<string>()
-  const merged: SearchResultItem[] = []
-  for (const item of [...(songs.results ?? []), ...(artists.results ?? [])]) {
-    const key = `${item.type}:${item.id}`
-    if (seen.has(key)) continue
-    seen.add(key)
-    merged.push(item)
-  }
-  return merged
+export async function searchByFilter(
+  query: string,
+  filter: SearchFilter,
+): Promise<SearchResultItem[]> {
+  const data = await invokeSearch({ q: query, type: filter })
+  const results = data.results ?? []
+  return filter === 'song' ? songsOnly(results) : results
 }
 
 export async function fetchArtistDetail(
@@ -68,7 +54,14 @@ export async function fetchArtistDetail(
 ): Promise<ArtistDetail> {
   try {
     const data = await invokeSearch({ type: 'artist_detail', browseId })
-    if (data.artist) return data.artist
+    if (data.artist) {
+      return {
+        id: data.artist.id,
+        title: data.artist.title,
+        thumbnail: data.artist.thumbnail,
+        songs: songsOnly(data.artist.songs),
+      }
+    }
   } catch {
     /* fall back to top tracks only */
   }
@@ -78,14 +71,6 @@ export async function fetchArtistDetail(
     id: browseId,
     title: 'Artist',
     thumbnail: '',
-    songs: tracks.results ?? [],
-    albums: [],
+    songs: songsOnly(tracks.results ?? []),
   }
-}
-
-export async function fetchAlbumTracks(
-  browseId: string,
-): Promise<SearchResultItem[]> {
-  const data = await invokeSearch({ type: 'album_tracks', browseId })
-  return data.results ?? []
 }

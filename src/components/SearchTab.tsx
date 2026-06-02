@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
 import {
-  fetchAlbumTracks,
   fetchArtistDetail,
-  searchYouTube,
+  searchByFilter,
   type ArtistDetail,
+  type SearchFilter,
   type SearchResultItem,
 } from '../lib/search'
 import { defaultThumbnail, type AddTrackInput } from '../lib/queue'
@@ -17,23 +17,57 @@ type SearchTabProps = {
 type View =
   | { kind: 'search' }
   | { kind: 'artist'; artist: SearchResultItem; detail: ArtistDetail | null }
-  | { kind: 'album'; album: SearchResultItem; artist: SearchResultItem }
 
-function typeLabel(type: SearchResultItem['type']) {
-  if (type === 'artist') return 'Artist'
-  if (type === 'album') return 'Album'
-  return 'Song'
+function FilterPills({
+  value,
+  onChange,
+}: {
+  value: SearchFilter
+  onChange: (filter: SearchFilter) => void
+}) {
+  const options: { id: SearchFilter; label: string }[] = [
+    { id: 'song', label: 'Songs' },
+    { id: 'artist', label: 'Artists' },
+  ]
+
+  return (
+    <div
+      className="flex rounded-xl border border-zinc-800 bg-zinc-950/80 p-1"
+      role="tablist"
+      aria-label="Search filter"
+    >
+      {options.map((option) => {
+        const active = value === option.id
+        return (
+          <button
+            key={option.id}
+            type="button"
+            role="tab"
+            aria-selected={active}
+            onClick={() => onChange(option.id)}
+            className={`flex-1 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+              active
+                ? 'bg-violet-600 text-white shadow-sm'
+                : 'text-zinc-400 hover:text-zinc-200'
+            }`}
+          >
+            {option.label}
+          </button>
+        )
+      })}
+    </div>
+  )
 }
 
 export function SearchTab({ nickname, onAdd, onAdded }: SearchTabProps) {
   const [query, setQuery] = useState('')
+  const [filter, setFilter] = useState<SearchFilter>('song')
   const [results, setResults] = useState<SearchResultItem[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [addingId, setAddingId] = useState<string | null>(null)
   const [view, setView] = useState<View>({ kind: 'search' })
   const [detailLoading, setDetailLoading] = useState(false)
-  const [albumTracks, setAlbumTracks] = useState<SearchResultItem[]>([])
 
   useEffect(() => {
     const trimmed = query.trim()
@@ -47,7 +81,7 @@ export function SearchTab({ nickname, onAdd, onAdded }: SearchTabProps) {
     const timer = window.setTimeout(() => {
       setLoading(true)
       setError(null)
-      void searchYouTube(trimmed)
+      void searchByFilter(trimmed, filter)
         .then((items) => {
           if (!cancelled) setResults(items)
         })
@@ -68,10 +102,9 @@ export function SearchTab({ nickname, onAdd, onAdded }: SearchTabProps) {
       cancelled = true
       window.clearTimeout(timer)
     }
-  }, [query])
+  }, [query, filter])
 
   const artistBrowseId = view.kind === 'artist' ? view.artist.id : null
-  const albumBrowseId = view.kind === 'album' ? view.album.id : null
 
   useEffect(() => {
     if (!artistBrowseId) return
@@ -105,33 +138,6 @@ export function SearchTab({ nickname, onAdd, onAdded }: SearchTabProps) {
     }
   }, [artistBrowseId])
 
-  useEffect(() => {
-    if (!albumBrowseId) return
-
-    let cancelled = false
-    setDetailLoading(true)
-    setError(null)
-    void fetchAlbumTracks(albumBrowseId)
-      .then((tracks) => {
-        if (!cancelled) setAlbumTracks(tracks)
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) {
-          setAlbumTracks([])
-          setError(
-            err instanceof Error ? err.message : 'Could not load album',
-          )
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setDetailLoading(false)
-      })
-
-    return () => {
-      cancelled = true
-    }
-  }, [albumBrowseId])
-
   async function handleAdd(item: SearchResultItem) {
     if (item.type !== 'song') return
     setAddingId(item.id)
@@ -158,102 +164,65 @@ export function SearchTab({ nickname, onAdd, onAdded }: SearchTabProps) {
     setResults([])
   }
 
-  function openAlbum(album: SearchResultItem, artist: SearchResultItem) {
-    setView({ kind: 'album', album, artist })
-  }
-
-  function renderResultRow(item: SearchResultItem) {
+  function renderSongRow(item: SearchResultItem, rank?: number) {
     const thumb = item.thumbnail || defaultThumbnail(item.id)
     const isAdding = addingId === item.id
 
     return (
       <li
-        key={`${item.type}-${item.id}`}
-        className="flex gap-3 rounded-xl border border-zinc-800 bg-zinc-900/80 p-3"
+        key={item.id}
+        className="flex items-center gap-3 rounded-xl border border-zinc-800/80 bg-zinc-900/60 px-3 py-2.5"
       >
+        {rank != null && (
+          <span className="w-6 shrink-0 text-center text-sm tabular-nums text-zinc-500">
+            {rank}
+          </span>
+        )}
         <img
           src={thumb}
           alt=""
-          className="h-14 w-14 shrink-0 rounded-lg object-cover"
+          className="h-12 w-12 shrink-0 rounded-lg object-cover"
         />
         <div className="min-w-0 flex-1">
-          <p className="text-[10px] font-medium uppercase tracking-wide text-zinc-500">
-            {typeLabel(item.type)}
-          </p>
-          <p className="line-clamp-2 font-medium">{item.title}</p>
+          <p className="truncate font-medium">{item.title}</p>
           <p className="truncate text-sm text-zinc-400">
             {item.subtitle || item.channelTitle}
           </p>
         </div>
-        {item.type === 'artist' ? (
-          <button
-            type="button"
-            onClick={() => openArtist(item)}
-            className="min-h-10 shrink-0 self-center rounded-lg border border-zinc-700 px-3 text-sm font-medium active:bg-zinc-800"
-          >
-            Open
-          </button>
-        ) : item.type === 'album' ? (
-          <button
-            type="button"
-            onClick={() =>
-              openAlbum(item, {
-                id: item.channelTitle,
-                title: item.channelTitle,
-                channelTitle: item.channelTitle,
-                thumbnail: '',
-                type: 'artist',
-              })
-            }
-            className="min-h-10 shrink-0 self-center rounded-lg border border-zinc-700 px-3 text-sm font-medium active:bg-zinc-800"
-          >
-            Open
-          </button>
-        ) : (
-          <button
-            type="button"
-            disabled={isAdding}
-            onClick={() => void handleAdd(item)}
-            className="min-h-10 shrink-0 self-center rounded-lg bg-violet-600 px-3 text-sm font-medium text-white active:bg-violet-700 disabled:opacity-60"
-          >
-            {isAdding ? '…' : 'Add'}
-          </button>
-        )}
+        <button
+          type="button"
+          disabled={isAdding}
+          onClick={() => void handleAdd(item)}
+          className="min-h-9 shrink-0 rounded-lg bg-violet-600 px-3.5 text-sm font-medium text-white active:bg-violet-700 disabled:opacity-60"
+        >
+          {isAdding ? '…' : 'Add'}
+        </button>
       </li>
     )
   }
 
-  if (view.kind === 'album') {
+  function renderArtistRow(item: SearchResultItem) {
+    const thumb = item.thumbnail || defaultThumbnail(item.id)
+
     return (
-      <section className="flex flex-1 flex-col gap-3">
+      <li key={item.id}>
         <button
           type="button"
-          onClick={() =>
-            setView({ kind: 'artist', artist: view.artist, detail: null })
-          }
-          className="self-start text-sm text-violet-400 underline"
+          onClick={() => openArtist(item)}
+          className="flex w-full items-center gap-3 rounded-xl border border-zinc-800/80 bg-zinc-900/60 px-3 py-2.5 text-left active:bg-zinc-900"
         >
-          ← Back to artist
+          <img
+            src={thumb}
+            alt=""
+            className="h-12 w-12 shrink-0 rounded-full object-cover"
+          />
+          <div className="min-w-0 flex-1">
+            <p className="truncate font-medium">{item.title}</p>
+            <p className="truncate text-sm text-zinc-400">Artist</p>
+          </div>
+          <span className="shrink-0 text-sm text-violet-400">View →</span>
         </button>
-        <h2 className="text-lg font-semibold">{view.album.title}</h2>
-        <p className="text-sm text-zinc-400">{view.artist.title}</p>
-
-        {error && (
-          <p className="text-sm text-red-400" role="alert">
-            {error}
-          </p>
-        )}
-
-        {detailLoading ? (
-          <p className="py-8 text-center text-zinc-500">Loading album…</p>
-        ) : albumTracks.length === 0 ? (
-          <p className="py-8 text-center text-zinc-500">No tracks found</p>
-        ) : (
-          <ul className="flex flex-col gap-2 pb-4">
-            {albumTracks.map(renderResultRow)}
-          </ul>
-        )}
-      </section>
+      </li>
     )
   }
 
@@ -262,9 +231,10 @@ export function SearchTab({ nickname, onAdd, onAdded }: SearchTabProps) {
     const artistTitle = detail?.title ?? view.artist.title
     const artistThumb =
       detail?.thumbnail || view.artist.thumbnail || defaultThumbnail(view.artist.id)
+    const songs = detail?.songs ?? []
 
     return (
-      <section className="flex flex-1 flex-col gap-3">
+      <section className="flex flex-1 flex-col gap-4">
         <button
           type="button"
           onClick={() => setView({ kind: 'search' })}
@@ -273,15 +243,19 @@ export function SearchTab({ nickname, onAdd, onAdded }: SearchTabProps) {
           ← Back to search
         </button>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-4 rounded-2xl border border-zinc-800 bg-gradient-to-br from-zinc-900 to-zinc-950 p-4">
           <img
             src={artistThumb}
             alt=""
-            className="h-16 w-16 shrink-0 rounded-full object-cover"
+            className="h-20 w-20 shrink-0 rounded-full object-cover ring-2 ring-zinc-700"
           />
-          <div>
-            <h2 className="text-lg font-semibold">{artistTitle}</h2>
-            <p className="text-sm text-zinc-400">Artist</p>
+          <div className="min-w-0">
+            <h2 className="truncate text-xl font-semibold">{artistTitle}</h2>
+            <p className="text-sm text-zinc-400">
+              {detailLoading
+                ? 'Loading songs…'
+                : `${songs.length} song${songs.length === 1 ? '' : 's'}`}
+            </p>
           </div>
         </div>
 
@@ -292,58 +266,24 @@ export function SearchTab({ nickname, onAdd, onAdded }: SearchTabProps) {
         )}
 
         {detailLoading || !detail ? (
-          <p className="py-8 text-center text-zinc-500">Loading artist…</p>
+          <p className="py-8 text-center text-zinc-500">Loading songs…</p>
+        ) : songs.length === 0 ? (
+          <p className="py-8 text-center text-sm text-zinc-500">
+            No songs found for this artist
+          </p>
         ) : (
-          <>
-            {detail.albums.length > 0 && (
-              <div className="space-y-2">
-                <h3 className="text-sm font-semibold text-zinc-300">Albums</h3>
-                <ul className="flex flex-col gap-2">
-                  {detail.albums.map((album) => (
-                    <li key={album.id}>
-                      <button
-                        type="button"
-                        onClick={() => openAlbum(album, view.artist)}
-                        className="flex w-full gap-3 rounded-xl border border-zinc-800 bg-zinc-900/80 p-3 text-left active:bg-zinc-900"
-                      >
-                        <img
-                          src={album.thumbnail || defaultThumbnail(album.id)}
-                          alt=""
-                          className="h-14 w-14 shrink-0 rounded-lg object-cover"
-                        />
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate font-medium">{album.title}</p>
-                          <p className="truncate text-sm text-zinc-400">
-                            {album.subtitle || album.channelTitle}
-                          </p>
-                        </div>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            <div className="space-y-2">
-              <h3 className="text-sm font-semibold text-zinc-300">Songs</h3>
-              {detail.songs.length === 0 ? (
-                <p className="py-4 text-center text-sm text-zinc-500">
-                  No songs found
-                </p>
-              ) : (
-                <ul className="flex flex-col gap-2 pb-4">
-                  {detail.songs.map(renderResultRow)}
-                </ul>
-              )}
-            </div>
-          </>
+          <div className="space-y-2 pb-4">
+            <h3 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">
+              Popular songs
+            </h3>
+            <ul className="flex flex-col gap-1.5">
+              {songs.map((song, index) => renderSongRow(song, index + 1))}
+            </ul>
+          </div>
         )}
       </section>
     )
   }
-
-  const songs = results.filter((item) => item.type === 'song')
-  const artists = results.filter((item) => item.type === 'artist')
 
   return (
     <section className="flex flex-1 flex-col gap-3">
@@ -353,10 +293,14 @@ export function SearchTab({ nickname, onAdd, onAdded }: SearchTabProps) {
         type="search"
         value={query}
         onChange={(e) => setQuery(e.target.value)}
-        placeholder="Search songs and artists…"
+        placeholder={
+          filter === 'song' ? 'Search songs…' : 'Search artists…'
+        }
         autoComplete="off"
         className="min-h-12 rounded-xl border border-zinc-700 bg-zinc-900 px-4 text-base outline-none focus:border-violet-500"
       />
+
+      <FilterPills value={filter} onChange={setFilter} />
 
       {error && (
         <p className="text-sm text-red-400" role="alert">
@@ -373,24 +317,11 @@ export function SearchTab({ nickname, onAdd, onAdded }: SearchTabProps) {
       ) : results.length === 0 ? (
         <p className="py-8 text-center text-zinc-500">No results</p>
       ) : (
-        <div className="flex flex-col gap-4 pb-4">
-          {songs.length > 0 && (
-            <div className="space-y-2">
-              <h3 className="text-sm font-semibold text-zinc-300">Top songs</h3>
-              <ul className="flex flex-col gap-2">
-                {songs.map(renderResultRow)}
-              </ul>
-            </div>
-          )}
-          {artists.length > 0 && (
-            <div className="space-y-2">
-              <h3 className="text-sm font-semibold text-zinc-300">Artists</h3>
-              <ul className="flex flex-col gap-2">
-                {artists.map(renderResultRow)}
-              </ul>
-            </div>
-          )}
-        </div>
+        <ul className="flex flex-col gap-2 pb-4">
+          {filter === 'song'
+            ? results.map((item) => renderSongRow(item))
+            : results.map((item) => renderArtistRow(item))}
+        </ul>
       )}
     </section>
   )
