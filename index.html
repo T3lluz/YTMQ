@@ -8,27 +8,6 @@
   </head>
   <body>
     <script>
-      // Repo-root index is for Vite dev only. github.io must serve the CI build (dist/).
-      ;(function () {
-        if (!/\.github\.io$/i.test(location.hostname)) return
-        var dev = document.querySelector('script[type="module"][src="/src/main.tsx"]')
-        if (!dev) return
-        dev.remove()
-        var root = document.getElementById('root')
-        if (!root) return
-        root.innerHTML =
-          '<div style="max-width:32rem;margin:2rem auto;padding:1.25rem;font:16px/1.5 system-ui,sans-serif;color:#e4e4e7">' +
-          '<h1 style="font-size:1.25rem;color:#fafafa">YTMQ is not deployed correctly</h1>' +
-          '<p>GitHub Pages is serving <code>index.html</code> from the repo instead of the built app.</p>' +
-          '<ol style="padding-left:1.25rem;color:#a1a1aa">' +
-          '<li>Open <strong>Settings → Pages</strong> for this repository.</li>' +
-          '<li>Set <strong>Source</strong> to <strong>GitHub Actions</strong>, <em>or</em> branch <code>gh-pages</code> / <code>(root)</code>.</li>' +
-          '<li>Do <strong>not</strong> use branch <code>main</code> — that causes the <code>/src/main.tsx</code> 404.</li>' +
-          '<li>Re-run <strong>Deploy to GitHub Pages</strong> under Actions.</li>' +
-          '</ol></div>'
-      })()
-    </script>
-    <script>
       // Undo GitHub Pages 404.html redirect (?/room/… → /room/…) before React Router runs.
       ;(function (l) {
         if (l.search[1] === '/') {

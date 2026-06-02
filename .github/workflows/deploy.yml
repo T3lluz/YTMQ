@@ -22,7 +22,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: npm
 
       - run: npm ci
@@ -49,9 +49,9 @@ jobs:
           test -f dist/index.html
           test -f dist/404.html
           test -f dist/ytmusic-bridge.js
-          grep -q '/YTMQ/assets/' dist/index.html
+          grep -q '/YTMQ/assets/index-' dist/index.html
           grep -q 'segmentCount' dist/404.html
-          ! grep -q '/src/main.tsx' dist/index.html
+          ! grep -qE 'src="/src/main\.tsx"|src="/src/main"' dist/index.html
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
