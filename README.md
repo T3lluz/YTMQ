@@ -36,7 +36,7 @@ Shared queue for **YouTube Music**: guests use this web app to search and manage
    - **Deploy from a branch** → **`gh-pages`** / **`(root)`** → run **Publish gh-pages branch** manually when you need an update (not on every `main` push).
    - **Never** use branch **`main`** (causes `GET /src/main.tsx 404`).
 
-4. If **Deploy to GitHub Pages** fails with *“due to in progress deployment”*: you have a branch deploy still running. Either wait a few minutes, or set Source to **GitHub Actions** only (not `gh-pages`), cancel the stuck run under [Environments → github-pages](https://github.com/T3lluz/YTMQ/settings/environments), then re-run the workflow.
+4. If **Deploy to GitHub Pages** fails with *“due to in progress deployment”*: wait a few minutes and **Re-run all jobs**, or cancel the stuck deployment under [Environments → github-pages](https://github.com/T3lluz/YTMQ/settings/environments).
 
 5. If the site still loads `/src/main.tsx`, the wrong source is selected — fix step 3 and hard-refresh.
 
