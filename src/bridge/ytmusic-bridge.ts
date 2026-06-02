@@ -46,7 +46,9 @@ type QueueStore = {
 
 type QueueElement = HTMLElement & {
   dispatch: (action: { type: string; payload?: unknown }) => void
-  queue?: QueueStore
+  queue?: QueueStore & {
+    getItems?: () => unknown[]
+  }
 }
 
 type YtmApp = HTMLElement & {
@@ -182,8 +184,17 @@ function queueItemRenderer(item: unknown): Record<string, unknown> | null {
 
 function parseVideoIdFromQueueItem(item: unknown): string | null {
   const renderer = queueItemRenderer(item)
-  const videoId = renderer?.videoId
-  return typeof videoId === 'string' && videoId.length > 0 ? videoId : null
+  const fromRenderer = renderer?.videoId
+  if (typeof fromRenderer === 'string' && fromRenderer.length > 0) {
+    return fromRenderer
+  }
+
+  try {
+    const match = JSON.stringify(item).match(/"videoId":"([a-zA-Z0-9_-]{11})"/)
+    return match?.[1] ?? null
+  } catch {
+    return null
+  }
 }
 
 function getSelectedIndexFromItems(items: unknown[]): number {
@@ -412,40 +423,246 @@ async function addVideoPlayNextWithRetry(
   return false
 }
 
-function findRemovableQueueIndex(items: unknown[], videoId: string): number {
-  const selectedIdx = getSelectedIndexFromItems(items)
+function extractRemoveFromQueueEndpoint(
+  item: unknown,
+): { videoId: string; itemId: string } | null {
+  const renderer = queueItemRenderer(item)
+  if (!renderer?.menu || typeof renderer.menu !== 'object') return null
 
-  for (let i = items.length - 1; i > selectedIdx; i -= 1) {
-    if (parseVideoIdFromQueueItem(items[i]) === videoId) return i
+  const menuItems =
+    ((renderer.menu as { menuRenderer?: { items?: unknown[] } }).menuRenderer
+      ?.items as unknown[] | undefined) ?? []
+
+  for (const menuItem of menuItems) {
+    if (!menuItem || typeof menuItem !== 'object') continue
+    const entry = menuItem as Record<string, unknown>
+    const candidates = [
+      (entry.menuServiceItemRenderer as { serviceEndpoint?: unknown })
+        ?.serviceEndpoint,
+      (entry.menuNavigationItemRenderer as { navigationEndpoint?: unknown })
+        ?.navigationEndpoint,
+      (entry.menuServiceItemRenderer as { navigationEndpoint?: unknown })
+        ?.navigationEndpoint,
+    ]
+
+    for (const endpoint of candidates) {
+      if (!endpoint || typeof endpoint !== 'object') continue
+      const remove = (
+        endpoint as {
+          removeFromQueueEndpoint?: { videoId?: string; itemId?: string }
+        }
+      ).removeFromQueueEndpoint
+      if (remove?.videoId && remove?.itemId) {
+        return { videoId: remove.videoId, itemId: remove.itemId }
+      }
+    }
   }
 
-  for (let i = items.length - 1; i >= 0; i -= 1) {
-    if (parseVideoIdFromQueueItem(items[i]) === videoId) return i
+  const playlistSetVideoId = renderer.playlistSetVideoId
+  const videoId = renderer.videoId
+  if (
+    typeof playlistSetVideoId === 'string' &&
+    typeof videoId === 'string' &&
+    playlistSetVideoId &&
+    videoId
+  ) {
+    return { videoId, itemId: playlistSetVideoId }
   }
 
-  return -1
+  return null
 }
 
-async function removeVideoFromQueue(videoId: string): Promise<boolean> {
+function getQueueStoreItems(): unknown[] {
+  const queueEl = getQueueElement()
+  if (typeof queueEl?.queue?.getItems === 'function') {
+    return queueEl.queue.getItems()
+  }
+  return getInnerStore()?.getState().queue.items ?? []
+}
+
+function isCurrentlyPlayingIndex(items: unknown[], index: number): boolean {
+  const renderer = queueItemRenderer(items[index])
+  if (renderer?.selected === true) return true
+  return index === getSelectedIndexFromItems(items)
+}
+
+type RemoveTarget = {
+  index: number
+  videoId: string
+  itemId?: string
+}
+
+function collectRemoveTargets(videoId: string): RemoveTarget[] {
+  const items = getQueueStoreItems()
+  const targets: RemoveTarget[] = []
+
+  items.forEach((item, index) => {
+    if (parseVideoIdFromQueueItem(item) !== videoId) return
+    if (isCurrentlyPlayingIndex(items, index)) return
+
+    const endpoint = extractRemoveFromQueueEndpoint(item)
+    targets.push({
+      index,
+      videoId,
+      itemId: endpoint?.itemId,
+    })
+  })
+
+  return targets.sort((a, b) => b.index - a.index)
+}
+
+async function waitForQueueItemRemoved(
+  videoId: string,
+  beforeCount: number,
+): Promise<boolean> {
+  const deadline = Date.now() + 2000
+  while (Date.now() < deadline) {
+    const items = getQueueStoreItems()
+    if (items.length < beforeCount) return true
+    if (!items.some((item) => parseVideoIdFromQueueItem(item) === videoId)) {
+      return true
+    }
+    await new Promise((r) => window.setTimeout(r, 50))
+  }
+  return false
+}
+
+async function removeViaStoreIndex(index: number, videoId: string): Promise<boolean> {
   const queueEl = getQueueElement()
   const innerStore = getInnerStore()
   if (!queueEl?.dispatch || !innerStore) return false
 
-  const items = innerStore.getState().queue.items
-  const index = findRemovableQueueIndex(items, videoId)
-  if (index < 0) return true
-
-  const beforeCount = items.length
+  const beforeCount = getQueueStoreItems().length
   queueEl.dispatch({ type: 'REMOVE_ITEM', payload: index })
+  return waitForQueueItemRemoved(videoId, beforeCount)
+}
 
-  const deadline = Date.now() + 1500
-  while (Date.now() < deadline) {
-    const nextItems = innerStore.getState().queue.items
-    if (nextItems.length < beforeCount) return true
-    if (parseVideoIdFromQueueItem(nextItems[index]) !== videoId) return true
-    await new Promise((r) => window.setTimeout(r, 50))
+async function dispatchQueueRemoveLegacy(
+  videoId: string,
+  queueItemId: string,
+): Promise<boolean> {
+  const playerBar = document.querySelector('ytmusic-player-bar')
+  if (!playerBar) return false
+
+  const beforeCount = getQueueStoreItems().length
+  const endpoint = {
+    removeFromQueueEndpoint: {
+      videoId,
+      itemId: queueItemId,
+      commands: [],
+    },
   }
 
+  const detail = {
+    actionName: 'yt-service-request',
+    args: [playerBar, endpoint],
+    optionalAction: false,
+    returnValue: [] as unknown[],
+  }
+
+  for (const target of [
+    getYtmApp(),
+    playerBar,
+    document.querySelector('ytmusic-player'),
+    getQueueElement(),
+  ]) {
+    if (!target) continue
+    target.dispatchEvent(
+      new CustomEvent('yt-action', {
+        bubbles: true,
+        cancelable: false,
+        composed: true,
+        detail,
+      }),
+    )
+  }
+
+  return waitForQueueItemRemoved(videoId, beforeCount)
+}
+
+async function removeViaDomClick(videoId: string): Promise<boolean> {
+  nudgeQueueUi()
+  await new Promise((r) => window.setTimeout(r, 250))
+
+  const beforeCount = getQueueStoreItems().length
+  const selectors = [
+    'ytmusic-player-queue-item',
+    '#playlist-items ytmusic-player-queue-item',
+  ]
+
+  for (const selector of selectors) {
+    const domItems = document.querySelectorAll(selector)
+    for (const el of domItems) {
+      const html = el.innerHTML
+      if (!html.includes(videoId)) continue
+
+      const removeBtn = el.querySelector(
+        [
+          'button[aria-label*="Remove" i]',
+          'yt-icon-button[aria-label*="Remove" i]',
+          'tp-yt-paper-icon-button[aria-label*="Remove" i]',
+          'button[aria-label*="Delete" i]',
+        ].join(','),
+      ) as HTMLElement | null
+
+      if (removeBtn) {
+        removeBtn.click()
+        if (await waitForQueueItemRemoved(videoId, beforeCount)) return true
+      }
+    }
+  }
+
+  return false
+}
+
+async function removeVideoFromQueue(videoId: string): Promise<boolean> {
+  if (!(await waitForQueueApi(queueApiReady ? 0 : 4000))) {
+    log('Queue API not ready for remove', videoId)
+    return false
+  }
+
+  const targets = collectRemoveTargets(videoId)
+  log('Remove targets for', videoId, targets.length)
+
+  for (const target of targets) {
+    if (await removeViaStoreIndex(target.index, videoId)) {
+      log('Removed via REMOVE_ITEM at index', target.index)
+      return true
+    }
+  }
+
+  for (const target of targets) {
+    if (target.itemId && (await dispatchQueueRemoveLegacy(videoId, target.itemId))) {
+      log('Removed via removeFromQueueEndpoint', target.itemId)
+      return true
+    }
+  }
+
+  if (await removeViaDomClick(videoId)) {
+    log('Removed via queue panel click', videoId)
+    return true
+  }
+
+  if (targets.length === 0) {
+    const stillInQueue = getQueueStoreItems().some(
+      (item) => parseVideoIdFromQueueItem(item) === videoId,
+    )
+    return !stillInQueue
+  }
+
+  return false
+}
+
+async function removeVideoFromQueueWithRetry(
+  videoId: string,
+  attempts = 3,
+): Promise<boolean> {
+  for (let i = 0; i < attempts; i += 1) {
+    if (await removeVideoFromQueue(videoId)) return true
+    if (i + 1 < attempts) {
+      await new Promise((r) => window.setTimeout(r, 300 * (i + 1)))
+    }
+  }
   return false
 }
 
@@ -498,8 +715,45 @@ async function runBridge() {
   }
 
   const syncedIds = new Set<string>()
+  const skipYtmRemoveIds = new Set<string>()
+  const rowVideoById = new Map<string, string>()
+  const pendingRemoveVideoIds = new Set<string>()
   const pendingRows: QueueRow[] = []
   const supabase: SupabaseClient = createClient(sb, key)
+
+  function trackRowVideo(row: QueueRow) {
+    if (row.id && row.video_id) {
+      rowVideoById.set(row.id, row.video_id)
+    }
+  }
+
+  function shouldSkipYtmRemove(row: QueueRow): boolean {
+    if (row.id && skipYtmRemoveIds.has(row.id)) {
+      skipYtmRemoveIds.delete(row.id)
+      return true
+    }
+    return false
+  }
+
+  function handleQueueRemove(row: QueueRow, source: string) {
+    const videoId = row.video_id || rowVideoById.get(row.id) || ''
+    if (!videoId) {
+      log('Remove ignored — missing video_id', source, row.id)
+      return
+    }
+    if (shouldSkipYtmRemove({ ...row, video_id: videoId })) {
+      log('Skip YT Music remove (now playing cleanup)', videoId)
+      return
+    }
+    if (pendingRemoveVideoIds.has(videoId)) {
+      log('Remove already in progress', videoId, source)
+      return
+    }
+    pendingRemoveVideoIds.add(videoId)
+    void dequeueFromYtm({ ...row, video_id: videoId }).finally(() => {
+      window.setTimeout(() => pendingRemoveVideoIds.delete(videoId), 3000)
+    })
+  }
 
   async function processPending() {
     while (pendingRows.length > 0) {
@@ -511,6 +765,7 @@ async function runBridge() {
       const ok = await addVideoPlayNextWithRetry(row.video_id, 2)
       if (!ok) return
       syncedIds.add(row.id)
+      trackRowVideo(row)
       pendingRows.pop()
       showToast(`Play next: ${row.title || 'track'}`)
       log('Play next (retry)', row.video_id, row.title)
@@ -519,9 +774,11 @@ async function runBridge() {
 
   async function enqueueToYtm(row: QueueRow) {
     if (syncedIds.has(row.id)) return
+    trackRowVideo(row)
     const ok = await addVideoPlayNextWithRetry(row.video_id, 2)
     if (ok) {
       syncedIds.add(row.id)
+      trackRowVideo(row)
       showToast(`Play next: ${row.title || 'track'}`)
       log('Play next', row.video_id, row.title)
       return
@@ -542,26 +799,60 @@ async function runBridge() {
       pendingRows.findIndex((p) => p.id === row.id),
       1,
     )
-    const ok = await removeVideoFromQueue(row.video_id)
+    rowVideoById.delete(row.id)
+    const ok = await removeVideoFromQueueWithRetry(row.video_id, 3)
     if (ok) {
       log('Removed from YT Music queue', row.video_id, row.title)
       showToast(`Removed: ${row.title || 'track'}`)
     } else {
       log('Could not remove from YT Music queue', row.video_id)
+      showToast(`Could not remove from YT Music: ${row.title || 'track'}`)
     }
   }
 
   let lastPlaybackKey = ''
+  let lastPublishedVideoId = ''
 
   const playbackChannel = supabase.channel(`ytmq-playback:${roomId}`)
+
+  async function removePlayedFromSharedQueue(videoId: string) {
+    const { data, error } = await supabase
+      .from('queue_items')
+      .select('id, created_at, title')
+      .eq('room_id', roomId)
+      .eq('video_id', videoId)
+      .order('position', { ascending: true })
+      .limit(1)
+
+    if (error || !data?.[0]) return
+
+    const row = data[0] as { id: string; created_at: string; title?: string }
+    if (!isInPlaybackSession(row.created_at, playbackSince)) return
+
+    skipYtmRemoveIds.add(row.id)
+    syncedIds.delete(row.id)
+    const { error: deleteError } = await supabase
+      .from('queue_items')
+      .delete()
+      .eq('id', row.id)
+
+    if (!deleteError) {
+      log('Removed played track from shared queue', videoId, row.title)
+    }
+  }
 
   function publishNowPlaying() {
     const current = readNowPlaying()
     if (!current?.videoId) return
 
     const key = `${current.videoId}|${current.title}|${current.artist}`
-    if (key === lastPlaybackKey) return
-    lastPlaybackKey = key
+    if (key !== lastPlaybackKey) {
+      lastPlaybackKey = key
+      if (current.videoId !== lastPublishedVideoId) {
+        lastPublishedVideoId = current.videoId
+        void removePlayedFromSharedQueue(current.videoId)
+      }
+    }
 
     void playbackChannel.send({
       type: 'broadcast',
@@ -586,6 +877,9 @@ async function runBridge() {
   }
 
   const existingRows = (initial ?? []) as QueueRow[]
+  for (const row of existingRows) {
+    trackRowVideo(row)
+  }
 
   async function syncExistingQueue() {
     const sessionRows = existingRows.filter((row) =>
@@ -613,6 +907,19 @@ async function runBridge() {
 
   const channel = supabase
     .channel(`ytmq-bridge:${roomId}`)
+    .on('broadcast', { event: 'queue_remove' }, ({ payload }) => {
+      if (!payload || typeof payload !== 'object') return
+      const p = payload as Partial<QueueRow>
+      handleQueueRemove(
+        {
+          id: p.id ?? '',
+          video_id: p.video_id ?? '',
+          title: p.title ?? '',
+          created_at: p.created_at ?? '',
+        },
+        'broadcast',
+      )
+    })
     .on(
       'postgres_changes',
       {
@@ -624,6 +931,7 @@ async function runBridge() {
       (payload) => {
         const row = payload.new as QueueRow | undefined
         if (!row?.id || !row?.video_id) return
+        trackRowVideo(row)
         const createdAt = row.created_at ?? new Date().toISOString()
         if (!isInPlaybackSession(createdAt, playbackSince)) return
         void enqueueToYtm({ ...row, created_at: createdAt })
@@ -639,13 +947,16 @@ async function runBridge() {
       },
       (payload) => {
         const row = payload.old as QueueRow | undefined
-        if (!row?.video_id) return
-        void dequeueFromYtm({
-          id: row.id ?? '',
-          video_id: row.video_id,
-          title: row.title ?? '',
-          created_at: row.created_at ?? '',
-        })
+        if (!row?.id && !row?.video_id) return
+        handleQueueRemove(
+          {
+            id: row.id ?? '',
+            video_id: row.video_id ?? '',
+            title: row.title ?? '',
+            created_at: row.created_at ?? '',
+          },
+          'postgres',
+        )
       },
     )
     .subscribe((status) => {
@@ -668,7 +979,7 @@ async function runBridge() {
     roomId,
     syncedIds,
     addVideoPlayNext,
-    removeVideoFromQueue,
+    removeVideoFromQueue: removeVideoFromQueueWithRetry,
     async syncAll() {
       const { data, error } = await supabase
         .from('queue_items')

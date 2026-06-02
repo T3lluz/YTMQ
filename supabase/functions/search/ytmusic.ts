@@ -19,7 +19,16 @@ export type YtmSearchResult = {
   title: string
   channelTitle: string
   thumbnail: string
-  type: 'song' | 'artist'
+  type: 'song' | 'artist' | 'album'
+  subtitle?: string
+}
+
+export type YtmArtistDetail = {
+  id: string
+  title: string
+  thumbnail: string
+  songs: YtmSearchResult[]
+  albums: YtmSearchResult[]
 }
 
 type JsonObject = Record<string, unknown>
@@ -178,6 +187,30 @@ function parseArtistItem(item: JsonObject): YtmSearchResult | null {
   }
 }
 
+function parseAlbumItem(item: JsonObject): YtmSearchResult | null {
+  const id = browseId(item.navigationEndpoint)
+  if (!id) return null
+
+  const title = runsText((item.title as { runs?: Array<{ text?: string }> })?.runs)
+  const subtitle = runsText(
+    (item.subtitle as { runs?: Array<{ text?: string }> })?.runs,
+  )
+
+  if (!title) return null
+
+  return {
+    id,
+    title,
+    channelTitle: subtitle || 'Album',
+    subtitle,
+    thumbnail: pickMusicThumbnail(
+      (item.thumbnailRenderer as { musicThumbnailRenderer?: unknown })
+        ?.musicThumbnailRenderer ?? item.thumbnail,
+    ),
+    type: 'album',
+  }
+}
+
 function collectFromShelf(
   shelf: JsonObject,
   kind: 'song' | 'artist',
@@ -250,16 +283,17 @@ function collectSearchResults(
   return results.slice(0, limit)
 }
 
-function collectArtistTopSongs(
+function collectMixedSearchResults(
   data: JsonObject,
   limit: number,
 ): YtmSearchResult[] {
-  const results: YtmSearchResult[] = []
+  const songs: YtmSearchResult[] = []
+  const artists: YtmSearchResult[] = []
   const seen = new Set<string>()
 
   const tabs = (
     data.contents as {
-      singleColumnBrowseResultsRenderer?: {
+      tabbedSearchResultsRenderer?: {
         tabs?: Array<{
           tabRenderer?: {
             content?: {
@@ -269,23 +303,196 @@ function collectArtistTopSongs(
         }>
       }
     }
-  )?.singleColumnBrowseResultsRenderer?.tabs
+  )?.tabbedSearchResultsRenderer?.tabs
 
   for (const tab of tabs ?? []) {
     const sections =
       tab.tabRenderer?.content?.sectionListRenderer?.contents ?? []
     for (const section of sections) {
-      const shelf = section.musicShelfRenderer as JsonObject | undefined
-      if (!shelf?.contents) continue
+      const card = section.musicCardShelfRenderer as JsonObject | undefined
+      if (card) {
+        for (const entry of (card.contents as Array<JsonObject> | undefined) ??
+          []) {
+          const item = entry.musicResponsiveListItemRenderer as
+            | JsonObject
+            | undefined
+          if (!item) continue
+          const parsed = parseSongItem(item) ?? parseArtistItem(item)
+          if (!parsed || seen.has(`${parsed.type}:${parsed.id}`)) continue
+          seen.add(`${parsed.type}:${parsed.id}`)
+          if (parsed.type === 'song') songs.unshift(parsed)
+          else artists.unshift(parsed)
+        }
+      }
 
-      const title = runsText(
+      const shelf = section.musicShelfRenderer as JsonObject | undefined
+      if (shelf) {
+        for (const entry of (shelf.contents as Array<JsonObject> | undefined) ??
+          []) {
+          const item = entry.musicResponsiveListItemRenderer as
+            | JsonObject
+            | undefined
+          if (!item) continue
+          const parsed = parseSongItem(item) ?? parseArtistItem(item)
+          if (!parsed || seen.has(`${parsed.type}:${parsed.id}`)) continue
+          seen.add(`${parsed.type}:${parsed.id}`)
+          if (parsed.type === 'song') songs.push(parsed)
+          else artists.push(parsed)
+        }
+      }
+    }
+  }
+
+  return [...songs, ...artists].slice(0, limit)
+}
+
+function browseSections(data: JsonObject): Array<JsonObject> {
+  const tabs =
+    (data.contents as {
+      singleColumnBrowseResultsRenderer?: {
+        tabs?: Array<{
+          tabRenderer?: {
+            content?: {
+              sectionListRenderer?: { contents?: Array<JsonObject> }
+            }
+          }
+        }>
+      }
+    })?.singleColumnBrowseResultsRenderer?.tabs ??
+    (data.contents as {
+      sectionListRenderer?: { contents?: Array<JsonObject> }
+    })?.sectionListRenderer?.contents?.map((section) => ({
+      tabRenderer: { content: { sectionListRenderer: { contents: [section] } } },
+    }))
+
+  const sections: Array<JsonObject> = []
+  for (const tab of tabs ?? []) {
+    sections.push(
+      ...(tab.tabRenderer?.content?.sectionListRenderer?.contents ?? []),
+    )
+  }
+  return sections
+}
+
+function collectArtistTopSongs(
+  data: JsonObject,
+  limit: number,
+): YtmSearchResult[] {
+  const results: YtmSearchResult[] = []
+  const seen = new Set<string>()
+
+  for (const section of browseSections(data)) {
+    const shelf = section.musicShelfRenderer as JsonObject | undefined
+    if (!shelf?.contents) continue
+
+    const title = runsText(
+      (shelf.title as { runs?: Array<{ text?: string }> })?.runs,
+    ).toLowerCase()
+    if (title.includes('album')) continue
+
+    collectFromShelf(shelf, 'song', results, seen)
+    if (results.length >= limit) return results.slice(0, limit)
+  }
+
+  return results.slice(0, limit)
+}
+
+function collectArtistDetail(data: JsonObject, limit: number): YtmArtistDetail {
+  const header = (
+    data.header as {
+      musicImmersiveHeaderRenderer?: {
+        title?: { runs?: Array<{ text?: string }> }
+        thumbnail?: unknown
+      }
+      musicVisualHeaderRenderer?: {
+        title?: { runs?: Array<{ text?: string }> }
+        thumbnail?: unknown
+      }
+    }
+  )?.musicImmersiveHeaderRenderer ??
+    (data.header as { musicVisualHeaderRenderer?: unknown })
+      ?.musicVisualHeaderRenderer
+
+  const title = runsText(
+    (header as { title?: { runs?: Array<{ text?: string }> } })?.title?.runs,
+  )
+  const thumbnail = pickMusicThumbnail(
+    (header as { thumbnail?: unknown })?.thumbnail,
+  )
+
+  const songs: YtmSearchResult[] = []
+  const albums: YtmSearchResult[] = []
+  const seenSongs = new Set<string>()
+  const seenAlbums = new Set<string>()
+
+  for (const section of browseSections(data)) {
+    const shelf = section.musicShelfRenderer as JsonObject | undefined
+    if (shelf?.contents) {
+      const shelfTitle = runsText(
         (shelf.title as { runs?: Array<{ text?: string }> })?.runs,
       ).toLowerCase()
-      if (!title.includes('song')) continue
-
-      collectFromShelf(shelf, 'song', results, seen)
-      if (results.length >= limit) return results.slice(0, limit)
+      if (shelfTitle.includes('album')) {
+        for (const entry of shelf.contents as Array<JsonObject>) {
+          const twoRow = entry.musicTwoRowItemRenderer as JsonObject | undefined
+          const parsed = twoRow ? parseAlbumItem(twoRow) : null
+          if (!parsed || seenAlbums.has(parsed.id)) continue
+          seenAlbums.add(parsed.id)
+          albums.push(parsed)
+        }
+      } else {
+        collectFromShelf(shelf, 'song', songs, seenSongs)
+      }
     }
+
+    const carousel = section.musicCarouselShelfRenderer as JsonObject | undefined
+    if (carousel?.contents) {
+      const carouselTitle = runsText(
+        (carousel.header as { musicCarouselShelfBasicHeaderRenderer?: { title?: { runs?: Array<{ text?: string }> } } })
+          ?.musicCarouselShelfBasicHeaderRenderer?.title?.runs ??
+          (carousel.title as { runs?: Array<{ text?: string }> })?.runs,
+      ).toLowerCase()
+
+      for (const entry of carousel.contents as Array<JsonObject>) {
+        const twoRow = entry.musicTwoRowItemRenderer as JsonObject | undefined
+        if (!twoRow) continue
+        if (carouselTitle.includes('album') || carouselTitle.includes('single')) {
+          const parsed = parseAlbumItem(twoRow)
+          if (!parsed || seenAlbums.has(parsed.id)) continue
+          seenAlbums.add(parsed.id)
+          albums.push(parsed)
+        } else {
+          const parsed = parseSongItem(twoRow as JsonObject) ?? parseAlbumItem(twoRow)
+          if (!parsed) continue
+          if (parsed.type === 'album') {
+            if (seenAlbums.has(parsed.id)) continue
+            seenAlbums.add(parsed.id)
+            albums.push(parsed)
+          }
+        }
+      }
+    }
+  }
+
+  return {
+    id: browseId(
+      (data.microformat as { microformatDataRenderer?: { urlCanonical?: string } })
+        ?.microformatDataRenderer,
+    ) ?? '',
+    title: title || 'Artist',
+    thumbnail,
+    songs: songs.slice(0, limit),
+    albums,
+  }
+}
+
+function collectAlbumTracks(data: JsonObject, limit: number): YtmSearchResult[] {
+  const results: YtmSearchResult[] = []
+  const seen = new Set<string>()
+
+  for (const section of browseSections(data)) {
+    const shelf = section.musicShelfRenderer as JsonObject | undefined
+    if (shelf) collectFromShelf(shelf, 'song', results, seen)
+    if (results.length >= limit) break
   }
 
   return results.slice(0, limit)
@@ -313,10 +520,49 @@ export async function searchYtmArtists(
   return collectSearchResults(data, 'artist', limit)
 }
 
+export async function searchYtmAll(
+  query: string,
+  limit = 25,
+): Promise<YtmSearchResult[]> {
+  const [mixedData, songData] = await Promise.all([
+    ytmusicRequest('search', { query }),
+    ytmusicRequest('search', { query, params: FILTER_SONGS }),
+  ])
+
+  const mixed = collectMixedSearchResults(mixedData, limit)
+  const topSongs = collectSearchResults(songData, 'song', 8)
+  const seen = new Set(mixed.map((item) => `${item.type}:${item.id}`))
+  const merged = [...topSongs.filter((item) => {
+    const key = `${item.type}:${item.id}`
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  }), ...mixed]
+
+  return merged.slice(0, limit)
+}
+
 export async function fetchYtmArtistTracks(
   browseId: string,
   limit = 12,
 ): Promise<YtmSearchResult[]> {
   const data = await ytmusicRequest('browse', { browseId })
   return collectArtistTopSongs(data, limit)
+}
+
+export async function fetchYtmArtistDetail(
+  browseId: string,
+  limit = 40,
+): Promise<YtmArtistDetail> {
+  const data = await ytmusicRequest('browse', { browseId })
+  const detail = collectArtistDetail(data, limit)
+  return { ...detail, id: browseId, title: detail.title || 'Artist' }
+}
+
+export async function fetchYtmAlbumTracks(
+  browseId: string,
+  limit = 50,
+): Promise<YtmSearchResult[]> {
+  const data = await ytmusicRequest('browse', { browseId })
+  return collectAlbumTracks(data, limit)
 }

@@ -6,6 +6,7 @@ import {
   type AddTrackInput,
   type QueueItem,
 } from '../lib/queue'
+import { notifyBridgeQueueRemove } from '../lib/bridgeChannel'
 import { supabase } from '../lib/supabase'
 
 function sortByPosition(items: QueueItem[]) {
@@ -105,10 +106,18 @@ export function useQueue(roomId: string) {
 
   const removeItem = useCallback(
     async (itemId: string) => {
+      const target = items.find((item) => item.id === itemId)
+      if (!target) return
+
       setBusyId(itemId)
       setError(null)
       setItems((prev) => prev.filter((item) => item.id !== itemId))
       try {
+        notifyBridgeQueueRemove(roomId, {
+          id: target.id,
+          video_id: target.video_id,
+          title: target.title,
+        })
         await removeQueueItem(itemId)
       } catch (err: unknown) {
         setError(err instanceof Error ? err.message : 'Could not remove track')
@@ -117,7 +126,7 @@ export function useQueue(roomId: string) {
         setBusyId(null)
       }
     },
-    [refresh],
+    [items, roomId, refresh],
   )
 
   return {

@@ -8,7 +8,7 @@ test.describe('Search', () => {
     await goToGuestRoom(page, lobby.room_id)
 
     await selectTab(page, 'Search')
-    await page.getByPlaceholder(/search songs/i).fill('daft punk')
+    await page.getByPlaceholder(/search songs and artists/i).fill('daft punk')
 
     await expect(page.getByRole('button', { name: 'Add' }).first()).toBeVisible({
       timeout: 20_000,
@@ -16,30 +16,29 @@ test.describe('Search', () => {
     await expect(page.locator('ul li').first()).toBeVisible()
   })
 
-  test('switches between songs and artists mode', async ({ page }) => {
+  test('unified search shows artists with open button', async ({ page }) => {
     const lobby = await createLobbyViaApi()
     await goToGuestRoom(page, lobby.room_id)
 
     await selectTab(page, 'Search')
-    await page.getByRole('button', { name: 'Artists' }).click()
-    await page.getByPlaceholder(/search artists/i).fill('daft punk')
+    await page.getByPlaceholder(/search songs and artists/i).fill('taylor swift')
 
     await expect(
-      page.getByRole('button', { name: 'Tracks' }).first(),
+      page.getByRole('button', { name: 'Open' }).first(),
     ).toBeVisible({ timeout: 20_000 })
   })
 
-  test('artist tracks view lists addable songs', async ({ page }) => {
+  test('artist view lists songs and albums', async ({ page }) => {
     const lobby = await createLobbyViaApi()
     await goToGuestRoom(page, lobby.room_id)
 
     await selectTab(page, 'Search')
-    await page.getByRole('button', { name: 'Artists' }).click()
-    await page.getByPlaceholder(/search artists/i).fill('taylor swift')
-    await page.getByRole('button', { name: 'Tracks' }).first().click()
+    await page.getByPlaceholder(/search songs and artists/i).fill('taylor swift')
+    await page.getByRole('button', { name: 'Open' }).first().click()
 
-    await expect(page.getByText('Popular tracks from this channel')).toBeVisible()
-    await expect(page.locator('ul li').first()).toBeVisible({ timeout: 20_000 })
+    await expect(page.getByRole('heading', { name: 'Songs' })).toBeVisible({
+      timeout: 20_000,
+    })
     await expect(page.getByRole('button', { name: 'Add' }).first()).toBeVisible()
   })
 })

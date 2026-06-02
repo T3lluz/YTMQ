@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { SearchTab } from '../components/SearchTab'
 import { QueueList } from '../components/QueueList'
+import { NowPlaying } from '../components/NowPlaying'
 import { SharePanel } from '../components/SharePanel'
 import { TabBar, type RoomTab } from '../components/TabBar'
 import { ToastStack } from '../components/ToastStack'
@@ -92,6 +93,10 @@ export function Room() {
 
   return (
     <main className="mx-auto flex min-h-dvh max-w-lg flex-col p-4 pb-24">
+      <div className="mb-4">
+        <NowPlaying roomId={roomId} compact />
+      </div>
+
       {tab === 'search' && (
         <SearchTab
           nickname={nickname}

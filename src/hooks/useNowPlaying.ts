@@ -5,7 +5,7 @@ import {
 } from '../lib/playback'
 import { supabase } from '../lib/supabase'
 
-const STALE_MS = 12_000
+const STALE_MS = 15_000
 
 export function useNowPlaying(roomId: string) {
   const [nowPlaying, setNowPlaying] = useState<NowPlaying | null>(null)
@@ -39,5 +39,5 @@ export function useNowPlaying(roomId: string) {
   const stale =
     !nowPlaying || Date.now() - nowPlaying.updatedAt > STALE_MS
 
-  return { nowPlaying, connected: connected && !stale, stale }
+  return { nowPlaying, connected, stale }
 }

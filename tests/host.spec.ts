@@ -24,7 +24,8 @@ test.describe('Host', () => {
     await expect(
       page
         .getByRole('button', { name: 'Connect YouTube Music' })
-        .or(page.getByText('YouTube Music linked')),
+        .or(page.getByText('YouTube Music linked'))
+        .or(page.getByText('HTTPS URL needed for YouTube Music connect')),
     ).toBeVisible()
   })
 

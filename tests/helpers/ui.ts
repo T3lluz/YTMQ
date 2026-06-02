@@ -55,7 +55,7 @@ export function ytMusicOpenLink(page: Page) {
 
 export async function searchAndAddFirstResult(page: Page, query: string) {
   await selectTab(page, 'Search')
-  const input = page.getByPlaceholder(/search songs/i)
+  const input = page.getByPlaceholder(/search songs and artists/i)
   await input.fill(query)
   const addButton = page.getByRole('button', { name: 'Add' }).first()
   await addButton.waitFor({ state: 'visible', timeout: 20_000 })
