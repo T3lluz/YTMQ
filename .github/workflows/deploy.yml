@@ -46,6 +46,8 @@ jobs:
         run: |
           test -f dist/index.html
           test -f dist/ytmusic-bridge.js
+          grep -q '/YTMQ/assets/' dist/index.html
+          ! grep -q '/src/main.tsx' dist/index.html
 
       - uses: actions/upload-pages-artifact@v3
         with:

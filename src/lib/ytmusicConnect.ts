@@ -10,20 +10,23 @@ export function bridgeScriptOrigin(): string | null {
   return null
 }
 
-export function bridgeScriptUrl(roomId: string): string | null {
+/** Path to bundled bridge on this deployment (no query string — GH Pages 404s some ? URLs). */
+export function bridgeScriptFetchUrl(): string | null {
   const origin = bridgeScriptOrigin()
   if (!origin) return null
 
   const base = import.meta.env.BASE_URL.replace(/\/$/, '')
-  const sb = encodeURIComponent(import.meta.env.VITE_SUPABASE_URL)
-  const key = encodeURIComponent(import.meta.env.VITE_SUPABASE_ANON_KEY)
-  return `${origin}${base}/ytmusic-bridge.js?roomId=${encodeURIComponent(roomId)}&sb=${sb}&key=${key}`
+  return `${origin}${base}/ytmusic-bridge.js`
 }
+
+/** Fallback when Pages artifact is missing the bridge file (served from git @ main). */
+export const BRIDGE_CDN_URL =
+  'https://cdn.jsdelivr.net/gh/T3lluz/YTMQ@main/public/ytmusic-bridge.js'
 
 /** One-liner for YouTube Music console — fetch + inline inject (Trusted Types safe). */
 export function buildYtmConnectSnippet(roomId: string): string | null {
-  const scriptUrl = bridgeScriptUrl(roomId)
-  if (!scriptUrl) return null
+  const primaryUrl = bridgeScriptFetchUrl()
+  if (!primaryUrl) return null
 
   const params = JSON.stringify({
     roomId,
@@ -31,7 +34,9 @@ export function buildYtmConnectSnippet(roomId: string): string | null {
     key: import.meta.env.VITE_SUPABASE_ANON_KEY,
   })
 
-  return `(function(){var p=${params},u=${JSON.stringify(scriptUrl)};window.__YTMQ_BRIDGE_PARAMS__=p;fetch(u).then(function(r){if(!r.ok)throw new Error('load '+r.status);return r.text()}).then(function(c){var s=document.createElement('script'),t=window.trustedTypes;if(t&&t.createPolicy){s.text=t.createPolicy('ytmq',{createScript:function(x){return x}}).createScript(c)}else{s.textContent=c}document.head.appendChild(s)}).catch(function(e){console.error('[YTMQ]',e)})})();`
+  const urls = JSON.stringify([primaryUrl, BRIDGE_CDN_URL])
+
+  return `(function(){var p=${params},urls=${urls};window.__YTMQ_BRIDGE_PARAMS__=p;function load(i){if(i>=urls.length){console.error('[YTMQ] Could not load bridge from',urls);return}fetch(urls[i]).then(function(r){if(!r.ok)throw new Error('load '+r.status);return r.text()}).then(function(c){var s=document.createElement('script'),t=window.trustedTypes;if(t&&t.createPolicy){s.text=t.createPolicy('ytmq',{createScript:function(x){return x}}).createScript(c)}else{s.textContent=c}document.head.appendChild(s)}).catch(function(){load(i+1)})}load(0)})();`
 }
 
 export function needsHttpsBridgeOrigin(): boolean {
