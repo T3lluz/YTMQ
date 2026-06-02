@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+
+      - name: Typecheck and build
+        env:
+          VITE_SUPABASE_URL: https://example.supabase.co
+          VITE_SUPABASE_ANON_KEY: example-anon-key
+          VITE_PUBLIC_SITE_URL: https://example.github.io/YTMQ
+        run: |
+          set -euo pipefail
+          npm run build
+          test -f dist/index.html
+          test -f dist/ytmusic-bridge.js
+          test -f dist/ytmq-connect.user.js
+          ! grep -qE 'src="/src/main\.tsx"|src="/src/main"' dist/index.html

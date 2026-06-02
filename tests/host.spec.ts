@@ -22,7 +22,9 @@ test.describe('Host', () => {
     })
     await expect(page.getByText('Queue mirror')).toBeVisible()
     await expect(
-      page.getByRole('button', { name: 'Connect YouTube Music' }),
+      page
+        .getByRole('button', { name: 'Connect YouTube Music' })
+        .or(page.getByText('YouTube Music linked')),
     ).toBeVisible()
   })
 

@@ -31,6 +31,11 @@ export async function goToGuestRoom(page: Page, roomId: string) {
 
 export async function goToHost(page: Page, lobby: LobbyApiResult) {
   await seedHostSession(page, lobby)
+  await page.evaluate(() => {
+    for (const key of Object.keys(sessionStorage)) {
+      if (key.startsWith('ytmq_ytm_connected_')) sessionStorage.removeItem(key)
+    }
+  })
   await gotoApp(page, `host/${lobby.room_id}`)
   await page.getByText('Queue mirror').waitFor()
 }

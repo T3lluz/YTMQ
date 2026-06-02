@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         YTMQ — YouTube Music connect
 // @namespace    https://github.com/T3lluz/YTMQ
-// @version      1.1.0
+// @version      1.2.0
 // @description  Auto-connects YTMQ on music.youtube.com (from host link or last session)
 // @match        https://music.youtube.com/*
 // @run-at       document-idle

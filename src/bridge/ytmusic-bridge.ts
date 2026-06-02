@@ -92,7 +92,13 @@ function getYtmApp(): YtmApp | null {
 }
 
 function getInnerStore(): InnerQueueStore | null {
-  return getQueueElement()?.queue?.store?.store ?? null
+  const outer = getQueueElement()?.queue?.store as
+    | { store?: InnerQueueStore; getState?: () => QueueStoreState }
+    | undefined
+  if (!outer) return null
+  if (outer.store?.getState) return outer.store
+  if (typeof outer.getState === 'function') return outer as InnerQueueStore
+  return null
 }
 
 function countDomQueueItems(): number {
@@ -273,7 +279,7 @@ async function addVideoToQueue(videoId: string): Promise<boolean> {
       }
 
       const beforeCount = state.items.length
-      const index = beforeCount > 0 ? beforeCount - 1 : 0
+      const index = beforeCount
 
       if (typeof queueEl.dispatch !== 'function') {
         throw new Error('Queue dispatch not available')
@@ -434,8 +440,14 @@ async function runBridge() {
     return
   }
 
-  for (const row of (initial ?? []) as QueueRow[]) {
-    syncedIds.add(row.id)
+  const existingRows = (initial ?? []) as QueueRow[]
+
+  async function syncExistingQueue() {
+    if (existingRows.length === 0) return
+    log('Syncing existing queue to YouTube Music…', existingRows.length)
+    for (const row of existingRows) {
+      await enqueueToYtm(row)
+    }
   }
 
   const channel = supabase
@@ -459,7 +471,10 @@ async function runBridge() {
         showToast('YTMQ connected')
         log('Subscribed to room', roomId)
         notifyHostConnected(roomId)
-        void waitForQueueApi().then(() => processPending())
+        void waitForQueueApi(25000).then(async () => {
+          await syncExistingQueue()
+          await processPending()
+        })
       }
     })
 
