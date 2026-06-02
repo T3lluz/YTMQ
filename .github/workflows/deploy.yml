@@ -51,16 +51,34 @@ jobs:
           grep -q 'segmentCount' dist/404.html
           ! grep -q '/src/main.tsx' dist/index.html
 
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
+          name: dist
           path: dist
 
   deploy:
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+
       - uses: actions/deploy-pages@v4
         id: deployment
+
+      # Fallback when Pages “Source” is set to a branch instead of GitHub Actions.
+      - name: Publish built app to gh-pages branch
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          folder: dist
+          branch: gh-pages
+          single-commit: true
