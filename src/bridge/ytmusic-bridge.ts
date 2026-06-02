@@ -30,9 +30,14 @@ type QueueStoreState = {
   }
 }
 
+/** Zustand store on #queue (queue.store.store at runtime). */
+type InnerQueueStore = {
+  getState: () => QueueStoreState
+}
+
 type QueueStore = {
   store: {
-    getState: () => QueueStoreState
+    store: InnerQueueStore
   }
 }
 
@@ -86,7 +91,7 @@ function getYtmApp(): YtmApp | null {
   return document.querySelector('ytmusic-app')
 }
 
-function getInnerStore(): QueueStore['store'] | null {
+function getInnerStore(): InnerQueueStore | null {
   return getQueueElement()?.queue?.store?.store ?? null
 }
 
@@ -136,7 +141,7 @@ function queueItemsIncludeVideo(items: unknown[], videoId: string): boolean {
 }
 
 async function waitForQueueToInclude(
-  innerStore: QueueStore['store'] | null,
+  innerStore: InnerQueueStore | null,
   videoId: string,
   beforeStoreCount: number,
   beforeDomCount: number,
