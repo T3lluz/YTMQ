@@ -30,20 +30,15 @@ type QueueStoreState = {
   }
 }
 
-type QueueDispatch = {
-  dispatch: (action: {
-    type: string
-    payload?: unknown
-  }) => void
+type QueueStore = {
   store: {
-    store: {
-      getState: () => QueueStoreState
-    }
+    getState: () => QueueStoreState
   }
 }
 
 type QueueElement = HTMLElement & {
-  queue?: QueueDispatch
+  dispatch: (action: { type: string; payload?: unknown }) => void
+  queue?: QueueStore
 }
 
 type YtmApp = HTMLElement & {
@@ -91,6 +86,78 @@ function getYtmApp(): YtmApp | null {
   return document.querySelector('ytmusic-app')
 }
 
+function getInnerStore(): QueueStore['store'] | null {
+  return getQueueElement()?.queue?.store?.store ?? null
+}
+
+function countDomQueueItems(): number {
+  return document.querySelectorAll('ytmusic-player-queue-item').length
+}
+
+function saveSession(params: BridgeParams) {
+  try {
+    localStorage.setItem(
+      'ytmq_session',
+      JSON.stringify({ ...params, at: Date.now() }),
+    )
+  } catch {
+    /* private mode */
+  }
+}
+
+function notifyHostConnected(roomId: string) {
+  const params = readParams()
+  if (params) saveSession(params)
+
+  try {
+    if (window.opener && !window.opener.closed) {
+      window.opener.postMessage({ type: 'ytmq:connected', roomId }, '*')
+    }
+  } catch {
+    /* cross-origin */
+  }
+}
+
+async function waitForQueueApi(maxMs = 20000): Promise<boolean> {
+  const deadline = Date.now() + maxMs
+  while (Date.now() < deadline) {
+    if (getInnerStore() && getYtmApp()?.networkManager) return true
+    await new Promise((r) => window.setTimeout(r, 250))
+  }
+  return Boolean(getInnerStore() && getYtmApp()?.networkManager)
+}
+
+function queueItemsIncludeVideo(items: unknown[], videoId: string): boolean {
+  try {
+    return JSON.stringify(items).includes(`"${videoId}"`)
+  } catch {
+    return false
+  }
+}
+
+async function waitForQueueToInclude(
+  innerStore: QueueStore['store'] | null,
+  videoId: string,
+  beforeStoreCount: number,
+  beforeDomCount: number,
+): Promise<boolean> {
+  const deadline = Date.now() + 2000
+  while (Date.now() < deadline) {
+    if (innerStore) {
+      const state = innerStore.getState().queue
+      if (
+        state.items.length > beforeStoreCount ||
+        queueItemsIncludeVideo(state.items, videoId)
+      ) {
+        return true
+      }
+    }
+    if (countDomQueueItems() > beforeDomCount) return true
+    await new Promise((r) => window.setTimeout(r, 80))
+  }
+  return false
+}
+
 function readNowPlaying(): NowPlayingPayload | null {
   const bar = document.querySelector('ytmusic-player-bar') as PlayerBar | null
   const title =
@@ -117,9 +184,13 @@ function readNowPlaying(): NowPlayingPayload | null {
   }
 }
 
-function dispatchQueueAddLegacy(videoId: string): boolean {
+async function dispatchQueueAddLegacy(videoId: string): Promise<boolean> {
   const playerBar = document.querySelector('ytmusic-player-bar')
   if (!playerBar) return false
+
+  const innerStore = getInnerStore()
+  const beforeStoreCount = innerStore?.getState().queue.items.length ?? 0
+  const beforeDomCount = countDomQueueItems()
 
   const queueTarget = {
     videoId,
@@ -156,7 +227,12 @@ function dispatchQueueAddLegacy(videoId: string): boolean {
     )
   }
 
-  return true
+  return waitForQueueToInclude(
+    innerStore,
+    videoId,
+    beforeStoreCount,
+    beforeDomCount,
+  )
 }
 
 async function addVideoToQueue(videoId: string): Promise<boolean> {
@@ -165,11 +241,13 @@ async function addVideoToQueue(videoId: string): Promise<boolean> {
     return false
   }
 
+  await waitForQueueApi(8000)
+
   const queueEl = getQueueElement()
   const app = getYtmApp()
-  const innerStore = queueEl?.queue?.store?.store
+  const innerStore = getInnerStore()
 
-  if (innerStore && app?.networkManager) {
+  if (innerStore && app?.networkManager && queueEl) {
     try {
       const state = innerStore.getState().queue
       const response = await app.networkManager.fetch<
@@ -189,10 +267,14 @@ async function addVideoToQueue(videoId: string): Promise<boolean> {
         return false
       }
 
-      const index =
-        state.items.length > 0 ? state.items.length - 1 : 0
+      const beforeCount = state.items.length
+      const index = beforeCount > 0 ? beforeCount - 1 : 0
 
-      queueEl!.queue!.dispatch({
+      if (typeof queueEl.dispatch !== 'function') {
+        throw new Error('Queue dispatch not available')
+      }
+
+      queueEl.dispatch({
         type: 'ADD_ITEMS',
         payload: {
           nextQueueItemId: state.nextQueueItemId,
@@ -203,19 +285,30 @@ async function addVideoToQueue(videoId: string): Promise<boolean> {
         },
       })
 
-      return true
+      return waitForQueueToInclude(
+        innerStore,
+        videoId,
+        beforeCount,
+        countDomQueueItems(),
+      )
     } catch (err) {
       log('Queue store add failed, trying legacy event', err)
     }
   }
 
-  if (!getQueueElement()) {
-    log(
-      'Queue panel not ready — play any song on YouTube Music, open the queue, then retry.',
-    )
-  }
+  return await dispatchQueueAddLegacy(videoId)
+}
 
-  return dispatchQueueAddLegacy(videoId)
+async function addVideoToQueueWithRetry(
+  videoId: string,
+  attempts = 6,
+): Promise<boolean> {
+  for (let i = 0; i < attempts; i += 1) {
+    if (await addVideoToQueue(videoId)) return true
+    await waitForQueueApi(3000)
+    await new Promise((r) => window.setTimeout(r, 400 * (i + 1)))
+  }
+  return false
 }
 
 function showToast(message: string) {
@@ -267,7 +360,40 @@ async function runBridge() {
   }
 
   const syncedIds = new Set<string>()
+  const pendingRows: QueueRow[] = []
   const supabase: SupabaseClient = createClient(sb, key)
+
+  async function processPending() {
+    while (pendingRows.length > 0) {
+      const row = pendingRows[0]!
+      if (syncedIds.has(row.id)) {
+        pendingRows.shift()
+        continue
+      }
+      const ok = await addVideoToQueueWithRetry(row.video_id, 3)
+      if (!ok) return
+      syncedIds.add(row.id)
+      pendingRows.shift()
+      showToast(`Added: ${row.title || 'track'}`)
+      log('Added to queue (retry)', row.video_id, row.title)
+    }
+  }
+
+  async function enqueueToYtm(row: QueueRow) {
+    if (syncedIds.has(row.id)) return
+    const ok = await addVideoToQueueWithRetry(row.video_id)
+    if (ok) {
+      syncedIds.add(row.id)
+      showToast(`Added: ${row.title || 'track'}`)
+      log('Added to queue', row.video_id, row.title)
+      return
+    }
+    if (!pendingRows.some((p) => p.id === row.id)) {
+      pendingRows.push(row)
+      log('Queued for retry when YT Music is ready', row.video_id)
+    }
+    void processPending()
+  }
 
   let lastPlaybackKey = ''
 
@@ -318,30 +444,23 @@ async function runBridge() {
         filter: `room_id=eq.${roomId}`,
       },
       (payload) => {
-        void (async () => {
-          const row = payload.new as QueueRow | undefined
-          if (!row?.id || !row?.video_id) return
-          if (syncedIds.has(row.id)) return
-          syncedIds.add(row.id)
-
-          const ok = await addVideoToQueue(row.video_id)
-          if (ok) {
-            showToast(`Added: ${row.title || 'track'}`)
-            log('Added to queue', row.video_id, row.title)
-          } else {
-            syncedIds.delete(row.id)
-            showToast(`Could not add: ${row.title || 'track'}`)
-            log('Failed to add', row.video_id, row.title)
-          }
-        })()
+        const row = payload.new as QueueRow | undefined
+        if (!row?.id || !row?.video_id) return
+        void enqueueToYtm(row)
       },
     )
     .subscribe((status) => {
       if (status === 'SUBSCRIBED') {
         showToast('YTMQ connected')
         log('Subscribed to room', roomId)
+        notifyHostConnected(roomId)
+        void waitForQueueApi().then(() => processPending())
       }
     })
+
+  window.setInterval(() => {
+    if (pendingRows.length > 0) void processPending()
+  }, 3000)
 
   window.__YTMQ_BRIDGE__ = {
     roomId,
@@ -362,7 +481,7 @@ async function runBridge() {
       let added = 0
       for (const row of (data ?? []) as QueueRow[]) {
         if (syncedIds.has(row.id)) continue
-        if (await addVideoToQueue(row.video_id)) {
+        if (await addVideoToQueueWithRetry(row.video_id)) {
           syncedIds.add(row.id)
           added += 1
         }

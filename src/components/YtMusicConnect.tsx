@@ -1,8 +1,9 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   buildYtmConnectDeepLink,
   buildYtmConnectSnippet,
   needsHttpsBridgeOrigin,
+  YTMQ_CONNECTED_MESSAGE,
   ytmUserscriptInstallUrl,
 } from '../lib/ytmusicConnect'
 
@@ -10,7 +11,7 @@ type YtMusicConnectProps = {
   roomId: string
 }
 
-type Step = 'start' | 'paste' | 'done'
+type Step = 'connect' | 'waiting' | 'done'
 
 function doneKey(roomId: string) {
   return `ytmq_ytm_connected_${roomId}`
@@ -18,43 +19,49 @@ function doneKey(roomId: string) {
 
 export function YtMusicConnect({ roomId }: YtMusicConnectProps) {
   const [step, setStep] = useState<Step>(() =>
-    sessionStorage.getItem(doneKey(roomId)) === '1' ? 'done' : 'start',
+    sessionStorage.getItem(doneKey(roomId)) === '1' ? 'done' : 'connect',
   )
-  const [copyError, setCopyError] = useState<string | null>(null)
+  const [showManual, setShowManual] = useState(false)
 
   const httpsRequired = needsHttpsBridgeOrigin()
   const snippet = useMemo(() => buildYtmConnectSnippet(roomId), [roomId])
   const deepLink = useMemo(() => buildYtmConnectDeepLink(roomId), [roomId])
   const userscriptUrl = useMemo(() => ytmUserscriptInstallUrl(), [])
 
-  const startConnect = useCallback(async () => {
-    if (!snippet) return
-    setCopyError(null)
-    try {
-      await navigator.clipboard.writeText(snippet)
-    } catch {
-      setCopyError('Could not copy — use “Copy code” below.')
-    }
-    window.open(
-      deepLink ?? 'https://music.youtube.com',
-      '_blank',
-      'noopener,noreferrer',
-    )
-    setStep('paste')
-  }, [snippet, deepLink])
-
   const markDone = useCallback(() => {
     sessionStorage.setItem(doneKey(roomId), '1')
     setStep('done')
   }, [roomId])
 
-  const copyAgain = useCallback(async () => {
+  useEffect(() => {
+    if (step !== 'waiting') return
+
+    function onMessage(event: MessageEvent) {
+      if (event.data?.type !== YTMQ_CONNECTED_MESSAGE) return
+      if (event.data.roomId !== roomId) return
+      markDone()
+    }
+
+    window.addEventListener('message', onMessage)
+    return () => window.removeEventListener('message', onMessage)
+  }, [step, roomId, markDone])
+
+  const startConnect = useCallback(() => {
+    window.open(
+      deepLink ?? 'https://music.youtube.com',
+      '_blank',
+      'noopener,noreferrer',
+    )
+    setStep('waiting')
+    setShowManual(false)
+  }, [deepLink])
+
+  const copySnippet = useCallback(async () => {
     if (!snippet) return
-    setCopyError(null)
     try {
       await navigator.clipboard.writeText(snippet)
     } catch {
-      setCopyError('Copy failed')
+      /* user can copy from details */
     }
   }, [snippet])
 
@@ -62,21 +69,16 @@ export function YtMusicConnect({ roomId }: YtMusicConnectProps) {
     return null
   }
 
-  if (httpsRequired || !snippet) {
+  if (httpsRequired || !deepLink) {
     return (
       <section className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-100">
         <p className="font-medium">HTTPS URL needed for YouTube Music connect</p>
         <p className="mt-1 text-amber-200/80">
-          Local dev uses HTTP, but music.youtube.com only loads scripts over HTTPS.
           Add to <code className="text-xs">.env.local</code>:
         </p>
         <pre className="mt-2 overflow-x-auto rounded-lg bg-black/30 p-2 text-xs text-zinc-200">
           VITE_PUBLIC_SITE_URL=https://YOUR_USER.github.io/YTMQ
         </pre>
-        <p className="mt-2 text-amber-200/80">
-          Use your deployed GitHub Pages URL, then reload this page and connect
-          again.
-        </p>
       </section>
     )
   }
@@ -93,14 +95,14 @@ export function YtMusicConnect({ roomId }: YtMusicConnectProps) {
         <div className="min-w-0 flex-1">
           <p className="font-medium text-emerald-200">YouTube Music linked</p>
           <p className="text-sm text-zinc-400">
-            Guest adds go to your queue. Keep that tab open.
+            Guest picks go to your queue. Keep this tab and YouTube Music open.
           </p>
         </div>
         <button
           type="button"
           onClick={() => {
             sessionStorage.removeItem(doneKey(roomId))
-            setStep('start')
+            setStep('connect')
           }}
           className="shrink-0 text-xs text-zinc-500 underline"
         >
@@ -110,71 +112,47 @@ export function YtMusicConnect({ roomId }: YtMusicConnectProps) {
     )
   }
 
-  if (step === 'paste') {
+  if (step === 'waiting') {
     return (
       <section className="space-y-3 rounded-xl border border-violet-500/30 bg-violet-500/5 p-4">
-        <p className="font-medium">Finish on the YouTube Music tab</p>
-        {userscriptUrl && (
-          <p className="text-sm text-zinc-400">
-            With{' '}
-            <a
-              href={userscriptUrl}
-              className="text-violet-300 underline"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Tampermonkey
-            </a>{' '}
-            installed, the opened tab should connect by itself. Otherwise use the
-            console steps below.
-          </p>
-        )}
-        <ol className="space-y-2 text-sm text-zinc-300">
-          <li className="flex gap-2">
-            <span className="font-semibold text-violet-400">1</span>
-            <span>
-              Type <code className="text-violet-300">allow pasting</code> in the
-              console if Chrome asks, then Enter
-            </span>
-          </li>
-          <li className="flex gap-2">
-            <span className="font-semibold text-violet-400">2</span>
-            <span>
-              Open console{' '}
-              <span className="text-zinc-500">
-                ({navigator.platform.includes('Mac') ? '⌘⌥J' : 'Ctrl+Shift+J'})
-              </span>
-            </span>
-          </li>
-          <li className="flex gap-2">
-            <span className="font-semibold text-violet-400">3</span>
-            <span>
-              Paste, Enter — look for “YTMQ connected”. Start playing any song
-              and open the queue panel so guest adds appear in Up next.
-            </span>
-          </li>
-        </ol>
-        {copyError && (
-          <p className="text-sm text-amber-400" role="alert">
-            {copyError}
-          </p>
-        )}
+        <p className="font-medium">Connecting…</p>
+        <p className="text-sm text-zinc-400">
+          On the YouTube Music tab, wait for the <strong className="text-zinc-300">YTMQ connected</strong>{' '}
+          toast. This page updates automatically.
+        </p>
         <div className="flex gap-2">
           <button
             type="button"
             onClick={() => void markDone()}
             className="flex-1 rounded-xl bg-violet-600 py-3 font-medium text-white active:bg-violet-500"
           >
-            Done
+            It&apos;s connected
           </button>
           <button
             type="button"
-            onClick={() => void copyAgain()}
+            onClick={() => setShowManual((v) => !v)}
             className="rounded-xl border border-zinc-700 px-4 py-3 text-sm font-medium active:bg-zinc-900"
           >
-            Copy code
+            Help
           </button>
         </div>
+        {showManual && snippet && (
+          <details open className="text-sm text-zinc-400">
+            <summary className="cursor-pointer text-violet-300">
+              Manual setup (no Tampermonkey)
+            </summary>
+            <p className="mt-2">
+              Open the console on the YouTube Music tab, paste the code, press Enter.
+            </p>
+            <button
+              type="button"
+              onClick={() => void copySnippet()}
+              className="mt-2 rounded-lg border border-zinc-700 px-3 py-2 text-xs font-medium active:bg-zinc-900"
+            >
+              Copy code
+            </button>
+          </details>
+        )}
       </section>
     )
   }
@@ -182,28 +160,26 @@ export function YtMusicConnect({ roomId }: YtMusicConnectProps) {
   return (
     <section className="space-y-3 rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
       <p className="text-sm text-zinc-400">
-        Link browser YouTube Music so guest picks land in your queue. Use{' '}
-        <strong className="font-medium text-zinc-300">music.youtube.com</strong>{' '}
-        in Chrome (not the YT Music app).
+        One click opens <strong className="text-zinc-300">music.youtube.com</strong> and
+        links your queue. Use Chrome on desktop (not the phone app).
       </p>
       {userscriptUrl && (
         <p className="text-xs text-zinc-500">
-          One-time: install{' '}
+          First time only:{' '}
           <a
             href={userscriptUrl}
             className="text-violet-300 underline"
             target="_blank"
             rel="noopener noreferrer"
           >
-            YTMQ helper (Tampermonkey)
+            install YTMQ helper
           </a>{' '}
-          on desktop or Android Chrome — then Connect opens a link that loads
-          automatically.
+          (Tampermonkey) — then Connect just works.
         </p>
       )}
       <button
         type="button"
-        onClick={() => void startConnect()}
+        onClick={startConnect}
         className="w-full rounded-xl bg-violet-600 py-3.5 text-base font-medium text-white active:bg-violet-500"
       >
         Connect YouTube Music

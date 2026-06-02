@@ -1,3 +1,6 @@
+/** postMessage type when the bridge subscribes on music.youtube.com */
+export const YTMQ_CONNECTED_MESSAGE = 'ytmq:connected' as const
+
 /** HTTPS origin for ytmusic-bridge.js (required on music.youtube.com). */
 export function bridgeScriptOrigin(): string | null {
   const fromEnv = import.meta.env.VITE_PUBLIC_SITE_URL?.replace(/\/$/, '')

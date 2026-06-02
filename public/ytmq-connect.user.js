@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         YTMQ — YouTube Music connect
 // @namespace    https://github.com/T3lluz/YTMQ
-// @version      1.0.0
-// @description  Auto-loads the YTMQ bridge when you open a connect link from the host lobby
+// @version      1.1.0
+// @description  Auto-connects YTMQ on music.youtube.com (from host link or last session)
 // @match        https://music.youtube.com/*
 // @run-at       document-idle
 // @grant        none
@@ -11,17 +11,64 @@
 (function () {
   if (window.__YTMQ_BRIDGE__ || window.__YTMQ_BRIDGE_LOADING__) return
 
-  const q = new URLSearchParams(location.search)
-  const roomId = q.get('roomId')
-  const sb = q.get('sb')
-  const key = q.get('key')
-  const bridgeList = q.get('ytmqBridge')
-  if (!roomId || !sb || !key || !bridgeList) return
+  var SESSION_KEY = 'ytmq_session'
+  var SESSION_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000
+  var DEFAULT_BRIDGE =
+    'https://cdn.jsdelivr.net/gh/T3lluz/YTMQ@main/public/ytmusic-bridge.js'
+
+  var q = new URLSearchParams(location.search)
+  var roomId = q.get('roomId')
+  var sb = q.get('sb')
+  var key = q.get('key')
+  var bridgeList = q.get('ytmqBridge')
+
+  if (roomId && sb && key) {
+    try {
+      localStorage.setItem(
+        SESSION_KEY,
+        JSON.stringify({
+          roomId: roomId,
+          sb: sb,
+          key: key,
+          bridgeList: bridgeList || '',
+          at: Date.now(),
+        }),
+      )
+    } catch (e) {
+      /* private mode */
+    }
+  } else {
+    try {
+      var stored = JSON.parse(localStorage.getItem(SESSION_KEY) || 'null')
+      if (
+        stored &&
+        stored.roomId &&
+        stored.sb &&
+        stored.key &&
+        Date.now() - (stored.at || 0) < SESSION_MAX_AGE_MS
+      ) {
+        roomId = stored.roomId
+        sb = stored.sb
+        key = stored.key
+        bridgeList = stored.bridgeList || ''
+      }
+    } catch (e2) {
+      /* ignore */
+    }
+  }
+
+  if (!roomId || !sb || !key) return
 
   window.__YTMQ_BRIDGE_LOADING__ = true
-  window.__YTMQ_BRIDGE_PARAMS__ = { roomId, sb, key }
+  window.__YTMQ_BRIDGE_PARAMS__ = { roomId: roomId, sb: sb, key: key }
 
-  const urls = bridgeList.split(',').map((s) => s.trim()).filter(Boolean)
+  var urls = (bridgeList || DEFAULT_BRIDGE)
+    .split(',')
+    .map(function (s) {
+      return s.trim()
+    })
+    .filter(Boolean)
+  if (urls.indexOf(DEFAULT_BRIDGE) === -1) urls.push(DEFAULT_BRIDGE)
 
   function load(i) {
     if (i >= urls.length) {
