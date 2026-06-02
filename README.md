@@ -29,14 +29,14 @@ Shared queue for **YouTube Music**: guests use this web app to search and manage
 1. In [Settings → Secrets and variables → Actions](https://github.com/T3lluz/YTMQ/settings/secrets/actions), add:
    - `VITE_SUPABASE_URL`
    - `VITE_SUPABASE_ANON_KEY`
-2. Push to `main` (or **Actions → Deploy to GitHub Pages → Run workflow**). Wait until all three jobs succeed: `build`, `deploy`, `publish-gh-pages-branch`.
-
-3. Open [Settings → Pages](https://github.com/T3lluz/YTMQ/settings/pages). Under **Build and deployment → Source**, pick **one**:
-   - **GitHub Actions** — appears after the first successful `deploy` job. Choose workflow **Deploy to GitHub Pages** if prompted.
-   - **Deploy from a branch** → **`gh-pages`** → **`/ (root)`** — only listed after `publish-gh-pages-branch` has run once.
+2. Open [Settings → Pages](https://github.com/T3lluz/YTMQ/settings/pages). Under **Source**, pick **exactly one** (mixing both causes “in progress deployment” errors):
+   - **GitHub Actions** (recommended) → push to `main` or run **Deploy to GitHub Pages**. Wait for `build` + `deploy`.
+   - **Deploy from a branch** → **`gh-pages`** / **`(root)`** → run **Publish gh-pages branch** manually when you need an update (not on every `main` push).
    - **Never** use branch **`main`** (causes `GET /src/main.tsx 404`).
 
-4. If the site still loads `/src/main.tsx`, the wrong source is selected — switch as above and hard-refresh.
+3. If **Deploy to GitHub Pages** fails with *“due to in progress deployment”*: you have a branch deploy still running. Either wait a few minutes, or set Source to **GitHub Actions** only (not `gh-pages`), cancel the stuck run under [Environments → github-pages](https://github.com/T3lluz/YTMQ/settings/environments), then re-run the workflow.
+
+4. If the site still loads `/src/main.tsx`, the wrong source is selected — fix step 2 and hard-refresh.
 
 Live site: `https://t3lluz.github.io/YTMQ/` (includes `ytmusic-bridge.js` for host connect).
 
