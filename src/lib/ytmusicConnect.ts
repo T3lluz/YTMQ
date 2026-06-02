@@ -35,18 +35,12 @@ export function bridgeScriptFetchUrl(): string | null {
   return urls[0] ?? null
 }
 
-/** Fallback when the primary Pages URL fails (e.g. offline mirror). */
-export const BRIDGE_CDN_URL =
-  'https://cdn.jsdelivr.net/gh/T3lluz/YTMQ@main/ytmusic-bridge.js'
-
 /** Ordered bridge URLs for the YT Music console loader (deduped). */
 export function bridgeScriptFetchUrls(): string[] {
   const root = bridgeSiteRoot()
   if (!root) return []
 
-  const candidates = [`${root}/ytmusic-bridge.js`, BRIDGE_CDN_URL]
-
-  return [...new Set(candidates)]
+  return [`${root}/ytmusic-bridge.js`]
 }
 
 /** One-liner for YouTube Music console — fetch + inline inject (Trusted Types safe). */

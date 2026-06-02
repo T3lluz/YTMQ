@@ -117,8 +117,9 @@ export function YtMusicConnect({ roomId }: YtMusicConnectProps) {
       <section className="space-y-3 rounded-xl border border-violet-500/30 bg-violet-500/5 p-4">
         <p className="font-medium">Connecting…</p>
         <p className="text-sm text-zinc-400">
-          On the YouTube Music tab, wait for the <strong className="text-zinc-300">YTMQ connected</strong>{' '}
-          toast. This page updates automatically.
+          On the YouTube Music tab, open the <strong className="text-zinc-300">queue panel</strong>,
+          wait for <strong className="text-zinc-300">YTMQ connected</strong>, then add a test song
+          from a guest. This page updates automatically.
         </p>
         <div className="flex gap-2">
           <button
@@ -163,6 +164,11 @@ export function YtMusicConnect({ roomId }: YtMusicConnectProps) {
         One click opens <strong className="text-zinc-300">music.youtube.com</strong> and
         links your queue. Use Chrome on desktop (not the phone app).
       </p>
+      <ol className="list-decimal space-y-1 pl-5 text-xs text-zinc-500">
+        <li>Install the helper below (once), then click Connect.</li>
+        <li>On YouTube Music, open the queue panel (icon by the player).</li>
+        <li>Wait for the &quot;YTMQ connected&quot; toast, then let guests add songs.</li>
+      </ol>
       {userscriptUrl && (
         <p className="text-xs text-zinc-500">
           First time only:{' '}

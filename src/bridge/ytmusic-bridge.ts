@@ -195,6 +195,84 @@ function readNowPlaying(): NowPlayingPayload | null {
   }
 }
 
+/** Opens the queue panel so #queue store initializes on a fresh session. */
+function nudgeQueueUi(): void {
+  const selectors = [
+    'ytmusic-player-bar button[aria-label*="Queue"]',
+    'ytmusic-player-bar button[aria-label*="queue"]',
+    'tp-yt-paper-icon-button[aria-label*="Queue"]',
+    'tp-yt-paper-icon-button[aria-label*="queue"]',
+  ]
+  for (const selector of selectors) {
+    const btn = document.querySelector(selector) as HTMLElement | null
+    if (btn) {
+      btn.click()
+      return
+    }
+  }
+}
+
+async function addVideoViaStoreApi(videoId: string): Promise<boolean> {
+  const queueEl = getQueueElement()
+  const app = getYtmApp()
+  const innerStore = getInnerStore()
+
+  if (!innerStore || !app?.networkManager || !queueEl) return false
+
+  const state = innerStore.getState().queue
+  if (!state.queueContextParams) {
+    log('Queue context not ready — open the queue panel or play a track first')
+    return false
+  }
+
+  try {
+    const response = await app.networkManager.fetch<
+      GetQueueResponse,
+      { queueContextParams: string; videoIds: string[] }
+    >('/music/get_queue', {
+      queueContextParams: state.queueContextParams,
+      videoIds: [videoId],
+    })
+
+    const items = (response.queueDatas ?? [])
+      .map((row) => row?.content)
+      .filter(Boolean)
+
+    if (items.length === 0) {
+      log('Track not in YouTube Music catalog:', videoId)
+      return false
+    }
+
+    const beforeCount = state.items.length
+    const index = beforeCount
+
+    if (typeof queueEl.dispatch !== 'function') {
+      throw new Error('Queue dispatch not available')
+    }
+
+    queueEl.dispatch({
+      type: 'ADD_ITEMS',
+      payload: {
+        nextQueueItemId: state.nextQueueItemId,
+        index,
+        items,
+        shuffleEnabled: false,
+        shouldAssignIds: true,
+      },
+    })
+
+    return waitForQueueToInclude(
+      innerStore,
+      videoId,
+      beforeCount,
+      countDomQueueItems(),
+    )
+  } catch (err) {
+    log('Queue store add failed', err)
+    return false
+  }
+}
+
 async function dispatchQueueAddLegacy(videoId: string): Promise<boolean> {
   const playerBar = document.querySelector('ytmusic-player-bar')
   if (!playerBar) return false
@@ -252,62 +330,17 @@ async function addVideoToQueue(videoId: string): Promise<boolean> {
     return false
   }
 
-  await waitForQueueApi(8000)
+  await waitForQueueApi(12000)
 
-  const queueEl = getQueueElement()
-  const app = getYtmApp()
-  const innerStore = getInnerStore()
-
-  if (innerStore && app?.networkManager && queueEl) {
-    try {
-      const state = innerStore.getState().queue
-      const response = await app.networkManager.fetch<
-        GetQueueResponse,
-        { queueContextParams: string; videoIds: string[] }
-      >('/music/get_queue', {
-        queueContextParams: state.queueContextParams,
-        videoIds: [videoId],
-      })
-
-      const items = (response.queueDatas ?? [])
-        .map((row) => row?.content)
-        .filter(Boolean)
-
-      if (items.length === 0) {
-        log('Track not in YouTube Music catalog:', videoId)
-        return false
-      }
-
-      const beforeCount = state.items.length
-      const index = beforeCount
-
-      if (typeof queueEl.dispatch !== 'function') {
-        throw new Error('Queue dispatch not available')
-      }
-
-      queueEl.dispatch({
-        type: 'ADD_ITEMS',
-        payload: {
-          nextQueueItemId: state.nextQueueItemId,
-          index,
-          items,
-          shuffleEnabled: false,
-          shouldAssignIds: true,
-        },
-      })
-
-      return waitForQueueToInclude(
-        innerStore,
-        videoId,
-        beforeCount,
-        countDomQueueItems(),
-      )
-    } catch (err) {
-      log('Queue store add failed, trying legacy event', err)
-    }
+  if (!getInnerStore()) {
+    nudgeQueueUi()
+    await new Promise((r) => window.setTimeout(r, 600))
+    await waitForQueueApi(5000)
   }
 
-  return await dispatchQueueAddLegacy(videoId)
+  if (await dispatchQueueAddLegacy(videoId)) return true
+
+  return addVideoViaStoreApi(videoId)
 }
 
 async function addVideoToQueueWithRetry(
@@ -402,6 +435,9 @@ async function runBridge() {
     if (!pendingRows.some((p) => p.id === row.id)) {
       pendingRows.push(row)
       log('Queued for retry when YT Music is ready', row.video_id)
+      showToast(
+        'Could not add yet — open the queue panel on YouTube Music, then retry',
+      )
     }
     void processPending()
   }
