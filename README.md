@@ -24,19 +24,19 @@ Shared queue for **YouTube Music**: guests use this web app to search and manage
 
 ## GitHub Pages deploy
 
-**One-time (required or deploy fails with HTTP 404):**
+**One-time setup:**
 
-1. Open [Settings → Pages](https://github.com/T3lluz/YTMQ/settings/pages).
-2. Under **Build and deployment**, set **Source** to one of:
-   - **GitHub Actions** (recommended), or
-   - **Deploy from a branch** → branch **`gh-pages`** → folder **`/ (root)`**
-   - **Never** use branch **`main`** — that serves dev `index.html` and breaks with `GET /src/main.tsx 404`.
-3. If the live site references `/src/main.tsx`, fix the source above and re-run deploy.
-   - A correct deploy’s view-source shows `/YTMQ/assets/index-….js`, not `/src/main.tsx`.
-3. In [Settings → Secrets and variables → Actions](https://github.com/T3lluz/YTMQ/settings/secrets/actions), add:
+1. In [Settings → Secrets and variables → Actions](https://github.com/T3lluz/YTMQ/settings/secrets/actions), add:
    - `VITE_SUPABASE_URL`
    - `VITE_SUPABASE_ANON_KEY`
-4. Push to `main`, or re-run the failed workflow: **Actions → Deploy to GitHub Pages → Re-run all jobs**.
+2. Push to `main` (or **Actions → Deploy to GitHub Pages → Run workflow**). Wait until all three jobs succeed: `build`, `deploy`, `publish-gh-pages-branch`.
+
+3. Open [Settings → Pages](https://github.com/T3lluz/YTMQ/settings/pages). Under **Build and deployment → Source**, pick **one**:
+   - **GitHub Actions** — appears after the first successful `deploy` job. Choose workflow **Deploy to GitHub Pages** if prompted.
+   - **Deploy from a branch** → **`gh-pages`** → **`/ (root)`** — only listed after `publish-gh-pages-branch` has run once.
+   - **Never** use branch **`main`** (causes `GET /src/main.tsx 404`).
+
+4. If the site still loads `/src/main.tsx`, the wrong source is selected — switch as above and hard-refresh.
 
 Live site: `https://t3lluz.github.io/YTMQ/` (includes `ytmusic-bridge.js` for host connect).
 
