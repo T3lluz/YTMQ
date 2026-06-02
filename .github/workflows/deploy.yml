@@ -53,6 +53,10 @@ jobs:
           grep -q '/YTMQ/assets/index-' dist/index.html
           grep -q 'segmentCount' dist/404.html
           ! grep -qE 'src="/src/main\.tsx"|src="/src/main"' dist/index.html
+          if grep -rq 'YTMQ/YTMQ' dist/; then
+            echo "::error::Built bundle contains double /YTMQ/ in bridge URLs"
+            exit 1
+          fi
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3

@@ -1,16 +1,32 @@
 /** postMessage type when the bridge subscribes on music.youtube.com */
 export const YTMQ_CONNECTED_MESSAGE = 'ytmq:connected' as const
 
-/** HTTPS origin for ytmusic-bridge.js (required on music.youtube.com). */
-export function bridgeScriptOrigin(): string | null {
+const viteBasePath = () => import.meta.env.BASE_URL.replace(/\/$/, '')
+
+/**
+ * Deploy root for static assets (includes `/YTMQ` on GitHub Pages).
+ * `VITE_PUBLIC_SITE_URL` is the full site root; do not append BASE_URL twice.
+ */
+export function bridgeSiteRoot(): string | null {
+  const base = viteBasePath()
   const fromEnv = import.meta.env.VITE_PUBLIC_SITE_URL?.replace(/\/$/, '')
-  if (fromEnv) return fromEnv
+
+  if (fromEnv) {
+    if (base && fromEnv.endsWith(base)) return fromEnv
+    return base ? `${fromEnv}${base}` : fromEnv
+  }
 
   if (typeof window !== 'undefined' && window.location.protocol === 'https:') {
-    return window.location.origin
+    const { origin } = window.location
+    return base ? `${origin}${base}` : origin
   }
 
   return null
+}
+
+/** @deprecated Use bridgeSiteRoot — kept for callers expecting an “origin”. */
+export function bridgeScriptOrigin(): string | null {
+  return bridgeSiteRoot()
 }
 
 /** Path to bundled bridge on this deployment (no query string — GH Pages 404s some ? URLs). */
@@ -19,21 +35,16 @@ export function bridgeScriptFetchUrl(): string | null {
   return urls[0] ?? null
 }
 
-/** Fallback when Pages artifact is missing the bridge file (public repo only). */
+/** Fallback when the primary Pages URL fails (e.g. offline mirror). */
 export const BRIDGE_CDN_URL =
-  'https://cdn.jsdelivr.net/gh/T3lluz/YTMQ@main/public/ytmusic-bridge.js'
+  'https://cdn.jsdelivr.net/gh/T3lluz/YTMQ@main/ytmusic-bridge.js'
 
 /** Ordered bridge URLs for the YT Music console loader (deduped). */
 export function bridgeScriptFetchUrls(): string[] {
-  const origin = bridgeScriptOrigin()
-  if (!origin) return []
+  const root = bridgeSiteRoot()
+  if (!root) return []
 
-  const base = import.meta.env.BASE_URL.replace(/\/$/, '')
-  const candidates = [
-    `${origin}${base}/ytmusic-bridge.js`,
-    `${origin}${base}/public/ytmusic-bridge.js`,
-    BRIDGE_CDN_URL,
-  ]
+  const candidates = [`${root}/ytmusic-bridge.js`, BRIDGE_CDN_URL]
 
   return [...new Set(candidates)]
 }
@@ -70,10 +81,9 @@ export function buildYtmConnectDeepLink(roomId: string): string | null {
 
 /** Tampermonkey / Violentmonkey install URL (hosted on your Pages site). */
 export function ytmUserscriptInstallUrl(): string | null {
-  const origin = bridgeScriptOrigin()
-  if (!origin) return null
-  const base = import.meta.env.BASE_URL.replace(/\/$/, '')
-  return `${origin}${base}/ytmq-connect.user.js`
+  const root = bridgeSiteRoot()
+  if (!root) return null
+  return `${root}/ytmq-connect.user.js`
 }
 
 export function needsHttpsBridgeOrigin(): boolean {

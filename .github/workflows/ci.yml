@@ -28,8 +28,13 @@ jobs:
           VITE_PUBLIC_SITE_URL: https://example.github.io/YTMQ
         run: |
           set -euo pipefail
+          node scripts/verify-bridge-urls.mjs
           npm run build
           test -f dist/index.html
           test -f dist/ytmusic-bridge.js
           test -f dist/ytmq-connect.user.js
           ! grep -qE 'src="/src/main\.tsx"|src="/src/main"' dist/index.html
+          if grep -rq 'YTMQ/YTMQ' dist/; then
+            echo "::error::Built bundle contains double /YTMQ/ in bridge URLs"
+            exit 1
+          fi

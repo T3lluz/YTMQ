@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         YTMQ — YouTube Music connect
 // @namespace    https://github.com/T3lluz/YTMQ
-// @version      1.2.0
+// @version      1.2.1
 // @description  Auto-connects YTMQ on music.youtube.com (from host link or last session)
 // @match        https://music.youtube.com/*
 // @run-at       document-idle
@@ -14,7 +14,7 @@
   var SESSION_KEY = 'ytmq_session'
   var SESSION_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000
   var DEFAULT_BRIDGE =
-    'https://cdn.jsdelivr.net/gh/T3lluz/YTMQ@main/public/ytmusic-bridge.js'
+    'https://t3lluz.github.io/YTMQ/ytmusic-bridge.js'
 
   var q = new URLSearchParams(location.search)
   var roomId = q.get('roomId')
