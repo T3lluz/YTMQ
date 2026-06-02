@@ -1,8 +1,68 @@
+import { useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
+import { joinLobby, roomPath } from '../lib/room'
+
 export function Join() {
+  const navigate = useNavigate()
+  const [code, setCode] = useState('')
+  const [joining, setJoining] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    const trimmed = code.trim()
+    if (!trimmed) {
+      setError('Enter a room code')
+      return
+    }
+
+    setError(null)
+    setJoining(true)
+    try {
+      const { room_id } = await joinLobby(trimmed)
+      navigate(roomPath(room_id))
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Could not join lobby')
+    } finally {
+      setJoining(false)
+    }
+  }
+
   return (
     <main className="mx-auto flex min-h-dvh max-w-lg flex-col justify-center gap-6 p-6">
-      <h1 className="text-2xl font-semibold">Join lobby</h1>
-      <p className="text-zinc-400">Room code entry — wired in step 3.</p>
+      <header className="space-y-2">
+        <Link to="/" className="text-sm text-zinc-400 underline">
+          ← Back
+        </Link>
+        <h1 className="text-2xl font-semibold">Join lobby</h1>
+        <p className="text-zinc-400">Enter the 6-character code from the host</p>
+      </header>
+
+      <form onSubmit={(e) => void handleSubmit(e)} className="flex flex-col gap-3">
+        <input
+          type="text"
+          value={code}
+          onChange={(e) => setCode(e.target.value.toUpperCase())}
+          placeholder="ABC123"
+          autoComplete="off"
+          autoCapitalize="characters"
+          maxLength={12}
+          className="min-h-12 rounded-xl border border-zinc-700 bg-zinc-900 px-4 text-center font-mono text-xl tracking-widest uppercase outline-none focus:border-violet-500"
+        />
+        <button
+          type="submit"
+          disabled={joining}
+          className="min-h-12 rounded-xl bg-violet-600 px-4 text-lg font-medium text-white active:bg-violet-700 disabled:opacity-60"
+        >
+          {joining ? 'Joining…' : 'Join'}
+        </button>
+      </form>
+
+      {error && (
+        <p className="text-center text-sm text-red-400" role="alert">
+          {error}
+        </p>
+      )}
     </main>
   )
 }

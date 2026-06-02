@@ -59,10 +59,12 @@ YouTube Music **shared queue**: host plays in **YT Music app**; **guests** use t
 5. User pastes into chat / `.env.local` (not committed):
 
 ```text
-VITE_SUPABASE_URL=https://xxxx.supabase.co
+VITE_SUPABASE_URL=https://owpmwxoqpzwbsrrcmvpz.supabase.co
 VITE_SUPABASE_ANON_KEY=eyJ...
 # YOUTUBE_API_KEY → supabase secrets only
 ```
+
+**Supabase project:** `owpmwxoqpzwbsrrcmvpz` (name: YTMQ, `eu-central-1`). MCP is scoped in `.cursor/mcp.json` (`project_ref` + database/docs/dev/debug tools). Reload Cursor after changing MCP config.
 
 ---
 

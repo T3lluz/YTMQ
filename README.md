@@ -1,73 +1,44 @@
-# React + TypeScript + Vite
+# YTMQ
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Shared queue for **YouTube Music**: host plays in the YT Music app; guests use this web app to search and manage the queue in realtime.
 
-Currently, two official plugins are available:
+**Live app (after deploy):** `https://<your-github-user>.github.io/YTMQ/`
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Local development
 
-## React Compiler
+1. Copy `.env.example` → `.env.local` and set:
+   - `VITE_SUPABASE_URL`
+   - `VITE_SUPABASE_ANON_KEY`
+2. `npm install`
+3. `npm run dev` → open `http://localhost:5173/YTMQ/`
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Supabase setup (one-time)
 
-## Expanding the ESLint configuration
+1. Run migration `supabase/migrations/001_initial.sql` (SQL editor or CLI).
+2. In **Database → Replication**, confirm `queue_items` is in the `supabase_realtime` publication.
+3. Set YouTube API key for search:
+   ```bash
+   supabase secrets set YOUTUBE_API_KEY=your_google_api_key --project-ref owpmwxoqpzwbsrrcmvpz
+   ```
+4. Deploy edge function `search` (included in repo under `supabase/functions/search/`).
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+## GitHub Pages deploy
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+1. Repo **Settings → Pages → Build and deployment**: **GitHub Actions**.
+2. Add repository secrets:
+   - `VITE_SUPABASE_URL`
+   - `VITE_SUPABASE_ANON_KEY`
+3. Push to `main` — workflow `.github/workflows/deploy.yml` builds and deploys.
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+## Smoke tests
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+- [ ] **Create lobby** → host view shows QR + guest link
+- [ ] **Join** with 6-character code on another device
+- [ ] **Search** → add 3 tracks → Queue tab updates within ~1s
+- [ ] **Remove** and **reorder** (↑/↓) on Queue tab
+- [ ] **Host** “Open” opens `https://music.youtube.com/watch?v=…`
+- [ ] Built bundle has no `YOUTUBE_API_KEY` or `service_role` (grep `dist/`)
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## Architecture
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+See [docs/AGENT.md](docs/AGENT.md) for product scope, data model, and build order.
