@@ -29,6 +29,7 @@ type QueueStoreState = {
     queueContextParams: string
     items: unknown[]
     nextQueueItemId: number
+    selectedItemIndex?: number
   }
 }
 
@@ -220,6 +221,14 @@ function nudgeQueueUi(): void {
   }
 }
 
+function playNextInsertIndex(state: QueueStoreState['queue']): number {
+  const selected = state.selectedItemIndex
+  if (typeof selected === 'number' && selected >= 0) {
+    return selected + 1
+  }
+  return state.items.length > 0 ? 1 : 0
+}
+
 async function addVideoViaStoreApi(videoId: string): Promise<boolean> {
   const queueEl = getQueueElement()
   const app = getYtmApp()
@@ -252,7 +261,7 @@ async function addVideoViaStoreApi(videoId: string): Promise<boolean> {
     }
 
     const beforeCount = state.items.length
-    const index = beforeCount
+    const index = playNextInsertIndex(state)
 
     if (typeof queueEl.dispatch !== 'function') {
       throw new Error('Queue dispatch not available')
@@ -297,7 +306,7 @@ async function dispatchQueueAddLegacy(videoId: string): Promise<boolean> {
   const endpoint = {
     queueAddEndpoint: {
       queueTarget,
-      queueInsertPosition: 'INSERT_AT_END' as const,
+      queueInsertPosition: 'INSERT_AFTER_CURRENT_VIDEO' as const,
     },
   }
 
@@ -332,9 +341,9 @@ async function dispatchQueueAddLegacy(videoId: string): Promise<boolean> {
   )
 }
 
-async function addVideoToQueue(videoId: string): Promise<boolean> {
+async function addVideoPlayNext(videoId: string): Promise<boolean> {
   if (!location.hostname.includes('music.youtube.com')) {
-    log('Open music.youtube.com — queue add only works there.')
+    log('Open music.youtube.com — play next only works there.')
     return false
   }
 
@@ -351,12 +360,12 @@ async function addVideoToQueue(videoId: string): Promise<boolean> {
   return addVideoViaStoreApi(videoId)
 }
 
-async function addVideoToQueueWithRetry(
+async function addVideoPlayNextWithRetry(
   videoId: string,
   attempts = 6,
 ): Promise<boolean> {
   for (let i = 0; i < attempts; i += 1) {
-    if (await addVideoToQueue(videoId)) return true
+    if (await addVideoPlayNext(videoId)) return true
     await waitForQueueApi(3000)
     await new Promise((r) => window.setTimeout(r, 400 * (i + 1)))
   }
@@ -417,27 +426,27 @@ async function runBridge() {
 
   async function processPending() {
     while (pendingRows.length > 0) {
-      const row = pendingRows[0]!
+      const row = pendingRows[pendingRows.length - 1]!
       if (syncedIds.has(row.id)) {
-        pendingRows.shift()
+        pendingRows.pop()
         continue
       }
-      const ok = await addVideoToQueueWithRetry(row.video_id, 3)
+      const ok = await addVideoPlayNextWithRetry(row.video_id, 3)
       if (!ok) return
       syncedIds.add(row.id)
-      pendingRows.shift()
-      showToast(`Added: ${row.title || 'track'}`)
-      log('Added to queue (retry)', row.video_id, row.title)
+      pendingRows.pop()
+      showToast(`Play next: ${row.title || 'track'}`)
+      log('Play next (retry)', row.video_id, row.title)
     }
   }
 
   async function enqueueToYtm(row: QueueRow) {
     if (syncedIds.has(row.id)) return
-    const ok = await addVideoToQueueWithRetry(row.video_id)
+    const ok = await addVideoPlayNextWithRetry(row.video_id)
     if (ok) {
       syncedIds.add(row.id)
-      showToast(`Added: ${row.title || 'track'}`)
-      log('Added to queue', row.video_id, row.title)
+      showToast(`Play next: ${row.title || 'track'}`)
+      log('Play next', row.video_id, row.title)
       return
     }
     if (!pendingRows.some((p) => p.id === row.id)) {
@@ -516,7 +525,7 @@ async function runBridge() {
       sessionRows.length,
       'track(s)',
     )
-    for (const row of sessionRows) {
+    for (const row of [...sessionRows].reverse()) {
       if (syncedIds.has(row.id) || markSyncedIfAlreadyInYtm(row)) continue
       await enqueueToYtm(row)
     }
@@ -559,7 +568,7 @@ async function runBridge() {
   window.__YTMQ_BRIDGE__ = {
     roomId,
     syncedIds,
-    addVideoToQueue,
+    addVideoPlayNext,
     async syncAll() {
       const { data, error } = await supabase
         .from('queue_items')
@@ -573,15 +582,15 @@ async function runBridge() {
       }
 
       let added = 0
-      for (const row of (data ?? []) as QueueRow[]) {
+      for (const row of [...((data ?? []) as QueueRow[])].reverse()) {
         if (!isInPlaybackSession(row.created_at, playbackSince)) continue
         if (syncedIds.has(row.id) || markSyncedIfAlreadyInYtm(row)) continue
-        if (await addVideoToQueueWithRetry(row.video_id)) {
+        if (await addVideoPlayNextWithRetry(row.video_id)) {
           syncedIds.add(row.id)
           added += 1
         }
       }
-      showToast(`YTMQ: synced ${added} track(s) to queue`)
+      showToast(`YTMQ: synced ${added} track(s) as play next`)
       return added
     },
     stop() {
@@ -593,7 +602,7 @@ async function runBridge() {
     },
   }
 
-  log('Bridge ready. Call __YTMQ_BRIDGE__.syncAll() to push the full queue.')
+  log('Bridge ready. Call __YTMQ_BRIDGE__.syncAll() to push the full queue as play next.')
 }
 
 void runBridge()

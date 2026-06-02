@@ -104,7 +104,7 @@ export function YtMusicConnect({ roomId }: YtMusicConnectProps) {
         <div className="min-w-0 flex-1">
           <p className="font-medium text-emerald-200">YouTube Music linked</p>
           <p className="text-sm text-zinc-400">
-            Guest picks go to your queue. Keep this tab and YouTube Music open.
+            Guest picks play next in YouTube Music. Keep this tab and YouTube Music open.
           </p>
         </div>
         <button
