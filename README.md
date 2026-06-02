@@ -1,6 +1,6 @@
 # YTMQ
 
-Shared queue for **YouTube Music**: host plays in the YT Music app; guests use this web app to search and manage the queue in realtime.
+Shared queue for **YouTube Music**: guests use this web app to search and manage the queue in realtime; the host connects [YouTube Music](https://music.youtube.com) in the browser so new tracks are added to their player queue automatically.
 
 **Live app (after deploy):** `https://<your-github-user>.github.io/YTMQ/`
 
@@ -30,12 +30,22 @@ Shared queue for **YouTube Music**: host plays in the YT Music app; guests use t
    - `VITE_SUPABASE_ANON_KEY`
 3. Push to `main` — workflow `.github/workflows/deploy.yml` builds and deploys.
 
+## E2E tests (Playwright)
+
+Requires `.env.local` and a running or auto-started dev server. See [tests/README.md](tests/README.md).
+
+```bash
+npm run test:e2e          # all 21 tests
+npx playwright test tests/queue.spec.ts   # one suite
+```
+
 ## Smoke tests
 
 - [ ] **Create lobby** → host view shows QR + guest link
 - [ ] **Join** with 6-character code on another device
 - [ ] **Search** → add 3 tracks → Queue tab updates within ~1s
 - [ ] **Remove** and **reorder** (↑/↓) on Queue tab
+- [ ] **Host** connects YouTube Music (bookmarklet on music.youtube.com); guest add appears in YT Music queue
 - [ ] **Host** “Open” opens `https://music.youtube.com/watch?v=…`
 - [ ] Built bundle has no `YOUTUBE_API_KEY` or `service_role` (grep `dist/`)
 

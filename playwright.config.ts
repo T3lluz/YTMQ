@@ -33,7 +33,7 @@ export default defineConfig({
   timeout: 60_000,
   expect: { timeout: 15_000 },
   use: {
-    baseURL: 'http://localhost:5173/YTMQ',
+    baseURL: 'http://localhost:5173/YTMQ/',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
   },
@@ -48,5 +48,11 @@ export default defineConfig({
     url: 'http://localhost:5173/YTMQ/',
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
+    env: {
+      ...process.env,
+      // Lets the host "Connect" UI build an HTTPS bridge URL during http://localhost e2e
+      VITE_PUBLIC_SITE_URL:
+        process.env.VITE_PUBLIC_SITE_URL ?? 'https://e2e-placeholder.github.io/YTMQ',
+    },
   },
 })

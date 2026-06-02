@@ -3,7 +3,9 @@ import { createLobbyViaApi } from './helpers/supabase'
 import {
   goToGuestRoom,
   goToHost,
+  gotoApp,
   searchAndAddFirstResult,
+  ytMusicOpenLink,
 } from './helpers/ui'
 
 test.describe('Host', () => {
@@ -12,16 +14,21 @@ test.describe('Host', () => {
     await goToHost(page, lobby)
 
     await expect(page.getByRole('heading', { name: /Lobby/ })).toBeVisible()
-    await expect(page.getByText(lobby.code)).toBeVisible()
+    await expect(
+      page.getByRole('heading', { name: `Lobby ${lobby.code}` }),
+    ).toBeVisible()
     await expect(page.getByRole('img', { name: new RegExp(`QR code for room ${lobby.code}`) })).toBeVisible({
       timeout: 10_000,
     })
     await expect(page.getByText('Queue mirror')).toBeVisible()
+    await expect(
+      page.getByRole('button', { name: 'Connect YouTube Music' }),
+    ).toBeVisible()
   })
 
   test('rejects host view without session token', async ({ page }) => {
     const lobby = await createLobbyViaApi()
-    await page.goto(`/host/${lobby.room_id}`)
+    await gotoApp(page, `host/${lobby.room_id}`)
     await expect(page.getByText(/Host session missing/i)).toBeVisible()
   })
 
@@ -36,9 +43,10 @@ test.describe('Host', () => {
     await searchAndAddFirstResult(guestPage, 'daft punk get lucky')
 
     await expect(hostPage.locator('ul li')).toHaveCount(1, { timeout: 15_000 })
-    await expect(
-      hostPage.getByRole('link', { name: 'Open' }).first(),
-    ).toHaveAttribute('href', /^https:\/\/music\.youtube\.com\/watch\?v=/)
+    await expect(ytMusicOpenLink(hostPage).first()).toHaveAttribute(
+      'href',
+      /^https:\/\/music\.youtube\.com\/watch\?v=/,
+    )
 
     await hostPage.close()
     await guestPage.close()

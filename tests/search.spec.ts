@@ -35,12 +35,11 @@ test.describe('Search', () => {
 
     await selectTab(page, 'Search')
     await page.getByRole('button', { name: 'Artists' }).click()
-    await page.getByPlaceholder(/search artists/i).fill('daft punk')
+    await page.getByPlaceholder(/search artists/i).fill('taylor swift')
     await page.getByRole('button', { name: 'Tracks' }).first().click()
 
     await expect(page.getByText('Popular tracks from this channel')).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Add' }).first()).toBeVisible({
-      timeout: 20_000,
-    })
+    await expect(page.locator('ul li').first()).toBeVisible({ timeout: 20_000 })
+    await expect(page.getByRole('button', { name: 'Add' }).first()).toBeVisible()
   })
 })

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { QueueList } from '../components/QueueList'
 import { SharePanel } from '../components/SharePanel'
+import { YtMusicConnect } from '../components/YtMusicConnect'
 import { useQueue } from '../hooks/useQueue'
 import {
   fetchRoom,
@@ -118,11 +119,14 @@ export function Host() {
         <p className="text-sm font-medium text-violet-400">Host</p>
         <h1 className="text-2xl font-semibold">Lobby {room.code}</h1>
         <p className="text-sm text-zinc-400">
-          Queue updates in realtime. Open tracks in YouTube Music below.
+          Share the lobby, connect YouTube Music once, then let guests build the
+          queue.
         </p>
       </header>
 
       <SharePanel roomId={roomId} code={room.code} />
+
+      <YtMusicConnect roomId={roomId} />
 
       <HostQueueMirror key={roomId} roomId={roomId} />
 

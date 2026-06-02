@@ -47,14 +47,14 @@ test.describe('Queue', () => {
     const firstTitle = await rows.nth(0).locator('.font-medium').textContent()
     const secondTitle = await rows.nth(1).locator('.font-medium').textContent()
 
-    await rows.nth(1).getByRole('button', { name: 'Move down' }).click()
+    await rows.nth(1).getByRole('button', { name: 'Move up' }).click()
 
     await expect(async () => {
       const newFirst = await rows.nth(0).locator('.font-medium').textContent()
       expect(newFirst).toBe(secondTitle)
     }).toPass({ timeout: 10_000 })
 
-    await rows.nth(0).getByRole('button', { name: 'Move up' }).click()
+    await rows.nth(0).getByRole('button', { name: 'Move down' }).click()
 
     await expect(async () => {
       const restored = await rows.nth(0).locator('.font-medium').textContent()

@@ -3,6 +3,7 @@ import { createLobbyViaApi } from './helpers/supabase'
 import {
   goToGuestRoom,
   goToHost,
+  gotoApp,
   searchAndAddFirstResult,
   selectTab,
 } from './helpers/ui'
@@ -18,25 +19,24 @@ test.describe('Full flow', () => {
     const hostPage = await hostContext.newPage()
     const guestPage = await guestContext.newPage()
 
-    // Host creates lobby via UI
-    await hostPage.goto('/')
+    await gotoApp(hostPage)
     await hostPage.getByRole('button', { name: 'Create lobby' }).click()
-    await expect(hostPage).toHaveURL(/\/host\/[0-9a-f-]{36}$/, { timeout: 15_000 })
+    await expect(hostPage).toHaveURL(/\/YTMQ\/host\/[0-9a-f-]{36}\/?$/, {
+      timeout: 15_000,
+    })
 
-    const roomId = hostPage.url().match(/\/host\/([0-9a-f-]{36})$/)?.[1]
+    const roomId = hostPage.url().match(/\/host\/([0-9a-f-]{36})/)?.[1]
     expect(roomId).toBeTruthy()
 
     const heading = await hostPage.getByRole('heading', { level: 1 }).textContent()
     const code = heading?.replace(/^Lobby\s+/i, '').trim()
     expect(code).toMatch(/^[A-Z0-9]{6}$/)
 
-    // Guest joins with code
-    await guestPage.goto('/join')
-    await guestPage.getByPlaceholder('ABC123').fill(code)
+    await gotoApp(guestPage, 'join')
+    await guestPage.getByPlaceholder('ABC123').fill(code!)
     await guestPage.getByRole('button', { name: 'Join' }).click()
-    await expect(guestPage).toHaveURL(new RegExp(`/room/${roomId}$`))
+    await expect(guestPage).toHaveURL(new RegExp(`/YTMQ/room/${roomId}/?$`))
 
-    // Guest sets nickname and adds tracks
     await selectTab(guestPage, 'Room')
     await guestPage.getByPlaceholder('Your name on the queue').fill('PartyGuest')
 
@@ -47,16 +47,14 @@ test.describe('Full flow', () => {
     const guestRows = guestPage.locator('ul li')
     await expect(guestRows).toHaveCount(2, { timeout: 10_000 })
 
-    // Host sees both tracks
     await expect(hostPage.locator('ul li')).toHaveCount(2, { timeout: 15_000 })
 
-    const openLink = hostPage.getByRole('link', { name: 'Open' }).first()
+    const openLink = hostPage.getByRole('link', { name: 'Open', exact: true }).first()
     await expect(openLink).toHaveAttribute(
       'href',
       /^https:\/\/music\.youtube\.com\/watch\?v=[\w-]+$/,
     )
 
-    // Guest reorders: move second track up
     const secondTitle = await guestRows
       .nth(1)
       .locator('.font-medium')
@@ -68,14 +66,12 @@ test.describe('Full flow', () => {
       expect(top).toBe(secondTitle)
     }).toPass({ timeout: 10_000 })
 
-    // Guest removes bottom track
     await guestRows.nth(1).getByRole('button', { name: 'Remove' }).click()
     await expect(guestRows).toHaveCount(1, { timeout: 10_000 })
     await expect(hostPage.locator('ul li')).toHaveCount(1, { timeout: 15_000 })
 
-    // Room tab share works
     await selectTab(guestPage, 'Room')
-    await expect(guestPage.getByText(code)).toBeVisible()
+    await expect(guestPage.getByText(code!)).toBeVisible()
 
     await hostContext.close()
     await guestContext.close()
@@ -94,9 +90,9 @@ test.describe('Full flow', () => {
     await selectTab(guestPage, 'Queue')
     await expect(guestPage.locator('ul li')).toHaveCount(1)
 
-    await expect(hostPage.getByRole('link', { name: 'Open' })).toBeVisible({
-      timeout: 15_000,
-    })
+    await expect(
+      hostPage.getByRole('link', { name: 'Open', exact: true }).first(),
+    ).toBeVisible({ timeout: 15_000 })
 
     await hostPage.close()
     await guestPage.close()
