@@ -5,8 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build:bridge": "vite build --config vite.bridge.config.ts && cp public/ytmusic-bridge.js ytmusic-bridge.js",
-    "build": "npm run build:bridge && tsc -b && vite build",
+    "build:bridge": "vite build --config vite.bridge.config.ts && node scripts/copy-bridge-root.mjs",
+    "build": "npm run build:bridge && npx tsc -b && npx vite build",
     "lint": "eslint .",
     "preview": "vite preview",
     "test:e2e": "playwright test",

@@ -37,13 +37,15 @@ jobs:
             exit 1
           fi
 
-      - run: npm run build
+      - name: Build site
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
-
-      - name: Verify build output
         run: |
+          set -euo pipefail
+          npm run build
+          echo "dist contents:"
+          ls -la dist/
           test -f dist/index.html
           test -f dist/404.html
           test -f dist/ytmusic-bridge.js
