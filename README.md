@@ -24,11 +24,16 @@ Shared queue for **YouTube Music**: guests use this web app to search and manage
 
 ## GitHub Pages deploy
 
-1. Repo **Settings → Pages → Build and deployment**: **GitHub Actions**.
-2. Add repository secrets:
+**One-time (required or deploy fails with HTTP 404):**
+
+1. Open [Settings → Pages](https://github.com/T3lluz/YTMQ/settings/pages).
+2. Under **Build and deployment**, set **Source** to **GitHub Actions** (not “Deploy from a branch”).
+3. In [Settings → Secrets and variables → Actions](https://github.com/T3lluz/YTMQ/settings/secrets/actions), add:
    - `VITE_SUPABASE_URL`
    - `VITE_SUPABASE_ANON_KEY`
-3. Push to `main` — workflow `.github/workflows/deploy.yml` builds and deploys.
+4. Push to `main`, or re-run the failed workflow: **Actions → Deploy to GitHub Pages → Re-run all jobs**.
+
+Live site: `https://t3lluz.github.io/YTMQ/` (includes `ytmusic-bridge.js` for host connect).
 
 ## E2E tests (Playwright)
 
@@ -45,7 +50,7 @@ npx playwright test tests/queue.spec.ts   # one suite
 - [ ] **Join** with 6-character code on another device
 - [ ] **Search** → add 3 tracks → Queue tab updates within ~1s
 - [ ] **Remove** and **reorder** (↑/↓) on Queue tab
-- [ ] **Host** connects YouTube Music (bookmarklet on music.youtube.com); guest add appears in YT Music queue
+- [ ] **Host** connects YouTube Music (console on music.youtube.com); guest add appears in YT Music queue
 - [ ] **Host** “Open” opens `https://music.youtube.com/watch?v=…`
 - [ ] Built bundle has no `YOUTUBE_API_KEY` or `service_role` (grep `dist/`)
 
