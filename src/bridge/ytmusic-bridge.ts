@@ -17,12 +17,18 @@ type QueueRow = {
   created_at: string
 }
 
+type PlaybackState = 'playing' | 'paused' | 'unknown'
+
 type NowPlayingPayload = {
   videoId: string
   title: string
   artist: string
   updatedAt: number
+  currentTime: number
+  state: PlaybackState
 }
+
+type PlaybackAction = 'next' | 'prev' | 'play' | 'pause' | 'toggle'
 
 type QueueStoreState = {
   queue: {
@@ -60,6 +66,13 @@ type YtmApp = HTMLElement & {
 type PlayerBar = HTMLElement & {
   playerApi?: {
     getVideoData?: () => { video_id?: string }
+    getCurrentTime?: () => number
+    getPlayerState?: () => number
+    nextVideo?: () => void
+    previousVideo?: () => void
+    playVideo?: () => void
+    pauseVideo?: () => void
+    seekTo?: (seconds: number, allowSeekAhead?: boolean) => void
   }
 }
 
@@ -245,8 +258,27 @@ async function waitForPlayNextPosition(
   return false
 }
 
+function getPlayerBar(): PlayerBar | null {
+  return document.querySelector('ytmusic-player-bar') as PlayerBar | null
+}
+
+/** YT iframe API state codes: 1=playing, 2=paused, 3=buffering, 0=ended, 5=cued, -1=unstarted */
+function readPlaybackState(bar: PlayerBar | null): PlaybackState {
+  const code = bar?.playerApi?.getPlayerState?.()
+  if (code === 1 || code === 3) return 'playing'
+  if (code === 0 || code === 2 || code === 5) return 'paused'
+
+  const playPauseBtn = document.querySelector(
+    'ytmusic-player-bar #play-pause-button',
+  ) as HTMLElement | null
+  const label = playPauseBtn?.getAttribute('aria-label')?.toLowerCase() ?? ''
+  if (label.includes('pause')) return 'playing'
+  if (label.includes('play')) return 'paused'
+  return 'unknown'
+}
+
 function readNowPlaying(): NowPlayingPayload | null {
-  const bar = document.querySelector('ytmusic-player-bar') as PlayerBar | null
+  const bar = getPlayerBar()
   const title =
     bar?.querySelector('.title')?.textContent?.trim() ??
     bar?.querySelector('[title]')?.textContent?.trim() ??
@@ -263,11 +295,128 @@ function readNowPlaying(): NowPlayingPayload | null {
 
   if (!videoId && !title) return null
 
+  const currentTime = (() => {
+    const t = bar?.playerApi?.getCurrentTime?.()
+    return typeof t === 'number' && Number.isFinite(t) && t >= 0 ? t : 0
+  })()
+
   return {
     videoId,
     title: title || 'Unknown track',
     artist,
     updatedAt: Date.now(),
+    currentTime,
+    state: readPlaybackState(bar),
+  }
+}
+
+function clickPlayerBarButton(matchers: string[]): boolean {
+  for (const m of matchers) {
+    const btn = document.querySelector(
+      `ytmusic-player-bar ${m}`,
+    ) as HTMLElement | null
+    if (btn) {
+      btn.click()
+      return true
+    }
+  }
+  return false
+}
+
+function doNext(): boolean {
+  const bar = getPlayerBar()
+  try {
+    bar?.playerApi?.nextVideo?.()
+    if (bar?.playerApi?.nextVideo) return true
+  } catch {
+    /* fall through */
+  }
+  return clickPlayerBarButton([
+    '.next-button',
+    'tp-yt-paper-icon-button.next-button',
+    'button[aria-label*="Next" i]',
+    'tp-yt-paper-icon-button[aria-label*="Next" i]',
+  ])
+}
+
+function doPrev(): boolean {
+  const bar = getPlayerBar()
+  const t = bar?.playerApi?.getCurrentTime?.() ?? 0
+
+  if (t >= 3 && bar?.playerApi?.seekTo) {
+    try {
+      bar.playerApi.seekTo(0, true)
+      return true
+    } catch {
+      /* fall through to native prev */
+    }
+  }
+
+  try {
+    bar?.playerApi?.previousVideo?.()
+    if (bar?.playerApi?.previousVideo) return true
+  } catch {
+    /* fall through */
+  }
+  return clickPlayerBarButton([
+    '.previous-button',
+    'tp-yt-paper-icon-button.previous-button',
+    'button[aria-label*="Previous" i]',
+    'tp-yt-paper-icon-button[aria-label*="Previous" i]',
+  ])
+}
+
+function doPlay(): boolean {
+  const bar = getPlayerBar()
+  try {
+    bar?.playerApi?.playVideo?.()
+    if (bar?.playerApi?.playVideo) return true
+  } catch {
+    /* fall through */
+  }
+  if (readPlaybackState(bar) === 'playing') return true
+  return clickPlayerBarButton([
+    '#play-pause-button[aria-label*="Play" i]',
+    'button[aria-label*="Play" i]',
+  ])
+}
+
+function doPause(): boolean {
+  const bar = getPlayerBar()
+  try {
+    bar?.playerApi?.pauseVideo?.()
+    if (bar?.playerApi?.pauseVideo) return true
+  } catch {
+    /* fall through */
+  }
+  if (readPlaybackState(bar) === 'paused') return true
+  return clickPlayerBarButton([
+    '#play-pause-button[aria-label*="Pause" i]',
+    'button[aria-label*="Pause" i]',
+  ])
+}
+
+function doToggle(): boolean {
+  const bar = getPlayerBar()
+  const state = readPlaybackState(bar)
+  if (state === 'playing') return doPause()
+  return doPlay()
+}
+
+function runPlaybackAction(action: PlaybackAction): boolean {
+  switch (action) {
+    case 'next':
+      return doNext()
+    case 'prev':
+      return doPrev()
+    case 'play':
+      return doPlay()
+    case 'pause':
+      return doPause()
+    case 'toggle':
+      return doToggle()
+    default:
+      return false
   }
 }
 
@@ -905,8 +1054,40 @@ async function runBridge() {
     }
   }
 
+  let lastControlAt = 0
+  function handlePlaybackControl(action: PlaybackAction) {
+    const now = Date.now()
+    if (now - lastControlAt < 300) {
+      log('Playback control debounced', action)
+      return
+    }
+    lastControlAt = now
+
+    const ok = runPlaybackAction(action)
+    log('Playback control', action, ok ? 'ok' : 'failed')
+    if (!ok) {
+      showToast(`Could not ${action} — open YouTube Music tab`)
+      return
+    }
+    window.setTimeout(publishNowPlaying, 200)
+    window.setTimeout(publishNowPlaying, 800)
+  }
+
   const channel = supabase
     .channel(`ytmq-bridge:${roomId}`)
+    .on('broadcast', { event: 'playback_control' }, ({ payload }) => {
+      if (!payload || typeof payload !== 'object') return
+      const action = (payload as { action?: PlaybackAction }).action
+      if (
+        action === 'next' ||
+        action === 'prev' ||
+        action === 'play' ||
+        action === 'pause' ||
+        action === 'toggle'
+      ) {
+        handlePlaybackControl(action)
+      }
+    })
     .on('broadcast', { event: 'queue_remove' }, ({ payload }) => {
       if (!payload || typeof payload !== 'object') return
       const p = payload as Partial<QueueRow>
