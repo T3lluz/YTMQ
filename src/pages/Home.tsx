@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { YtmqLogo } from '../components/YtmqLogo'
 import { setNickname } from '../lib/nickname'
 import { createLobby, hostPath, setHostToken } from '../lib/room'
 
@@ -33,20 +34,8 @@ export function Home() {
   return (
     <main className="mx-auto flex min-h-dvh max-w-lg flex-col justify-center gap-6 p-6">
       <header className="ytmq-anim-fade-up space-y-3 text-center">
-        <div
-          className="ytmq-anim-pop mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-500 to-fuchsia-600 shadow-lg shadow-violet-900/40"
-          style={{ animationDelay: '80ms' }}
-        >
-          <svg
-            viewBox="0 0 24 24"
-            fill="currentColor"
-            className="h-8 w-8 text-white"
-            aria-hidden
-          >
-            <path d="M9 18V6l10-2v12" />
-            <circle cx="6" cy="18" r="3" fill="currentColor" />
-            <circle cx="16" cy="16" r="3" fill="currentColor" />
-          </svg>
+        <div className="ytmq-anim-pop" style={{ animationDelay: '80ms' }}>
+          <YtmqLogo className="mx-auto h-16 w-16 rounded-2xl shadow-lg shadow-violet-900/40" />
         </div>
         <h1 className="bg-gradient-to-br from-white to-zinc-400 bg-clip-text text-4xl font-bold tracking-tight text-transparent">
           YTMQ
