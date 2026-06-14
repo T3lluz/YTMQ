@@ -59,7 +59,11 @@ function makeSongs() {
 
 async function installMocks(page: Page) {
   const queue: QueueRow[] = []
-  let positionCounter = 0
+  let idCounter = 0
+
+  function sortedQueue(): QueueRow[] {
+    return [...queue].sort((a, b) => a.position - b.position)
+  }
 
   await page.route(/stub\.supabase\.co\/.*/i, async (route) => {
     const req = route.request()
@@ -110,10 +114,21 @@ async function installMocks(page: Page) {
       )
 
       if (method === 'GET') {
-        const body: unknown = wantsSingleObject
-          ? queue[queue.length - 1] ?? null
-          : queue
-        return json(200, body)
+        const order = url.searchParams.get('order') ?? ''
+        let rows = sortedQueue()
+        if (order.startsWith('position.desc')) {
+          rows = rows.slice().reverse()
+        }
+        const limitParam = url.searchParams.get('limit')
+        const limit = limitParam != null ? Number.parseInt(limitParam, 10) : NaN
+        if (Number.isFinite(limit) && limit > 0) {
+          rows = rows.slice(0, limit)
+        }
+
+        if (wantsSingleObject) {
+          return json(200, rows[0] ?? null)
+        }
+        return json(200, rows)
       }
       if (method === 'POST') {
         let body: Partial<QueueRow> | Partial<QueueRow>[] = {}
@@ -128,10 +143,28 @@ async function installMocks(page: Page) {
         const bodyJson: Partial<QueueRow> = Array.isArray(body)
           ? (body[0] ?? {})
           : body
+
+        // Mirror Postgres: clash on (room_id, position) is a unique violation.
+        if (
+          typeof bodyJson.position === 'number' &&
+          queue.some((row) => row.position === bodyJson.position)
+        ) {
+          return json(409, {
+            code: '23505',
+            message:
+              'duplicate key value violates unique constraint "queue_items_room_id_position_key"',
+          })
+        }
+
+        idCounter += 1
+        const fallbackPosition = queue.length
         const row: QueueRow = {
-          id: `qi_${queue.length + 1}`,
+          id: `qi_${idCounter}`,
           room_id: ROOM_ID,
-          position: positionCounter++,
+          position:
+            typeof bodyJson.position === 'number'
+              ? bodyJson.position
+              : fallbackPosition,
           video_id: bodyJson.video_id ?? '',
           title: bodyJson.title ?? '',
           channel_title: bodyJson.channel_title ?? '',
@@ -364,5 +397,107 @@ test.describe('Queue insert modes (mocked Supabase)', () => {
         )
       }
     }
+  })
+
+  test('queue order mirrors YouTube Music: Play next jumps to the top, Add to queue appends to the bottom', async ({
+    page,
+  }) => {
+    await installMocks(page)
+    await gotoRoom(page)
+
+    const search = page.getByPlaceholder(/search songs/i)
+    await search.fill('daft punk')
+
+    const searchRows = page.locator('ul li')
+    await expect(searchRows).toHaveCount(3)
+
+    async function clickAndWaitForToast(
+      rowIndex: number,
+      buttonName: 'Play next' | 'Add to queue',
+      toastPattern: RegExp,
+      expectedToastCount: number,
+    ) {
+      await searchRows
+        .nth(rowIndex)
+        .getByRole('button', { name: buttonName })
+        .click()
+      // Wait for the new toast to appear (toasts stack, so we count them).
+      await expect(page.getByText(toastPattern)).toHaveCount(expectedToastCount)
+    }
+
+    // 1) Add row 0 ("One More Time") as "Add to queue" → only queue item, bottom.
+    await clickAndWaitForToast(0, 'Add to queue', /Added to queue:/, 1)
+    // 2) Add row 1 ("Get Lucky") as "Add to queue" → appended below #1.
+    await clickAndWaitForToast(1, 'Add to queue', /Added to queue:/, 2)
+    // 3) Add row 2 (long title) as "Play next" → jumps above both queue items.
+    await clickAndWaitForToast(2, 'Play next', /Playing next:/, 1)
+    // 4) Add row 0 again as "Play next" → jumps ABOVE the previous play_next.
+    await clickAndWaitForToast(0, 'Play next', /Playing next:/, 2)
+
+    await page
+      .getByRole('navigation', { name: 'Room navigation' })
+      .getByRole('button', { name: /^Queue/ })
+      .click()
+
+    const queueRows = page.locator('section ul li')
+    await expect(queueRows).toHaveCount(4)
+
+    // Expected display order, top → bottom:
+    //   [Play next #2] One More Time            (last play_next → top)
+    //   [Play next #1] Around the World …       (first play_next)
+    //   [Queue #1]     One More Time            (first queue item)
+    //   [Queue #2]     Get Lucky                (second queue item)
+    async function readRow(index: number) {
+      const row = queueRows.nth(index)
+      const title = await row.locator('p.font-medium').first().textContent()
+      const badge = await row
+        .locator('span', { hasText: /^(Play next|Queue)$/ })
+        .first()
+        .textContent()
+      return {
+        title: (title ?? '').trim(),
+        badge: (badge ?? '').trim(),
+      }
+    }
+
+    const [row0, row1, row2, row3] = await Promise.all([
+      readRow(0),
+      readRow(1),
+      readRow(2),
+      readRow(3),
+    ])
+
+    expect(row0).toEqual({ title: 'One More Time', badge: 'Play next' })
+    expect(row1).toEqual({
+      title:
+        'Around the World / Harder Better Faster Stronger (Alive 2007 Live Edit Extended Bonus Mix)',
+      badge: 'Play next',
+    })
+    expect(row2).toEqual({ title: 'One More Time', badge: 'Queue' })
+    expect(row3).toEqual({ title: 'Get Lucky', badge: 'Queue' })
+  })
+
+  test('Play next into an empty queue places the track at position 0', async ({
+    page,
+  }) => {
+    await installMocks(page)
+    await gotoRoom(page)
+
+    await page.getByPlaceholder(/search songs/i).fill('daft punk')
+    await page
+      .locator('ul li')
+      .first()
+      .getByRole('button', { name: 'Play next' })
+      .click()
+    await expect(page.getByText(/Playing next:/)).toBeVisible()
+
+    await page
+      .getByRole('navigation', { name: 'Room navigation' })
+      .getByRole('button', { name: /^Queue/ })
+      .click()
+
+    const queueRows = page.locator('section ul li')
+    await expect(queueRows).toHaveCount(1)
+    await expect(queueRows.first().getByText('Play next', { exact: true })).toBeVisible()
   })
 })
