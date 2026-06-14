@@ -60,7 +60,16 @@ type YtmApp = HTMLElement & {
 type PlayerBar = HTMLElement & {
   playerApi?: {
     getVideoData?: () => { video_id?: string }
+    getCurrentTime?: () => number
+    getDuration?: () => number
   }
+}
+
+type NextSongInfo = {
+  videoId: string
+  title: string
+  artist: string
+  thumbnailUrl: string
 }
 
 type GetQueueResponse = {
@@ -269,6 +278,312 @@ function readNowPlaying(): NowPlayingPayload | null {
     artist,
     updatedAt: Date.now(),
   }
+}
+
+function getPlayerTimes(): { current: number; duration: number } | null {
+  const bar = document.querySelector('ytmusic-player-bar') as PlayerBar | null
+  const api = bar?.playerApi
+  if (!api?.getCurrentTime || !api.getDuration) return null
+  const current = api.getCurrentTime()
+  const duration = api.getDuration()
+  if (
+    typeof current !== 'number' ||
+    typeof duration !== 'number' ||
+    !Number.isFinite(current) ||
+    !Number.isFinite(duration) ||
+    duration <= 0
+  ) {
+    return null
+  }
+  return { current, duration }
+}
+
+function readRendererText(field: unknown): string {
+  if (!field || typeof field !== 'object') return ''
+  const obj = field as Record<string, unknown>
+  if (typeof obj.simpleText === 'string') return obj.simpleText
+  const runs = obj.runs as { text?: string }[] | undefined
+  if (Array.isArray(runs)) {
+    return runs.map((r) => (typeof r?.text === 'string' ? r.text : '')).join('')
+  }
+  return ''
+}
+
+function readRendererThumbnail(renderer: Record<string, unknown>): string {
+  const thumb = renderer.thumbnail as
+    | { thumbnails?: { url?: string; width?: number }[] }
+    | undefined
+  const thumbs = thumb?.thumbnails ?? []
+  if (thumbs.length === 0) return ''
+  let best: { url?: string; width?: number } = thumbs[0]!
+  for (const t of thumbs) {
+    if ((t?.width ?? 0) > (best.width ?? 0)) best = t
+  }
+  return typeof best?.url === 'string' ? best.url : ''
+}
+
+function getNextSongInfo(): NextSongInfo | null {
+  const innerStore = getInnerStore()
+  if (!innerStore) return null
+  const items = innerStore.getState().queue.items ?? []
+  if (items.length === 0) return null
+  const selectedIdx = getSelectedIndexFromItems(items)
+  const next = items[selectedIdx + 1]
+  if (!next) return null
+  const renderer = queueItemRenderer(next)
+  if (!renderer) return null
+  const videoId = typeof renderer.videoId === 'string' ? renderer.videoId : ''
+  const title = readRendererText(renderer.title)
+  const artist =
+    readRendererText(renderer.longBylineText) ||
+    readRendererText(renderer.shortBylineText)
+  const thumbnailUrl = readRendererThumbnail(renderer)
+  if (!videoId && !title) return null
+  return {
+    videoId,
+    title: title || 'Up next',
+    artist,
+    thumbnailUrl,
+  }
+}
+
+const nextToastState = {
+  shownForVideoId: '',
+  hideTimer: 0 as number,
+  removeTimer: 0 as number,
+}
+
+function ensureNextToastStyles(): void {
+  if (document.getElementById('ytmq-next-toast-style')) return
+  const style = document.createElement('style')
+  style.id = 'ytmq-next-toast-style'
+  style.textContent = `
+    @keyframes ytmq-next-in {
+      0% { opacity: 0; transform: translate(-50%, 36px) scale(.92); filter: blur(8px); }
+      55% { opacity: 1; transform: translate(-50%, -3px) scale(1.02); filter: blur(0); }
+      100% { opacity: 1; transform: translate(-50%, 0) scale(1); filter: blur(0); }
+    }
+    @keyframes ytmq-next-out {
+      0% { opacity: 1; transform: translate(-50%, 0) scale(1); filter: blur(0); }
+      100% { opacity: 0; transform: translate(-50%, -28px) scale(.96); filter: blur(6px); }
+    }
+    @keyframes ytmq-next-bar {
+      0% { transform: scaleX(0); }
+      100% { transform: scaleX(1); }
+    }
+    @keyframes ytmq-next-glow {
+      0%, 100% { box-shadow: 0 18px 48px rgba(0,0,0,.55), 0 0 0 1px rgba(244,63,94,.2), 0 0 24px rgba(244,63,94,.15); }
+      50% { box-shadow: 0 18px 48px rgba(0,0,0,.55), 0 0 0 1px rgba(244,63,94,.45), 0 0 32px rgba(244,63,94,.35); }
+    }
+    #ytmq-next-toast {
+      position: fixed;
+      left: 50%;
+      bottom: 96px;
+      z-index: 99999;
+      transform: translate(-50%, 0);
+      background: linear-gradient(135deg, rgba(24,24,27,.96), rgba(39,39,42,.96));
+      color: #fafafa;
+      padding: 12px 20px 14px 14px;
+      border-radius: 14px;
+      font: 14px/1.4 'YouTube Sans', 'Roboto', system-ui, sans-serif;
+      border: 1px solid rgba(244,63,94,.35);
+      max-width: min(440px, 92vw);
+      min-width: 240px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      backdrop-filter: blur(10px) saturate(140%);
+      -webkit-backdrop-filter: blur(10px) saturate(140%);
+      animation:
+        ytmq-next-in 520ms cubic-bezier(.22,1.4,.36,1) both,
+        ytmq-next-glow 2.4s ease-in-out 520ms infinite;
+      overflow: hidden;
+      pointer-events: none;
+      will-change: transform, opacity, filter;
+    }
+    #ytmq-next-toast.is-leaving {
+      animation: ytmq-next-out 480ms cubic-bezier(.4,0,.8,.4) both;
+    }
+    #ytmq-next-toast .ytmq-next-thumb {
+      width: 44px;
+      height: 44px;
+      border-radius: 8px;
+      object-fit: cover;
+      flex-shrink: 0;
+      background: #27272a;
+      box-shadow: 0 4px 12px rgba(0,0,0,.5);
+    }
+    #ytmq-next-toast .ytmq-next-text {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      flex: 1;
+    }
+    #ytmq-next-toast .ytmq-next-label {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+      color: #fb7185;
+      margin-bottom: 3px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    #ytmq-next-toast .ytmq-next-label::before {
+      content: '';
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #fb7185;
+      box-shadow: 0 0 8px #fb7185;
+      animation: ytmq-next-glow 1.2s ease-in-out infinite;
+    }
+    #ytmq-next-toast .ytmq-next-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: #fafafa;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    #ytmq-next-toast .ytmq-next-artist {
+      font-size: 12px;
+      color: #a1a1aa;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin-top: 1px;
+    }
+    #ytmq-next-toast .ytmq-next-progress {
+      position: absolute;
+      left: 0;
+      bottom: 0;
+      height: 3px;
+      width: 100%;
+      background: linear-gradient(90deg, #f43f5e, #ec4899, #f97316);
+      transform-origin: left center;
+      animation-name: ytmq-next-bar;
+      animation-timing-function: linear;
+      animation-fill-mode: forwards;
+    }
+  `
+  document.head.appendChild(style)
+}
+
+function hideNextSongToast(opts: { immediate?: boolean } = {}): void {
+  if (nextToastState.hideTimer) {
+    window.clearTimeout(nextToastState.hideTimer)
+    nextToastState.hideTimer = 0
+  }
+  if (nextToastState.removeTimer) {
+    window.clearTimeout(nextToastState.removeTimer)
+    nextToastState.removeTimer = 0
+  }
+  const el = document.getElementById('ytmq-next-toast')
+  if (!el) {
+    nextToastState.shownForVideoId = ''
+    return
+  }
+  if (opts.immediate) {
+    el.remove()
+    nextToastState.shownForVideoId = ''
+    return
+  }
+  el.classList.add('is-leaving')
+  nextToastState.removeTimer = window.setTimeout(() => {
+    el.remove()
+    nextToastState.removeTimer = 0
+    nextToastState.shownForVideoId = ''
+  }, 480)
+}
+
+function showNextSongToast(
+  info: NextSongInfo,
+  currentVideoId: string,
+  visibleMs: number,
+): void {
+  ensureNextToastStyles()
+  hideNextSongToast({ immediate: true })
+
+  const el = document.createElement('div')
+  el.id = 'ytmq-next-toast'
+
+  const thumb = document.createElement('img')
+  thumb.className = 'ytmq-next-thumb'
+  thumb.alt = ''
+  thumb.referrerPolicy = 'no-referrer'
+  if (info.thumbnailUrl) thumb.src = info.thumbnailUrl
+  else thumb.style.visibility = 'hidden'
+
+  const text = document.createElement('div')
+  text.className = 'ytmq-next-text'
+
+  const label = document.createElement('span')
+  label.className = 'ytmq-next-label'
+  label.textContent = 'Up next'
+
+  const title = document.createElement('span')
+  title.className = 'ytmq-next-title'
+  title.textContent = info.title
+
+  const artist = document.createElement('span')
+  artist.className = 'ytmq-next-artist'
+  artist.textContent = info.artist
+
+  text.appendChild(label)
+  text.appendChild(title)
+  if (info.artist) text.appendChild(artist)
+
+  const progress = document.createElement('div')
+  progress.className = 'ytmq-next-progress'
+  progress.style.animationDuration = `${visibleMs}ms`
+
+  el.appendChild(thumb)
+  el.appendChild(text)
+  el.appendChild(progress)
+
+  document.body.appendChild(el)
+  nextToastState.shownForVideoId = currentVideoId
+
+  nextToastState.hideTimer = window.setTimeout(() => {
+    nextToastState.hideTimer = 0
+    hideNextSongToast()
+  }, visibleMs)
+}
+
+function checkNextSongToast(): void {
+  const times = getPlayerTimes()
+  if (!times) return
+  const currentVideoId =
+    new URLSearchParams(location.search).get('v') ??
+    (document.querySelector('ytmusic-player-bar') as PlayerBar | null)
+      ?.playerApi?.getVideoData?.()?.video_id ??
+    ''
+  if (!currentVideoId) return
+
+  if (
+    nextToastState.shownForVideoId &&
+    nextToastState.shownForVideoId !== currentVideoId
+  ) {
+    hideNextSongToast({ immediate: true })
+  }
+
+  if (nextToastState.shownForVideoId === currentVideoId) return
+
+  const remaining = times.duration - times.current
+  if (!Number.isFinite(remaining)) return
+  if (remaining > 15 || remaining <= 0.5) return
+
+  const next = getNextSongInfo()
+  if (!next) return
+  if (next.videoId === currentVideoId) return
+
+  const visibleMs = Math.max(
+    1500,
+    Math.min(15000, Math.floor((remaining - 0.4) * 1000)),
+  )
+  showNextSongToast(next, currentVideoId, visibleMs)
 }
 
 /** Opens the queue panel so #queue store initializes on a fresh session. */
@@ -865,6 +1180,14 @@ async function runBridge() {
   const playbackTimer = window.setInterval(publishNowPlaying, 2000)
   publishNowPlaying()
 
+  const nextToastTimer = window.setInterval(() => {
+    try {
+      checkNextSongToast()
+    } catch (err) {
+      log('Next-song toast tick failed', err)
+    }
+  }, 500)
+
   const { data: initial, error: loadError } = await supabase
     .from('queue_items')
     .select('id, video_id, title, created_at')
@@ -1006,6 +1329,8 @@ async function runBridge() {
     },
     stop() {
       window.clearInterval(playbackTimer)
+      window.clearInterval(nextToastTimer)
+      hideNextSongToast({ immediate: true })
       void supabase.removeChannel(channel)
       void supabase.removeChannel(playbackChannel)
       delete window.__YTMQ_BRIDGE__
