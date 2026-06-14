@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react'
 import type { QueueInsertMode } from '../lib/queue'
 
 export function PlayNextIcon({ className = 'h-4 w-4' }: { className?: string }) {
@@ -35,6 +36,27 @@ export function AddToQueueIcon({ className = 'h-4 w-4' }: { className?: string }
   )
 }
 
+function CheckIcon({ className = 'h-4 w-4' }: { className?: string }) {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 20 20"
+      fill="currentColor"
+      className={`ytmq-check ${className}`}
+    >
+      <path
+        fillRule="evenodd"
+        d="M16.7 5.3a1 1 0 0 1 0 1.4l-7.5 7.5a1 1 0 0 1-1.4 0l-3.5-3.5a1 1 0 1 1 1.4-1.4l2.8 2.79 6.8-6.79a1 1 0 0 1 1.4 0Z"
+        clipRule="evenodd"
+      />
+    </svg>
+  )
+}
+
+function Spinner() {
+  return <span className="ytmq-spinner h-3.5 w-3.5" aria-hidden />
+}
+
 type TrackRowProps = {
   thumbnail: string
   title: string
@@ -46,6 +68,28 @@ type TrackRowProps = {
   disabled?: boolean
   onPlayNext: () => void
   onQueue: () => void
+}
+
+/**
+ * Tracks the moment a pending add resolves so the row can briefly flash a
+ * success state and show a check on the button that was tapped.
+ */
+function useJustAdded(pendingMode: QueueInsertMode | null) {
+  const [added, setAdded] = useState<QueueInsertMode | null>(null)
+  const prev = useRef<QueueInsertMode | null>(pendingMode)
+
+  useEffect(() => {
+    if (prev.current && pendingMode === null) {
+      const mode = prev.current
+      setAdded(mode)
+      const timer = setTimeout(() => setAdded(null), 1100)
+      prev.current = pendingMode
+      return () => clearTimeout(timer)
+    }
+    prev.current = pendingMode
+  }, [pendingMode])
+
+  return added
 }
 
 export function TrackRow({
@@ -60,8 +104,14 @@ export function TrackRow({
   onPlayNext,
   onQueue,
 }: TrackRowProps) {
+  const justAdded = useJustAdded(pendingMode)
+
   return (
-    <li className="flex items-center gap-3 rounded-xl border border-zinc-800/80 bg-zinc-900/60 px-3 py-2.5 transition-colors hover:border-zinc-700">
+    <li
+      className={`ytmq-anim-row flex items-center gap-3 rounded-xl border border-zinc-800/80 bg-zinc-900/60 px-3 py-2.5 transition-colors hover:border-zinc-700 ${
+        justAdded ? 'ytmq-flash' : ''
+      }`}
+    >
       {rank != null && (
         <span className="w-5 shrink-0 text-center text-sm tabular-nums text-zinc-500">
           {rank}
@@ -93,10 +143,12 @@ export function TrackRow({
           onClick={onPlayNext}
           aria-label="Play next"
           title="Play next"
-          className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-lg bg-violet-600 px-2.5 text-xs font-medium text-white active:bg-violet-700 disabled:opacity-60"
+          className="ytmq-press inline-flex min-h-9 items-center justify-center gap-1.5 rounded-lg bg-violet-600 px-2.5 text-xs font-medium text-white hover:bg-violet-500 disabled:opacity-60"
         >
           {pendingMode === 'play_next' ? (
-            <span aria-hidden="true">…</span>
+            <Spinner />
+          ) : justAdded === 'play_next' ? (
+            <CheckIcon />
           ) : (
             <PlayNextIcon />
           )}
@@ -108,10 +160,12 @@ export function TrackRow({
           onClick={onQueue}
           aria-label="Add to queue"
           title="Add to queue"
-          className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-lg border border-violet-500/70 px-2.5 text-xs font-medium text-violet-200 active:bg-violet-500/10 disabled:opacity-60"
+          className="ytmq-press inline-flex min-h-9 items-center justify-center gap-1.5 rounded-lg border border-violet-500/70 px-2.5 text-xs font-medium text-violet-200 hover:bg-violet-500/10 disabled:opacity-60"
         >
           {pendingMode === 'queue' ? (
-            <span aria-hidden="true">…</span>
+            <Spinner />
+          ) : justAdded === 'queue' ? (
+            <CheckIcon />
           ) : (
             <AddToQueueIcon />
           )}

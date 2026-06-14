@@ -21,14 +21,14 @@ export function NicknamePrompt({ onSubmit }: NicknamePromptProps) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-6"
+      className="ytmq-anim-fade fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-6 backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
       aria-labelledby="nickname-prompt-title"
     >
       <form
         onSubmit={handleSubmit}
-        className="w-full max-w-sm space-y-4 rounded-2xl border border-zinc-800 bg-zinc-950 p-6 shadow-xl"
+        className="ytmq-anim-pop w-full max-w-sm space-y-4 rounded-2xl border border-zinc-800 bg-zinc-950 p-6 shadow-2xl shadow-black/60"
       >
         <header className="space-y-1">
           <h2 id="nickname-prompt-title" className="text-xl font-semibold">
@@ -49,19 +49,19 @@ export function NicknamePrompt({ onSubmit }: NicknamePromptProps) {
             autoComplete="nickname"
             autoFocus
             maxLength={32}
-            className="min-h-12 w-full rounded-xl border border-zinc-700 bg-zinc-900 px-4 outline-none focus:border-violet-500"
+            className="min-h-12 w-full rounded-xl border border-zinc-700 bg-zinc-900 px-4 outline-none transition-colors focus:border-violet-500"
           />
         </label>
 
         {error && (
-          <p className="text-sm text-red-400" role="alert">
+          <p className="ytmq-anim-fade text-sm text-red-400" role="alert">
             {error}
           </p>
         )}
 
         <button
           type="submit"
-          className="min-h-12 w-full rounded-xl bg-violet-600 px-4 text-lg font-medium text-white active:bg-violet-700"
+          className="ytmq-press min-h-12 w-full rounded-xl bg-violet-600 px-4 text-lg font-medium text-white hover:bg-violet-500"
         >
           Continue
         </button>

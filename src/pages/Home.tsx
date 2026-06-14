@@ -32,8 +32,25 @@ export function Home() {
 
   return (
     <main className="mx-auto flex min-h-dvh max-w-lg flex-col justify-center gap-6 p-6">
-      <header className="space-y-2 text-center">
-        <h1 className="text-3xl font-semibold tracking-tight">YTMQ</h1>
+      <header className="ytmq-anim-fade-up space-y-3 text-center">
+        <div
+          className="ytmq-anim-pop mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-500 to-fuchsia-600 shadow-lg shadow-violet-900/40"
+          style={{ animationDelay: '80ms' }}
+        >
+          <svg
+            viewBox="0 0 24 24"
+            fill="currentColor"
+            className="h-8 w-8 text-white"
+            aria-hidden
+          >
+            <path d="M9 18V6l10-2v12" />
+            <circle cx="6" cy="18" r="3" fill="currentColor" />
+            <circle cx="16" cy="16" r="3" fill="currentColor" />
+          </svg>
+        </div>
+        <h1 className="bg-gradient-to-br from-white to-zinc-400 bg-clip-text text-4xl font-bold tracking-tight text-transparent">
+          YTMQ
+        </h1>
         <p className="text-zinc-400">Shared queue for YouTube Music</p>
       </header>
       <form
@@ -41,7 +58,8 @@ export function Home() {
           e.preventDefault()
           void handleCreate()
         }}
-        className="flex flex-col gap-3"
+        className="ytmq-anim-fade-up flex flex-col gap-3"
+        style={{ animationDelay: '120ms' }}
       >
         <label className="block space-y-1">
           <span className="text-sm text-zinc-500">Nickname</span>
@@ -52,25 +70,26 @@ export function Home() {
             placeholder="Your name on the queue"
             autoComplete="nickname"
             maxLength={32}
-            className="min-h-12 w-full rounded-xl border border-zinc-700 bg-zinc-900 px-4 outline-none focus:border-violet-500"
+            className="min-h-12 w-full rounded-xl border border-zinc-700 bg-zinc-900 px-4 outline-none transition-colors focus:border-violet-500"
           />
         </label>
         <button
           type="submit"
           disabled={creating}
-          className="min-h-12 rounded-xl bg-violet-600 px-4 text-lg font-medium text-white active:bg-violet-700 disabled:opacity-60"
+          className="ytmq-press inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-gradient-to-br from-violet-500 to-violet-700 px-4 text-lg font-medium text-white shadow-lg shadow-violet-900/30 hover:brightness-110 disabled:opacity-60"
         >
+          {creating && <span className="ytmq-spinner h-4 w-4" aria-hidden />}
           {creating ? 'Creating…' : 'Create lobby'}
         </button>
         <Link
           to="/join"
-          className="flex min-h-12 items-center justify-center rounded-xl border border-zinc-700 px-4 text-lg font-medium text-zinc-100 active:bg-zinc-900"
+          className="ytmq-press flex min-h-12 items-center justify-center rounded-xl border border-zinc-700 px-4 text-lg font-medium text-zinc-100 hover:border-zinc-600 hover:bg-zinc-900"
         >
           Join with code
         </Link>
       </form>
       {error && (
-        <p className="text-center text-sm text-red-400" role="alert">
+        <p className="ytmq-anim-fade text-center text-sm text-red-400" role="alert">
           {error}
         </p>
       )}

@@ -4,6 +4,7 @@ import {
   type QueueInsertMode,
   type QueueItem,
 } from '../lib/queue'
+import { useAnimatedList } from '../hooks/useAnimatedList'
 
 function InsertModeBadge({ mode }: { mode: QueueInsertMode }) {
   const isPlayNext = mode === 'play_next'
@@ -30,6 +31,51 @@ function AddedByLine({ addedBy }: { addedBy?: string }) {
   )
 }
 
+function QueueSkeleton() {
+  return (
+    <ul className="flex flex-col gap-2">
+      {Array.from({ length: 4 }).map((_, index) => (
+        <li
+          key={index}
+          className="ytmq-anim-fade flex gap-3 rounded-xl border border-zinc-800 bg-zinc-900/60 p-3"
+          style={{ animationDelay: `${index * 70}ms` }}
+        >
+          <div className="ytmq-skeleton h-14 w-14 shrink-0 rounded-lg" />
+          <div className="flex min-w-0 flex-1 flex-col justify-center gap-2">
+            <div className="ytmq-skeleton h-3.5 w-3/4 rounded-full" />
+            <div className="ytmq-skeleton h-3 w-1/2 rounded-full" />
+          </div>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+function EmptyState() {
+  return (
+    <div className="ytmq-anim-pop flex flex-col items-center gap-3 rounded-2xl border border-dashed border-zinc-800 bg-zinc-900/30 px-6 py-12 text-center">
+      <svg
+        aria-hidden="true"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        className="h-8 w-8 text-zinc-600"
+      >
+        <path d="M3 6h13M3 12h9M3 18h9" />
+        <path d="M18 12v8" />
+        <path d="M21.5 15.5 18 12l-3.5 3.5" />
+      </svg>
+      <p className="text-sm font-medium text-zinc-300">Queue is empty</p>
+      <p className="max-w-xs text-sm text-zinc-500">
+        Use Search to add the first track.
+      </p>
+    </div>
+  )
+}
+
 type QueueListProps = {
   items: QueueItem[]
   loading?: boolean
@@ -47,32 +93,35 @@ export function QueueList({
   showYtMusicLink = false,
   onRemove,
 }: QueueListProps) {
+  const entries = useAnimatedList(items, (item) => item.id)
+
   if (loading) {
-    return <p className="py-8 text-center text-zinc-500">Loading queue…</p>
+    return <QueueSkeleton />
   }
 
   if (items.length === 0) {
-    return (
-      <p className="py-8 text-center text-zinc-500">
-        Queue is empty. Use Search to add tracks.
-      </p>
-    )
+    return <EmptyState />
   }
 
+  // Map id -> position among the *present* items for the rank badge.
+  const positionById = new Map(items.map((item, index) => [item.id, index + 1]))
+
   return (
-    <ul className="flex flex-col gap-2">
-      {items.map((item, index) => {
-        const thumb =
-          item.thumbnail_url || defaultThumbnail(item.video_id)
+    <ul className="flex flex-col">
+      {entries.map(({ key, item, leaving }) => {
+        const thumb = item.thumbnail_url || defaultThumbnail(item.video_id)
         const isBusy = busyId === item.id
+        const rank = positionById.get(item.id)
 
         return (
           <li
-            key={item.id}
-            className="flex gap-3 rounded-xl border border-zinc-800 bg-zinc-900/80 p-3"
+            key={key}
+            className={`mb-2 flex gap-3 rounded-xl border border-zinc-800 bg-zinc-900/80 p-3 transition-colors hover:border-zinc-700 ${
+              leaving ? 'ytmq-leaving' : 'ytmq-anim-row'
+            }`}
           >
-            <span className="flex w-6 shrink-0 items-center justify-center text-sm text-zinc-500">
-              {index + 1}
+            <span className="flex w-6 shrink-0 items-center justify-center text-sm tabular-nums text-zinc-500">
+              {rank ?? ''}
             </span>
             <img
               src={thumb}
@@ -97,7 +146,7 @@ export function QueueList({
                   href={ytMusicWatchUrl(item.video_id)}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="min-h-9 rounded-lg bg-violet-600 px-3 text-center text-xs font-medium leading-9 text-white active:bg-violet-700"
+                  className="ytmq-press min-h-9 rounded-lg bg-violet-600 px-3 text-center text-xs font-medium leading-9 text-white hover:bg-violet-500"
                 >
                   Open
                 </a>
@@ -107,10 +156,14 @@ export function QueueList({
                   type="button"
                   disabled={isBusy}
                   onClick={() => onRemove?.(item.id)}
-                  className="min-h-9 rounded-lg border border-red-900/60 px-3 text-sm text-red-400 active:bg-red-950 disabled:opacity-40"
+                  className="ytmq-press inline-flex min-h-9 items-center justify-center gap-1.5 rounded-lg border border-red-900/60 px-3 text-sm text-red-400 hover:border-red-700 hover:bg-red-950/50 disabled:opacity-40"
                   aria-label="Remove"
                 >
-                  Remove
+                  {isBusy ? (
+                    <span className="ytmq-spinner h-3.5 w-3.5" aria-hidden />
+                  ) : (
+                    'Remove'
+                  )}
                 </button>
               )}
             </div>

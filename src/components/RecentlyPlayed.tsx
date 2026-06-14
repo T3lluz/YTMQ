@@ -45,7 +45,7 @@ export function RecentlyPlayed({
 
   if (items.length === 0) {
     return (
-      <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-zinc-800 bg-zinc-900/30 px-6 py-12 text-center">
+      <div className="ytmq-anim-pop flex flex-col items-center gap-3 rounded-2xl border border-dashed border-zinc-800 bg-zinc-900/30 px-6 py-12 text-center">
         <HistoryIcon />
         <p className="text-sm font-medium text-zinc-300">No history yet</p>
         <p className="max-w-xs text-sm text-zinc-500">

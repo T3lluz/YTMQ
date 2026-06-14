@@ -56,8 +56,13 @@ export function NowPlaying({ roomId, compact = false }: NowPlayingProps) {
 
   if (!nowPlaying && !connected) {
     return (
-      <section className="rounded-2xl border border-zinc-800 bg-zinc-900/50 p-4">
-        <p className="text-sm font-medium text-zinc-300">Now playing</p>
+      <section className="ytmq-anim-fade-up rounded-2xl border border-zinc-800 bg-zinc-900/50 p-4">
+        <div className="flex items-center gap-2">
+          <span className="flex h-2 w-2 shrink-0 rounded-full bg-zinc-600">
+            <span className="h-2 w-2 animate-ping rounded-full bg-zinc-500" />
+          </span>
+          <p className="text-sm font-medium text-zinc-300">Now playing</p>
+        </div>
         <p className="mt-1 text-sm text-zinc-500">
           Waiting for playback from the connected YouTube Music tab…
         </p>
@@ -67,7 +72,7 @@ export function NowPlaying({ roomId, compact = false }: NowPlayingProps) {
 
   if (!nowPlaying) {
     return (
-      <section className="rounded-2xl border border-zinc-800 bg-zinc-900/50 p-4">
+      <section className="ytmq-anim-fade-up rounded-2xl border border-zinc-800 bg-zinc-900/50 p-4">
         <p className="text-sm font-medium text-zinc-300">Now playing</p>
         <p className="mt-1 text-sm text-zinc-500">
           No recent updates — keep music.youtube.com open and playing.
@@ -80,7 +85,7 @@ export function NowPlaying({ roomId, compact = false }: NowPlayingProps) {
 
   return (
     <section
-      className={`ytmq-now-playing-card relative isolate overflow-hidden rounded-2xl border bg-zinc-900 ${
+      className={`ytmq-now-playing-card ytmq-anim-fade-up relative isolate overflow-hidden rounded-2xl border bg-zinc-900 ${
         stale ? 'border-zinc-800 opacity-90' : ''
       }`}
       style={{

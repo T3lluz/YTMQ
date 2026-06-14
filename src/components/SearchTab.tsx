@@ -44,9 +44,9 @@ function FilterPills({
             role="tab"
             aria-selected={active}
             onClick={() => onChange(option.id)}
-            className={`rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
+            className={`ytmq-press rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
               active
-                ? 'bg-violet-600 text-white'
+                ? 'bg-violet-600 text-white shadow-sm shadow-violet-900/40'
                 : 'bg-zinc-900 text-zinc-300 hover:bg-zinc-800'
             }`}
           >
@@ -55,6 +55,26 @@ function FilterPills({
         )
       })}
     </div>
+  )
+}
+
+function SearchSkeleton() {
+  return (
+    <ul className="flex flex-col gap-1.5 pt-1">
+      {Array.from({ length: 6 }).map((_, index) => (
+        <li
+          key={index}
+          className="ytmq-anim-fade flex items-center gap-3 rounded-xl border border-zinc-800/80 bg-zinc-900/50 px-3 py-2.5"
+          style={{ animationDelay: `${index * 60}ms` }}
+        >
+          <div className="ytmq-skeleton h-12 w-12 shrink-0 rounded-lg" />
+          <div className="flex min-w-0 flex-1 flex-col gap-2">
+            <div className="ytmq-skeleton h-3.5 w-2/3 rounded-full" />
+            <div className="ytmq-skeleton h-3 w-2/5 rounded-full" />
+          </div>
+        </li>
+      ))}
+    </ul>
   )
 }
 
@@ -149,11 +169,11 @@ export function SearchTab({
 
   function renderArtistRow(item: SearchResultItem) {
     return (
-      <li key={item.id}>
+      <li key={item.id} className="ytmq-anim-row">
         <button
           type="button"
           onClick={() => filterByArtist(item)}
-          className="flex w-full items-center gap-3 rounded-xl border border-zinc-800/80 bg-zinc-900/60 px-3 py-2.5 text-left transition-colors hover:border-zinc-700 active:bg-zinc-900"
+          className="ytmq-press flex w-full items-center gap-3 rounded-xl border border-zinc-800/80 bg-zinc-900/60 px-3 py-2.5 text-left transition-colors hover:border-zinc-700"
         >
           <img
             src={item.thumbnail || defaultThumbnail(item.id)}
@@ -175,18 +195,18 @@ export function SearchTab({
 
   function renderResults() {
     if (loading) {
-      return <p className="py-8 text-center text-zinc-500">Searching…</p>
+      return <SearchSkeleton />
     }
     if (error) {
       return (
-        <p className="py-8 text-center text-sm text-red-400" role="alert">
+        <p className="ytmq-anim-fade py-8 text-center text-sm text-red-400" role="alert">
           {error}
         </p>
       )
     }
     if (results.length === 0) {
       return (
-        <p className="py-8 text-center text-zinc-500">
+        <p className="ytmq-anim-fade py-8 text-center text-zinc-500">
           No results for “{trimmed}”
         </p>
       )
@@ -214,14 +234,14 @@ export function SearchTab({
       top.type === 'song' ? songs.filter((s) => s.id !== top.id) : songs
 
     return (
-      <div className="flex flex-col gap-6 pb-4">
+      <div className="ytmq-anim-fade-up flex flex-col gap-6 pb-4">
         {top && (
           <section className="space-y-2">
             <h3 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">
               Top result
             </h3>
             {top.type === 'song' ? (
-              <div className="flex items-center gap-4 rounded-2xl border border-zinc-800 bg-gradient-to-br from-zinc-900 to-zinc-950 p-4">
+              <div className="ytmq-anim-pop flex items-center gap-4 rounded-2xl border border-zinc-800 bg-gradient-to-br from-zinc-900 to-zinc-950 p-4 transition-colors hover:border-zinc-700">
                 <img
                   src={top.thumbnail || defaultThumbnail(top.id)}
                   alt=""
@@ -237,8 +257,11 @@ export function SearchTab({
                       type="button"
                       disabled={pending !== null}
                       onClick={() => addSong(top, 'play_next')}
-                      className="rounded-full bg-violet-600 px-4 py-1.5 text-sm font-medium text-white active:bg-violet-700 disabled:opacity-60"
+                      className="ytmq-press inline-flex items-center gap-1.5 rounded-full bg-violet-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-violet-500 disabled:opacity-60"
                     >
+                      {pending?.id === top.id && pending.mode === 'play_next' && (
+                        <span className="ytmq-spinner h-3.5 w-3.5" aria-hidden />
+                      )}
                       {pending?.id === top.id && pending.mode === 'play_next'
                         ? 'Adding…'
                         : 'Play next'}
@@ -247,8 +270,11 @@ export function SearchTab({
                       type="button"
                       disabled={pending !== null}
                       onClick={() => addSong(top, 'queue')}
-                      className="rounded-full border border-violet-500/70 px-4 py-1.5 text-sm font-medium text-violet-200 active:bg-violet-500/10 disabled:opacity-60"
+                      className="ytmq-press inline-flex items-center gap-1.5 rounded-full border border-violet-500/70 px-4 py-1.5 text-sm font-medium text-violet-200 hover:bg-violet-500/10 disabled:opacity-60"
                     >
+                      {pending?.id === top.id && pending.mode === 'queue' && (
+                        <span className="ytmq-spinner h-3.5 w-3.5" aria-hidden />
+                      )}
                       {pending?.id === top.id && pending.mode === 'queue'
                         ? 'Adding…'
                         : 'Queue'}
@@ -260,7 +286,7 @@ export function SearchTab({
               <button
                 type="button"
                 onClick={() => filterByArtist(top)}
-                className="flex w-full items-center gap-4 rounded-2xl border border-zinc-800 bg-gradient-to-br from-zinc-900 to-zinc-950 p-4 text-left transition-colors hover:border-zinc-700"
+                className="ytmq-press ytmq-anim-pop flex w-full items-center gap-4 rounded-2xl border border-zinc-800 bg-gradient-to-br from-zinc-900 to-zinc-950 p-4 text-left transition-colors hover:border-zinc-700"
               >
                 <img
                   src={top.thumbnail || defaultThumbnail(top.id)}
@@ -315,14 +341,14 @@ export function SearchTab({
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Songs, artists…"
           autoComplete="off"
-          className="min-h-12 w-full rounded-xl border border-zinc-700 bg-zinc-900 px-4 pr-10 text-base outline-none focus:border-violet-500"
+          className="min-h-12 w-full rounded-xl border border-zinc-700 bg-zinc-900 px-4 pr-10 text-base outline-none transition-colors focus:border-violet-500"
         />
         {query && (
           <button
             type="button"
             onClick={() => setQuery('')}
             aria-label="Clear search"
-            className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-1.5 text-zinc-500 hover:text-zinc-200"
+            className="ytmq-anim-fade absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-1.5 text-zinc-500 transition-colors hover:text-zinc-200"
           >
             <svg viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
               <path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" />

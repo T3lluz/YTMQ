@@ -4,7 +4,9 @@ import { QueueList } from '../components/QueueList'
 import { SharePanel } from '../components/SharePanel'
 import { NowPlaying } from '../components/NowPlaying'
 import { YtMusicConnect } from '../components/YtMusicConnect'
+import { ToastStack } from '../components/ToastStack'
 import { useQueue } from '../hooks/useQueue'
+import { useToast } from '../hooks/useToast'
 import {
   clearPlaybackSession,
   isTrackInPlaybackSession,
@@ -19,16 +21,25 @@ import {
 
 function HostUnavailable({ message }: { message: string }) {
   return (
-    <main className="mx-auto flex min-h-dvh max-w-lg flex-col justify-center gap-4 p-6 text-center">
+    <main className="ytmq-anim-pop mx-auto flex min-h-dvh max-w-lg flex-col justify-center gap-4 p-6 text-center">
       <p className="text-red-400">{message}</p>
-      <Link to="/" className="text-violet-400 underline">
+      <Link
+        to="/"
+        className="ytmq-press text-violet-400 underline underline-offset-2"
+      >
         Back home
       </Link>
     </main>
   )
 }
 
-function HostQueueMirror({ roomId }: { roomId: string }) {
+function HostQueueMirror({
+  roomId,
+  onToast,
+}: {
+  roomId: string
+  onToast?: (message: string) => void
+}) {
   const { items, loading, error } = useQueue(roomId)
   const [copiedIds, setCopiedIds] = useState(false)
 
@@ -45,6 +56,7 @@ function HostQueueMirror({ roomId }: { roomId: string }) {
     if (!ids) return
     await navigator.clipboard.writeText(ids)
     setCopiedIds(true)
+    onToast?.(`Copied ${sessionItems.length} video IDs`)
     window.setTimeout(() => setCopiedIds(false), 2000)
   }
 
@@ -56,7 +68,7 @@ function HostQueueMirror({ roomId }: { roomId: string }) {
           <button
             type="button"
             onClick={() => void copyAllVideoIds()}
-            className="shrink-0 rounded-lg border border-zinc-700 px-3 py-2 text-xs font-medium active:bg-zinc-900"
+            className="ytmq-press shrink-0 rounded-lg border border-zinc-700 px-3 py-2 text-xs font-medium hover:border-zinc-600 hover:bg-zinc-900"
           >
             {copiedIds ? 'Copied!' : 'Copy video IDs'}
           </button>
@@ -86,6 +98,7 @@ export function Host() {
   const [loading, setLoading] = useState(Boolean(roomId && hostToken))
   const [error, setError] = useState<string | null>(null)
   const [ending, setEnding] = useState(false)
+  const { toasts, showToast, dismiss } = useToast()
 
   useEffect(() => {
     if (!roomId || !hostToken) return
@@ -126,8 +139,9 @@ export function Host() {
 
   if (loading) {
     return (
-      <main className="mx-auto flex min-h-dvh max-w-lg items-center justify-center p-6">
-        <p className="text-zinc-400">Loading host view…</p>
+      <main className="mx-auto flex min-h-dvh max-w-lg flex-col items-center justify-center gap-3 p-6">
+        <span className="ytmq-spinner h-7 w-7 text-violet-400" aria-hidden />
+        <p className="ytmq-anim-fade text-zinc-400">Loading host view…</p>
       </main>
     )
   }
@@ -138,7 +152,7 @@ export function Host() {
 
   return (
     <main className="mx-auto flex min-h-dvh max-w-lg flex-col gap-6 p-6">
-      <header className="space-y-1">
+      <header className="ytmq-anim-fade-up space-y-1">
         <p className="text-sm font-medium text-violet-400">Host</p>
         <h1 className="text-2xl font-semibold">Lobby {room.code}</h1>
         <p className="text-sm text-zinc-400">
@@ -147,18 +161,37 @@ export function Host() {
         </p>
       </header>
 
-      <SharePanel roomId={roomId} code={room.code} />
+      <div className="ytmq-anim-fade-up" style={{ animationDelay: '80ms' }}>
+        <SharePanel
+          roomId={roomId}
+          code={room.code}
+          onCopied={(message) => showToast(message, 'info')}
+        />
+      </div>
 
-      <YtMusicConnect roomId={roomId} />
+      <div className="ytmq-anim-fade-up" style={{ animationDelay: '140ms' }}>
+        <YtMusicConnect roomId={roomId} />
+      </div>
 
-      <NowPlaying roomId={roomId} />
+      <div className="ytmq-anim-fade-up" style={{ animationDelay: '200ms' }}>
+        <NowPlaying roomId={roomId} />
+      </div>
 
-      <HostQueueMirror key={roomId} roomId={roomId} />
+      <div className="ytmq-anim-fade-up" style={{ animationDelay: '260ms' }}>
+        <HostQueueMirror
+          key={roomId}
+          roomId={roomId}
+          onToast={(message) => showToast(message, 'info')}
+        />
+      </div>
 
-      <div className="flex flex-col gap-3">
+      <div
+        className="ytmq-anim-fade-up flex flex-col gap-3"
+        style={{ animationDelay: '320ms' }}
+      >
         <Link
           to={`/room/${roomId}`}
-          className="text-center text-sm text-zinc-400 underline"
+          className="text-center text-sm text-zinc-400 underline underline-offset-2 transition-colors hover:text-zinc-200"
         >
           Open guest view
         </Link>
@@ -188,17 +221,20 @@ export function Host() {
                 navigate('/')
               })
               .catch((err: unknown) => {
-                setError(
-                  err instanceof Error ? err.message : 'Could not end lobby',
-                )
+                const message =
+                  err instanceof Error ? err.message : 'Could not end lobby'
+                setError(message)
+                showToast(message, 'error')
               })
               .finally(() => setEnding(false))
           }}
-          className="min-h-11 rounded-xl border border-red-500/40 px-4 text-sm font-medium text-red-300 active:bg-red-500/10 disabled:opacity-60"
+          className="ytmq-press inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-red-500/40 px-4 text-sm font-medium text-red-300 hover:bg-red-500/10 disabled:opacity-60"
         >
+          {ending && <span className="ytmq-spinner h-4 w-4" aria-hidden />}
           {ending ? 'Ending…' : 'End lobby & delete queue'}
         </button>
       </div>
+      <ToastStack toasts={toasts} onDismiss={dismiss} />
     </main>
   )
 }

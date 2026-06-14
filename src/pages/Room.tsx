@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { NicknamePrompt } from '../components/NicknamePrompt'
 import { SearchTab } from '../components/SearchTab'
@@ -14,9 +14,12 @@ import { fetchRoom, type RoomInfo } from '../lib/room'
 
 function RoomUnavailable({ message }: { message: string }) {
   return (
-    <main className="mx-auto flex min-h-dvh max-w-lg flex-col justify-center gap-4 p-6 text-center">
+    <main className="ytmq-anim-pop mx-auto flex min-h-dvh max-w-lg flex-col justify-center gap-4 p-6 text-center">
       <p className="text-red-400">{message}</p>
-      <Link to="/" className="text-violet-400 underline">
+      <Link
+        to="/"
+        className="ytmq-press text-violet-400 underline underline-offset-2"
+      >
         Back home
       </Link>
     </main>
@@ -35,7 +38,7 @@ export function Room() {
   const [needsNickname, setNeedsNickname] = useState(() =>
     roomId ? !getNickname(roomId) : false,
   )
-  const { toasts, showToast } = useToast()
+  const { toasts, showToast, dismiss } = useToast()
 
   const {
     items,
@@ -45,6 +48,14 @@ export function Room() {
     addTrack,
     removeItem,
   } = useQueue(roomId ?? '')
+
+  const lastError = useRef<string | null>(null)
+  useEffect(() => {
+    if (error && error !== lastError.current) {
+      showToast(error, 'error')
+    }
+    lastError.current = error
+  }, [error, showToast])
 
   useEffect(() => {
     if (!roomId) return
@@ -82,8 +93,9 @@ export function Room() {
 
   if (roomLoading) {
     return (
-      <main className="mx-auto flex min-h-dvh max-w-lg items-center justify-center p-6">
-        <p className="text-zinc-400">Loading lobby…</p>
+      <main className="mx-auto flex min-h-dvh max-w-lg flex-col items-center justify-center gap-3 p-6">
+        <span className="ytmq-spinner h-7 w-7 text-violet-400" aria-hidden />
+        <p className="ytmq-anim-fade text-zinc-400">Loading lobby…</p>
       </main>
     )
   }
@@ -114,42 +126,47 @@ export function Room() {
       </div>
 
       {tab === 'search' && (
-        <SearchTab
-          roomId={roomId}
-          nickname={nickname}
-          onAdd={async (track, mode) => {
-            await addTrack(track, mode)
-          }}
-          onAdded={(title, mode) =>
-            showToast(
-              mode === 'queue'
-                ? `Added to queue: “${title}”`
-                : `Playing next: “${title}”`,
-            )
-          }
-        />
+        <div className="ytmq-tab-panel flex flex-1 flex-col">
+          <SearchTab
+            roomId={roomId}
+            nickname={nickname}
+            onAdd={async (track, mode) => {
+              await addTrack(track, mode)
+            }}
+            onAdded={(title, mode) =>
+              showToast(
+                mode === 'queue'
+                  ? `Added to queue: “${title}”`
+                  : `Playing next: “${title}”`,
+                'success',
+              )
+            }
+          />
+        </div>
       )}
 
       {tab === 'queue' && (
-        <section className="flex flex-1 flex-col gap-3">
+        <section className="ytmq-tab-panel flex flex-1 flex-col gap-3">
           <h2 className="text-lg font-semibold">Queue</h2>
-          {error && (
-            <p className="text-sm text-red-400" role="alert">
-              {error}
-            </p>
-          )}
           <QueueList
             items={items}
             loading={loading}
             busyId={busyId}
             editable
-            onRemove={(id) => void removeItem(id)}
+            onRemove={(id) => {
+              const target = items.find((item) => item.id === id)
+              void removeItem(id)
+              showToast(
+                target ? `Removed “${target.title}”` : 'Removed from queue',
+                'info',
+              )
+            }}
           />
         </section>
       )}
 
       {tab === 'room' && (
-        <section className="flex flex-1 flex-col gap-4">
+        <section className="ytmq-tab-panel flex flex-1 flex-col gap-4">
           <h2 className="text-lg font-semibold">Room</h2>
           <p className="text-sm text-zinc-400">
             Share this lobby so friends can add tracks to the queue.
@@ -163,7 +180,7 @@ export function Room() {
               onChange={(e) => saveNickname(e.target.value)}
               placeholder="Your name on the queue"
               maxLength={32}
-              className="min-h-11 w-full rounded-xl border border-zinc-700 bg-zinc-900 px-3 outline-none focus:border-violet-500"
+              className="min-h-11 w-full rounded-xl border border-zinc-700 bg-zinc-900 px-3 outline-none transition-colors focus:border-violet-500"
             />
           </label>
 
@@ -176,7 +193,7 @@ export function Room() {
       )}
 
       <TabBar active={tab} onChange={setTab} queueCount={items.length} />
-      <ToastStack toasts={toasts} />
+      <ToastStack toasts={toasts} onDismiss={dismiss} />
     </main>
   )
 }
