@@ -2,7 +2,11 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { defaultThumbnail } from '../lib/queue'
 import { useNowPlaying } from '../hooks/useNowPlaying'
 import { sendPlaybackControl } from '../lib/bridgeChannel'
-import type { PlaybackAction, PlaybackState } from '../lib/playback'
+import {
+  formatPlaybackTime,
+  type PlaybackAction,
+  type PlaybackState,
+} from '../lib/playback'
 
 type NowPlayingProps = {
   roomId: string
@@ -37,6 +41,13 @@ export function NowPlaying({ roomId, compact = false }: NowPlayingProps) {
     [roomId],
   )
 
+  const effectiveState: PlaybackState = nowPlaying?.state ?? 'unknown'
+  const isPlaying = effectiveState === 'playing'
+  const position = usePlaybackPosition(
+    nowPlaying,
+    Boolean(nowPlaying && isPlaying && !stale),
+  )
+
   if (!nowPlaying && !connected) {
     return (
       <section className="rounded-2xl border border-zinc-800 bg-zinc-900/50 p-4">
@@ -60,8 +71,6 @@ export function NowPlaying({ roomId, compact = false }: NowPlayingProps) {
   }
 
   const thumb = defaultThumbnail(nowPlaying.videoId)
-  const effectiveState: PlaybackState = nowPlaying.state ?? 'unknown'
-  const isPlaying = effectiveState === 'playing'
   const disabled = !connected || stale
 
   return (
@@ -150,7 +159,98 @@ export function NowPlaying({ roomId, compact = false }: NowPlayingProps) {
           </ControlButton>
         </div>
       </div>
+
+      <PlaybackProgress
+        position={position}
+        duration={nowPlaying.duration}
+        compact={compact}
+      />
     </section>
+  )
+}
+
+function usePlaybackPosition(
+  nowPlaying: {
+    currentTime?: number
+    duration?: number
+    updatedAt: number
+    videoId: string
+  } | null,
+  live: boolean,
+) {
+  const [position, setPosition] = useState(0)
+
+  useEffect(() => {
+    if (!nowPlaying) {
+      setPosition(0)
+      return
+    }
+
+    const compute = () => {
+      const base = nowPlaying.currentTime ?? 0
+      const elapsed = live ? (Date.now() - nowPlaying.updatedAt) / 1000 : 0
+      let next = base + elapsed
+      if (nowPlaying.duration != null && nowPlaying.duration > 0) {
+        next = Math.min(next, nowPlaying.duration)
+      }
+      setPosition(next)
+    }
+
+    compute()
+    if (!live) return
+
+    const id = window.setInterval(compute, 250)
+    return () => window.clearInterval(id)
+  }, [
+    nowPlaying?.videoId,
+    nowPlaying?.currentTime,
+    nowPlaying?.duration,
+    nowPlaying?.updatedAt,
+    live,
+  ])
+
+  return position
+}
+
+type PlaybackProgressProps = {
+  position: number
+  duration?: number
+  compact?: boolean
+}
+
+function PlaybackProgress({
+  position,
+  duration,
+  compact = false,
+}: PlaybackProgressProps) {
+  const percent =
+    duration != null && duration > 0
+      ? Math.min(100, Math.max(0, (position / duration) * 100))
+      : 0
+  const hasDuration = duration != null && duration > 0
+
+  return (
+    <div
+      className={`pointer-events-none select-none border-t border-white/5 ${
+        compact ? 'pb-2.5 pt-2' : 'pb-3 pt-2.5'
+      }`}
+      aria-hidden
+    >
+      <div className="h-1 w-full overflow-hidden bg-white/10">
+        <div
+          className="h-full bg-violet-400/90 transition-[width] duration-300 ease-linear"
+          style={{ width: hasDuration ? `${percent}%` : '0%' }}
+        />
+      </div>
+      <div
+        className={`mt-1 flex justify-between text-[10px] tabular-nums text-zinc-400 ${
+          compact ? 'px-3' : 'px-4'
+        }`}
+      >
+        <span>{formatPlaybackTime(position)}</span>
+        <span>{hasDuration ? formatPlaybackTime(duration) : '--:--'}</span>
+      </div>
+    </div>
   )
 }
 

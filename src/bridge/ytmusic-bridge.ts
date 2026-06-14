@@ -37,6 +37,7 @@ type NowPlayingPayload = {
   artist: string
   updatedAt: number
   currentTime: number
+  duration?: number
   state: PlaybackState
 }
 
@@ -345,10 +346,13 @@ function readNowPlaying(): NowPlayingPayload | null {
 
   if (!videoId && !title) return null
 
-  const currentTime = (() => {
-    const t = bar?.playerApi?.getCurrentTime?.()
-    return typeof t === 'number' && Number.isFinite(t) && t >= 0 ? t : 0
-  })()
+  const times = getPlayerTimes()
+  const currentTime =
+    times?.current ??
+    (() => {
+      const t = bar?.playerApi?.getCurrentTime?.()
+      return typeof t === 'number' && Number.isFinite(t) && t >= 0 ? t : 0
+    })()
 
   return {
     videoId,
@@ -356,6 +360,7 @@ function readNowPlaying(): NowPlayingPayload | null {
     artist,
     updatedAt: Date.now(),
     currentTime,
+    ...(times?.duration != null ? { duration: times.duration } : {}),
     state: readPlaybackState(bar),
   }
 }

@@ -30,6 +30,12 @@ export function useNowPlaying(roomId: string) {
             typeof p.currentTime === 'number' && Number.isFinite(p.currentTime)
               ? p.currentTime
               : undefined,
+          duration:
+            typeof p.duration === 'number' &&
+            Number.isFinite(p.duration) &&
+            p.duration > 0
+              ? p.duration
+              : undefined,
           state: p.state,
         })
         setConnected(true)
