@@ -10,9 +10,12 @@ test.describe('Search', () => {
     await selectTab(page, 'Search')
     await page.getByPlaceholder(/search songs/i).fill('daft punk')
 
-    await expect(page.getByRole('button', { name: 'Add' }).first()).toBeVisible({
-      timeout: 20_000,
-    })
+    await expect(
+      page.getByRole('button', { name: 'Play next' }).first(),
+    ).toBeVisible({ timeout: 20_000 })
+    await expect(
+      page.getByRole('button', { name: 'Add to queue' }).first(),
+    ).toBeVisible()
     await expect(page.locator('ul li').first()).toBeVisible()
   })
 
@@ -50,6 +53,11 @@ test.describe('Search', () => {
     await expect(page.getByText('Popular songs')).toBeVisible({
       timeout: 20_000,
     })
-    await expect(page.getByRole('button', { name: 'Add' }).first()).toBeVisible()
+    await expect(
+      page.getByRole('button', { name: 'Play next' }).first(),
+    ).toBeVisible()
+    await expect(
+      page.getByRole('button', { name: 'Add to queue' }).first(),
+    ).toBeVisible()
   })
 })

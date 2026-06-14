@@ -7,15 +7,49 @@ import {
 } from './helpers/ui'
 
 test.describe('Queue', () => {
-  test('adds a track from search', async ({ page }) => {
+  test('adds a track as play next from search', async ({ page }) => {
     const lobby = await createLobbyViaApi()
     await goToGuestRoom(page, lobby.room_id)
 
-    await searchAndAddFirstResult(page, 'one more time daft punk')
+    await searchAndAddFirstResult(page, 'one more time daft punk', 'Play next')
 
     await selectTab(page, 'Queue')
     await expect(page.locator('ul li')).toHaveCount(1, { timeout: 10_000 })
     await expect(page.getByText(/Daft Punk|One More Time/i).first()).toBeVisible()
+    await expect(page.locator('ul li').first().getByText('Play next')).toBeVisible()
+  })
+
+  test('adds a track as queue from search', async ({ page }) => {
+    const lobby = await createLobbyViaApi()
+    await goToGuestRoom(page, lobby.room_id)
+
+    await searchAndAddFirstResult(
+      page,
+      'daft punk get lucky',
+      'Add to queue',
+    )
+
+    await selectTab(page, 'Queue')
+    await expect(page.locator('ul li')).toHaveCount(1, { timeout: 10_000 })
+    await expect(
+      page.locator('ul li').first().getByText('Queue', { exact: true }),
+    ).toBeVisible()
+  })
+
+  test('shows distinct tags for queue and play-next adds', async ({ page }) => {
+    const lobby = await createLobbyViaApi()
+    await goToGuestRoom(page, lobby.room_id)
+
+    await searchAndAddFirstResult(page, 'daft punk one more time', 'Play next')
+    await searchAndAddFirstResult(page, 'daft punk get lucky', 'Add to queue')
+
+    await selectTab(page, 'Queue')
+    const rows = page.locator('ul li')
+    await expect(rows).toHaveCount(2, { timeout: 10_000 })
+    await expect(rows.filter({ hasText: 'Play next' })).toHaveCount(1)
+    await expect(
+      rows.filter({ has: page.getByText('Queue', { exact: true }) }),
+    ).toHaveCount(1)
   })
 
   test('removes a track', async ({ page }) => {

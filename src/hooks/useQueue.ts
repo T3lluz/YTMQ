@@ -4,6 +4,7 @@ import {
   fetchQueueItems,
   removeQueueItem,
   type AddTrackInput,
+  type QueueInsertMode,
   type QueueItem,
 } from '../lib/queue'
 import { notifyBridgeQueueRemove } from '../lib/bridgeChannel'
@@ -88,10 +89,13 @@ export function useQueue(roomId: string) {
   }, [roomId])
 
   const addTrack = useCallback(
-    async (track: AddTrackInput) => {
+    async (track: AddTrackInput, mode: QueueInsertMode = 'play_next') => {
       setError(null)
       try {
-        const item = await addTrackToQueue(roomId, track)
+        const item = await addTrackToQueue(roomId, {
+          ...track,
+          insert_mode: track.insert_mode ?? mode,
+        })
         setItems((prev) =>
           sortByPosition([...prev.filter((row) => row.id !== item.id), item]),
         )

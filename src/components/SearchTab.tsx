@@ -6,12 +6,51 @@ import {
   type SearchFilter,
   type SearchResultItem,
 } from '../lib/search'
-import { defaultThumbnail, type AddTrackInput } from '../lib/queue'
+import {
+  defaultThumbnail,
+  type AddTrackInput,
+  type QueueInsertMode,
+} from '../lib/queue'
 
 type SearchTabProps = {
   nickname: string
-  onAdd: (track: AddTrackInput) => Promise<void>
-  onAdded?: (title: string) => void
+  onAdd: (track: AddTrackInput, mode: QueueInsertMode) => Promise<void>
+  onAdded?: (title: string, mode: QueueInsertMode) => void
+}
+
+function PlayNextIcon({ className = 'h-4 w-4' }: { className?: string }) {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 20 20"
+      fill="currentColor"
+      className={className}
+    >
+      <path d="M3.5 4.75A.75.75 0 0 1 4.62 4.1l8.5 5.25a.75.75 0 0 1 0 1.3l-8.5 5.25a.75.75 0 0 1-1.12-.65V4.75Z" />
+      <path d="M15.5 4.75a.75.75 0 0 1 1.5 0v10.5a.75.75 0 0 1-1.5 0V4.75Z" />
+    </svg>
+  )
+}
+
+function AddToQueueIcon({ className = 'h-4 w-4' }: { className?: string }) {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 20 20"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.75"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <path d="M3 6h10" />
+      <path d="M3 10h7" />
+      <path d="M3 14h7" />
+      <path d="M14.5 11v6" />
+      <path d="M11.5 14h6" />
+    </svg>
+  )
 }
 
 type View =
@@ -59,13 +98,15 @@ function FilterPills({
   )
 }
 
+type Pending = { id: string; mode: QueueInsertMode } | null
+
 export function SearchTab({ nickname, onAdd, onAdded }: SearchTabProps) {
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<SearchFilter>('song')
   const [results, setResults] = useState<SearchResultItem[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [addingId, setAddingId] = useState<string | null>(null)
+  const [pending, setPending] = useState<Pending>(null)
   const [view, setView] = useState<View>({ kind: 'search' })
   const [detailLoading, setDetailLoading] = useState(false)
 
@@ -138,23 +179,27 @@ export function SearchTab({ nickname, onAdd, onAdded }: SearchTabProps) {
     }
   }, [artistBrowseId])
 
-  async function handleAdd(item: SearchResultItem) {
+  async function handleAdd(item: SearchResultItem, mode: QueueInsertMode) {
     if (item.type !== 'song') return
-    setAddingId(item.id)
+    setPending({ id: item.id, mode })
     setError(null)
     try {
-      await onAdd({
-        video_id: item.id,
-        title: item.title,
-        channel_title: item.channelTitle,
-        thumbnail_url: item.thumbnail || defaultThumbnail(item.id),
-        added_by: nickname,
-      })
-      onAdded?.(item.title)
+      await onAdd(
+        {
+          video_id: item.id,
+          title: item.title,
+          channel_title: item.channelTitle,
+          thumbnail_url: item.thumbnail || defaultThumbnail(item.id),
+          added_by: nickname,
+          insert_mode: mode,
+        },
+        mode,
+      )
+      onAdded?.(item.title, mode)
     } catch {
       // hook surfaces queue errors
     } finally {
-      setAddingId(null)
+      setPending(null)
     }
   }
 
@@ -166,7 +211,9 @@ export function SearchTab({ nickname, onAdd, onAdded }: SearchTabProps) {
 
   function renderSongRow(item: SearchResultItem, rank?: number) {
     const thumb = item.thumbnail || defaultThumbnail(item.id)
-    const isAdding = addingId === item.id
+    const isPending = pending?.id === item.id
+    const pendingMode = isPending ? pending?.mode : null
+    const anyBusy = pending !== null
 
     return (
       <li
@@ -189,14 +236,38 @@ export function SearchTab({ nickname, onAdd, onAdded }: SearchTabProps) {
             {item.subtitle || item.channelTitle}
           </p>
         </div>
-        <button
-          type="button"
-          disabled={isAdding}
-          onClick={() => void handleAdd(item)}
-          className="min-h-9 shrink-0 rounded-lg bg-violet-600 px-3.5 text-sm font-medium text-white active:bg-violet-700 disabled:opacity-60"
-        >
-          {isAdding ? '…' : 'Add'}
-        </button>
+        <div className="flex shrink-0 items-center gap-1.5">
+          <button
+            type="button"
+            disabled={anyBusy}
+            onClick={() => void handleAdd(item, 'play_next')}
+            aria-label="Play next"
+            title="Play next"
+            className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-lg bg-violet-600 px-2.5 text-xs font-medium text-white active:bg-violet-700 disabled:opacity-60"
+          >
+            {pendingMode === 'play_next' ? (
+              <span aria-hidden="true">…</span>
+            ) : (
+              <PlayNextIcon />
+            )}
+            <span className="hidden sm:inline">Next</span>
+          </button>
+          <button
+            type="button"
+            disabled={anyBusy}
+            onClick={() => void handleAdd(item, 'queue')}
+            aria-label="Add to queue"
+            title="Add to queue"
+            className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-lg border border-violet-500/70 px-2.5 text-xs font-medium text-violet-200 active:bg-violet-500/10 disabled:opacity-60"
+          >
+            {pendingMode === 'queue' ? (
+              <span aria-hidden="true">…</span>
+            ) : (
+              <AddToQueueIcon />
+            )}
+            <span className="hidden sm:inline">Queue</span>
+          </button>
+        </div>
       </li>
     )
   }

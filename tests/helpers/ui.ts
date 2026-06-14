@@ -53,12 +53,17 @@ export function ytMusicOpenLink(page: Page) {
   return page.getByRole('link', { name: 'Open', exact: true })
 }
 
-export async function searchAndAddFirstResult(page: Page, query: string) {
+export async function searchAndAddFirstResult(
+  page: Page,
+  query: string,
+  mode: 'Play next' | 'Add to queue' = 'Play next',
+) {
   await selectTab(page, 'Search')
   const input = page.getByPlaceholder(/search songs/i)
   await input.fill(query)
-  const addButton = page.getByRole('button', { name: 'Add' }).first()
+  const addButton = page.getByRole('button', { name: mode }).first()
   await addButton.waitFor({ state: 'visible', timeout: 20_000 })
   await addButton.click()
-  await page.getByText(/Added “/).waitFor({ timeout: 10_000 })
+  const confirmation = mode === 'Add to queue' ? /Added to queue/ : /Playing next/
+  await page.getByText(confirmation).waitFor({ timeout: 10_000 })
 }
