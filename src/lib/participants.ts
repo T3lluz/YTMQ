@@ -61,6 +61,21 @@ export async function kickParticipant(
   return data === true
 }
 
+/** Kick every participant whose display name matches (case-insensitive). Returns how many were removed. */
+export async function kickByNickname(
+  roomId: string,
+  hostToken: string,
+  nickname: string,
+): Promise<number> {
+  const { data, error } = await supabase.rpc('kick_by_nickname', {
+    p_room_id: roomId,
+    p_host_token: hostToken,
+    p_nickname: nickname,
+  })
+  if (error) throw error
+  return typeof data === 'number' ? data : 0
+}
+
 export async function leaveParticipant(
   roomId: string,
   clientId: string,

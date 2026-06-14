@@ -6,7 +6,7 @@ import {
 } from '../lib/room'
 import type { ToastVariant } from '../hooks/useToast'
 import type { PresenceParticipant } from '../hooks/useRoomPresence'
-import { kickParticipant } from '../lib/participants'
+import { kickByNickname, kickParticipant } from '../lib/participants'
 import { ParticipantList } from './ParticipantList'
 
 type Toggleable = Pick<
@@ -167,9 +167,20 @@ export function HostAdminPanel({
   async function handleKick(clientId: string, nickname: string) {
     setKickBusyId(clientId)
     try {
-      const ok = await kickParticipant(roomId, hostToken, clientId)
-      if (!ok) throw new Error('Not authorised')
-      onToast(`Removed ${nickname || 'guest'}`, 'info')
+      const name = nickname.trim()
+      if (name) {
+        // Kick by display name so every device using that name is removed.
+        const removed = await kickByNickname(roomId, hostToken, name)
+        if (removed <= 0) throw new Error('Not authorised')
+        onToast(
+          removed > 1 ? `Removed ${name} (${removed})` : `Removed ${name}`,
+          'info',
+        )
+      } else {
+        const ok = await kickParticipant(roomId, hostToken, clientId)
+        if (!ok) throw new Error('Not authorised')
+        onToast('Removed guest', 'info')
+      }
     } catch (err) {
       onToast(err instanceof Error ? err.message : 'Could not kick', 'error')
     } finally {

@@ -378,31 +378,18 @@ export function Room() {
             />
           </label>
 
-          {isHost && hostToken ? (
-            <HostAdminPanel
-              roomId={roomId}
-              hostToken={hostToken}
-              settings={settings}
-              participants={participants}
-              onlineCount={onlineCount}
-              onToast={showToast}
-            />
-          ) : (
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">
-                  In this room
-                </h3>
-                <span className="text-xs text-zinc-500">
-                  {onlineCount} online
-                </span>
-              </div>
-              <ParticipantList
-                participants={participants}
-                emptyHint="You're the first one here. Share the code below!"
-              />
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">
+                In this room
+              </h3>
+              <span className="text-xs text-zinc-500">{onlineCount} online</span>
             </div>
-          )}
+            <ParticipantList
+              participants={participants}
+              emptyHint="You're the first one here. Share the code below!"
+            />
+          </div>
 
           <SharePanel
             roomId={roomId}
@@ -412,7 +399,25 @@ export function Room() {
         </section>
       )}
 
-      <TabBar active={tab} onChange={setTab} queueCount={items.length} />
+      {tab === 'admin' && isHost && hostToken && (
+        <section className="ytmq-tab-panel flex flex-1 flex-col">
+          <HostAdminPanel
+            roomId={roomId}
+            hostToken={hostToken}
+            settings={settings}
+            participants={participants}
+            onlineCount={onlineCount}
+            onToast={showToast}
+          />
+        </section>
+      )}
+
+      <TabBar
+        active={tab}
+        onChange={setTab}
+        queueCount={items.length}
+        showAdmin={isHost}
+      />
       <ToastStack toasts={toasts} onDismiss={dismiss} />
     </main>
   )

@@ -1,9 +1,11 @@
-export type RoomTab = 'search' | 'queue' | 'room'
+export type RoomTab = 'search' | 'queue' | 'room' | 'admin'
 
 type TabBarProps = {
   active: RoomTab
   onChange: (tab: RoomTab) => void
   queueCount: number
+  /** Show the host-only Admin tab. */
+  showAdmin?: boolean
 }
 
 function SearchIcon({ className }: { className?: string }) {
@@ -63,25 +65,52 @@ function RoomIcon({ className }: { className?: string }) {
   )
 }
 
-const tabs: {
+function AdminIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden
+    >
+      <path d="M12 3 4.5 6v5c0 4.4 3.1 7.6 7.5 9 4.4-1.4 7.5-4.6 7.5-9V6L12 3Z" />
+      <path d="m9 11.5 2 2 4-4" />
+    </svg>
+  )
+}
+
+type TabDef = {
   id: RoomTab
   label: string
   Icon: (props: { className?: string }) => React.ReactElement
-}[] = [
+}
+
+const baseTabs: TabDef[] = [
   { id: 'search', label: 'Search', Icon: SearchIcon },
   { id: 'queue', label: 'Queue', Icon: QueueIcon },
   { id: 'room', label: 'Room', Icon: RoomIcon },
 ]
 
-export function TabBar({ active, onChange, queueCount }: TabBarProps) {
-  const activeIndex = tabs.findIndex((tab) => tab.id === active)
+const adminTab: TabDef = { id: 'admin', label: 'Admin', Icon: AdminIcon }
+
+export function TabBar({ active, onChange, queueCount, showAdmin }: TabBarProps) {
+  const tabs = showAdmin ? [...baseTabs, adminTab] : baseTabs
+  const activeIndex = Math.max(
+    0,
+    tabs.findIndex((tab) => tab.id === active),
+  )
+  const gridColsClass = tabs.length === 4 ? 'grid-cols-4' : 'grid-cols-3'
 
   return (
     <nav
       className="fixed inset-x-0 bottom-0 z-50 border-t border-white/10 bg-zinc-950/65 pb-[env(safe-area-inset-bottom)] shadow-[0_-8px_30px_rgba(0,0,0,0.35)] backdrop-blur-2xl backdrop-saturate-150"
       aria-label="Room navigation"
     >
-      <div className="relative mx-auto grid max-w-lg grid-cols-3">
+      <div className={`relative mx-auto grid max-w-lg ${gridColsClass}`}>
         {/* Sliding active indicator */}
         <span
           aria-hidden

@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { resetPlaybackSession } from '../lib/playbackSession'
+import {
+  getOrStartPlaybackSince,
+  resetPlaybackSession,
+} from '../lib/playbackSession'
 import {
   bridgeSiteRoot,
   buildYtmConnectSnippet,
@@ -21,20 +24,81 @@ function doneKey(roomId: string) {
   return `ytmq_ytm_connected_${roomId}`
 }
 
+/** Always-available manual connect: copy a script to paste into the YT Music console. */
+function ManualConnect({
+  snippet,
+  defaultOpen = false,
+}: {
+  snippet: string | null
+  defaultOpen?: boolean
+}) {
+  const [copied, setCopied] = useState(false)
+
+  const copy = useCallback(async () => {
+    if (!snippet) return
+    try {
+      await navigator.clipboard.writeText(snippet)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      /* fall back to selecting the code block below */
+    }
+  }, [snippet])
+
+  if (!snippet) return null
+
+  return (
+    <details
+      open={defaultOpen}
+      className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-3 text-sm text-zinc-400"
+    >
+      <summary className="cursor-pointer font-medium text-violet-300">
+        Connect manually (paste a script)
+      </summary>
+      <ol className="mt-2 list-decimal space-y-1 pl-5 text-xs text-zinc-500">
+        <li>
+          Open <strong className="text-zinc-300">music.youtube.com</strong> in a
+          desktop Chrome tab and sign in.
+        </li>
+        <li>
+          Open DevTools (<kbd className="rounded bg-zinc-800 px-1">F12</kbd>) and
+          go to the <strong className="text-zinc-300">Console</strong> tab.
+        </li>
+        <li>
+          If the console blocks pasting, type{' '}
+          <code className="rounded bg-zinc-800 px-1">allow pasting</code> and
+          press Enter.
+        </li>
+        <li>Paste the script below, press Enter, then open the queue panel.</li>
+      </ol>
+      <button
+        type="button"
+        onClick={() => void copy()}
+        className="ytmq-press mt-3 inline-flex items-center gap-1.5 rounded-lg border border-violet-500/50 bg-violet-500/10 px-3 py-2 text-xs font-medium text-violet-200 hover:bg-violet-500/20"
+      >
+        {copied ? '✓ Copied' : 'Copy connect script'}
+      </button>
+      <pre className="mt-2 max-h-32 select-all overflow-auto rounded-lg bg-black/40 p-2 text-[10px] leading-relaxed text-zinc-300">
+        {snippet}
+      </pre>
+    </details>
+  )
+}
+
 export function YtMusicConnect({ roomId }: YtMusicConnectProps) {
   const [step, setStep] = useState<Step>(() =>
     sessionStorage.getItem(doneKey(roomId)) === '1' ? 'done' : 'connect',
   )
-  const [showManual, setShowManual] = useState(false)
   const [playbackSince, setPlaybackSince] = useState<string | null>(null)
 
   const httpsRequired = needsHttpsBridgeOrigin()
   const userscriptUrl = useMemo(() => ytmUserscriptInstallUrl(), [])
-  const snippet = useMemo(
-    () =>
-      playbackSince ? buildYtmConnectSnippet(roomId, playbackSince) : null,
-    [roomId, playbackSince],
-  )
+  // Always have a snippet ready for manual pasting, even before (or instead of)
+  // clicking Connect — auto-connect doesn't work in every browser.
+  const snippet = useMemo(() => {
+    const since = playbackSince ?? getOrStartPlaybackSince(roomId)
+    return buildYtmConnectSnippet(roomId, since)
+  }, [roomId, playbackSince])
 
   const hostInitialized = isYtmHostInitialized()
 
@@ -59,7 +123,6 @@ export function YtMusicConnect({ roomId }: YtMusicConnectProps) {
     const since = resetPlaybackSession(roomId)
     setPlaybackSince(since)
     openYtmMusicWindow(roomId, { resetSession: false })
-    setShowManual(false)
     // Returning hosts already have the helper installed, which auto-injects on
     // music.youtube.com — link immediately instead of asking them to verify.
     if (isYtmHostInitialized()) {
@@ -72,15 +135,6 @@ export function YtMusicConnect({ roomId }: YtMusicConnectProps) {
   const reopenYtm = useCallback(() => {
     openYtmMusicWindow(roomId)
   }, [roomId])
-
-  const copySnippet = useCallback(async () => {
-    if (!snippet) return
-    try {
-      await navigator.clipboard.writeText(snippet)
-    } catch {
-      /* user can copy from details */
-    }
-  }, [snippet])
 
   if (!import.meta.env.VITE_SUPABASE_URL || !import.meta.env.VITE_SUPABASE_ANON_KEY) {
     return null
@@ -148,39 +202,17 @@ export function YtMusicConnect({ roomId }: YtMusicConnectProps) {
           wait for <strong className="text-zinc-300">YTMQ connected</strong>, then add a test song
           from a guest. This page updates automatically.
         </p>
-        <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={() => void markDone()}
-            className="flex-1 rounded-xl bg-violet-600 py-3 font-medium text-white active:bg-violet-500"
-          >
-            It&apos;s connected
-          </button>
-          <button
-            type="button"
-            onClick={() => setShowManual((v) => !v)}
-            className="rounded-xl border border-zinc-700 px-4 py-3 text-sm font-medium active:bg-zinc-900"
-          >
-            Help
-          </button>
-        </div>
-        {showManual && snippet && (
-          <details open className="text-sm text-zinc-400">
-            <summary className="cursor-pointer text-violet-300">
-              Manual setup (no Tampermonkey)
-            </summary>
-            <p className="mt-2">
-              Open the console on the YouTube Music tab, paste the code, press Enter.
-            </p>
-            <button
-              type="button"
-              onClick={() => void copySnippet()}
-              className="mt-2 rounded-lg border border-zinc-700 px-3 py-2 text-xs font-medium active:bg-zinc-900"
-            >
-              Copy code
-            </button>
-          </details>
-        )}
+        <button
+          type="button"
+          onClick={() => void markDone()}
+          className="w-full rounded-xl bg-violet-600 py-3 font-medium text-white active:bg-violet-500"
+        >
+          It&apos;s connected
+        </button>
+        <p className="text-xs text-zinc-500">
+          Auto-connect not working? Use manual setup below.
+        </p>
+        <ManualConnect snippet={snippet} defaultOpen />
       </section>
     )
   }
@@ -224,6 +256,7 @@ export function YtMusicConnect({ roomId }: YtMusicConnectProps) {
       >
         Connect YouTube Music
       </button>
+      <ManualConnect snippet={snippet} />
     </section>
   )
 }
