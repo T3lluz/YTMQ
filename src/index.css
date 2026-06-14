@@ -176,12 +176,27 @@ body {
   }
 }
 
-@keyframes ytmq-flash {
+@keyframes ytmq-added-glow {
   0% {
-    background-color: rgba(16, 185, 129, 0.18);
+    opacity: 0;
+    transform: scale(1.015);
+  }
+  18% {
+    opacity: 1;
+    transform: scale(1);
   }
   100% {
-    background-color: transparent;
+    opacity: 0;
+    transform: scale(1);
+  }
+}
+
+@keyframes ytmq-added-sheen {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(220%);
   }
 }
 
@@ -205,8 +220,30 @@ body {
   animation: ytmq-row-out 0.34s var(--ease-out-soft) both;
 }
 
-.ytmq-flash {
-  animation: ytmq-flash 1.1s ease-out;
+/* Success "added to queue" overlay — lives on its own element so it never
+   fights the row's entrance animation (which also drives `animation`). */
+.ytmq-added-overlay {
+  background: linear-gradient(
+    90deg,
+    rgba(16, 185, 129, 0.26),
+    rgba(16, 185, 129, 0.1)
+  );
+  box-shadow: inset 0 0 0 1.5px rgba(16, 185, 129, 0.6);
+  animation: ytmq-added-glow 1s var(--ease-out-soft) both;
+}
+.ytmq-added-overlay::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  width: 45%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.22),
+    transparent
+  );
+  transform: translateX(-120%);
+  animation: ytmq-added-sheen 0.9s var(--ease-out-soft) 0.05s both;
 }
 
 /* Page transition wrapper */

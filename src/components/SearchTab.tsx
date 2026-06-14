@@ -16,6 +16,7 @@ import {
 type SearchTabProps = {
   roomId: string
   nickname: string
+  canAdd?: boolean
   onAdd: (track: AddTrackInput, mode: QueueInsertMode) => Promise<void>
   onAdded?: (title: string, mode: QueueInsertMode) => void
 }
@@ -81,6 +82,7 @@ function SearchSkeleton() {
 export function SearchTab({
   roomId,
   nickname,
+  canAdd = true,
   onAdd,
   onAdded,
 }: SearchTabProps) {
@@ -160,7 +162,7 @@ export function SearchTab({
         subtitle={item.subtitle || item.channelTitle}
         rank={rank}
         pendingMode={pending?.id === item.id ? pending.mode : null}
-        disabled={pending !== null}
+        disabled={pending !== null || !canAdd}
         onPlayNext={() => addSong(item, 'play_next')}
         onQueue={() => addSong(item, 'queue')}
       />
@@ -255,7 +257,7 @@ export function SearchTab({
                   <div className="mt-2 flex gap-2">
                     <button
                       type="button"
-                      disabled={pending !== null}
+                      disabled={pending !== null || !canAdd}
                       onClick={() => addSong(top, 'play_next')}
                       className="ytmq-press inline-flex items-center gap-1.5 rounded-full bg-violet-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-violet-500 disabled:opacity-60"
                     >
@@ -268,7 +270,7 @@ export function SearchTab({
                     </button>
                     <button
                       type="button"
-                      disabled={pending !== null}
+                      disabled={pending !== null || !canAdd}
                       onClick={() => addSong(top, 'queue')}
                       className="ytmq-press inline-flex items-center gap-1.5 rounded-full border border-violet-500/70 px-4 py-1.5 text-sm font-medium text-violet-200 hover:bg-violet-500/10 disabled:opacity-60"
                     >
@@ -334,13 +336,27 @@ export function SearchTab({
     <section className="flex flex-1 flex-col gap-3">
       <h2 className="text-lg font-semibold">Search</h2>
 
+      {!canAdd && (
+        <p className="ytmq-anim-fade flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-100">
+          <svg viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4 shrink-0" aria-hidden>
+            <path
+              fillRule="evenodd"
+              d="M10 1.5A3.5 3.5 0 0 0 6.5 5v2H6a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-.5V5A3.5 3.5 0 0 0 10 1.5Zm2 5.5V5a2 2 0 1 0-4 0v2h4Z"
+              clipRule="evenodd"
+            />
+          </svg>
+          The host has paused adding songs right now.
+        </p>
+      )}
+
       <div className="relative">
         <input
-          type="search"
+          type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Songs, artists…"
           autoComplete="off"
+          enterKeyHint="search"
           className="min-h-12 w-full rounded-xl border border-zinc-700 bg-zinc-900 px-4 pr-10 text-base outline-none transition-colors focus:border-violet-500"
         />
         {query && (
@@ -363,6 +379,7 @@ export function SearchTab({
         <RecentlyPlayed
           roomId={roomId}
           nickname={nickname}
+          canAdd={canAdd}
           onAdd={onAdd}
           onAdded={onAdded}
         />

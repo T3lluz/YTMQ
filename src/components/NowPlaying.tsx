@@ -13,9 +13,14 @@ import {
 type NowPlayingProps = {
   roomId: string
   compact?: boolean
+  canControl?: boolean
 }
 
-export function NowPlaying({ roomId, compact = false }: NowPlayingProps) {
+export function NowPlaying({
+  roomId,
+  compact = false,
+  canControl = true,
+}: NowPlayingProps) {
   const { nowPlaying, connected, stale } = useNowPlaying(roomId)
   const [pendingAction, setPendingAction] = useState<PlaybackAction | null>(null)
   const pendingTimer = useRef<number | null>(null)
@@ -81,7 +86,7 @@ export function NowPlaying({ roomId, compact = false }: NowPlayingProps) {
     )
   }
 
-  const disabled = !connected || stale
+  const disabled = !connected || stale || !canControl
 
   return (
     <section
@@ -156,6 +161,7 @@ export function NowPlaying({ roomId, compact = false }: NowPlayingProps) {
           className={`ytmq-now-controls flex shrink-0 items-center gap-1 rounded-full border px-1 py-1 backdrop-blur ${
             compact ? '' : 'gap-1.5 px-1.5'
           }`}
+          title={!canControl ? 'The host has limited playback controls' : undefined}
         >
           <ControlButton
             label="Previous"

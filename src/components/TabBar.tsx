@@ -78,7 +78,7 @@ export function TabBar({ active, onChange, queueCount }: TabBarProps) {
 
   return (
     <nav
-      className="fixed inset-x-0 bottom-0 z-40 border-t border-zinc-800 bg-zinc-950/85 backdrop-blur-xl"
+      className="fixed inset-x-0 bottom-0 z-50 border-t border-zinc-800 bg-zinc-950/85 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl"
       aria-label="Room navigation"
     >
       <div className="relative mx-auto grid max-w-lg grid-cols-3">

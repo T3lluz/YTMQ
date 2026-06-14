@@ -108,12 +108,17 @@ export function TrackRow({
 
   return (
     <li
-      className={`ytmq-anim-row flex items-center gap-3 rounded-xl border border-zinc-800/80 bg-zinc-900/60 px-3 py-2.5 transition-colors hover:border-zinc-700 ${
-        justAdded ? 'ytmq-flash' : ''
-      }`}
+      className="ytmq-anim-row relative flex items-center gap-3 overflow-hidden rounded-xl border border-zinc-800/80 bg-zinc-900/60 px-3 py-2.5 transition-colors hover:border-zinc-700"
     >
+      {justAdded && (
+        <span
+          key={justAdded}
+          aria-hidden
+          className="ytmq-added-overlay pointer-events-none absolute inset-0 z-0 overflow-hidden rounded-xl"
+        />
+      )}
       {rank != null && (
-        <span className="w-5 shrink-0 text-center text-sm tabular-nums text-zinc-500">
+        <span className="relative z-10 w-5 shrink-0 text-center text-sm tabular-nums text-zinc-500">
           {rank}
         </span>
       )}
@@ -121,22 +126,22 @@ export function TrackRow({
         src={thumbnail}
         alt=""
         loading="lazy"
-        className={`h-12 w-12 shrink-0 object-cover ${
+        className={`relative z-10 h-12 w-12 shrink-0 object-cover ${
           roundedThumb ? 'rounded-full' : 'rounded-lg'
         }`}
       />
-      <div className="min-w-0 flex-1">
+      <div className="relative z-10 min-w-0 flex-1">
         <p className="truncate font-medium">{title}</p>
         {subtitle && (
           <p className="truncate text-sm text-zinc-400">{subtitle}</p>
         )}
       </div>
       {meta && (
-        <span className="shrink-0 text-xs tabular-nums text-zinc-500">
+        <span className="relative z-10 shrink-0 text-xs tabular-nums text-zinc-500">
           {meta}
         </span>
       )}
-      <div className="flex shrink-0 items-center gap-1.5">
+      <div className="relative z-10 flex shrink-0 items-center gap-1.5">
         <button
           type="button"
           disabled={disabled}

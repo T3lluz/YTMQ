@@ -7,6 +7,8 @@ export function Join() {
   const navigate = useNavigate()
   const [code, setCode] = useState('')
   const [nickname, setNicknameInput] = useState('')
+  const [password, setPassword] = useState('')
+  const [needsPassword, setNeedsPassword] = useState(false)
   const [joining, setJoining] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -22,13 +24,40 @@ export function Join() {
       setError('Enter a nickname')
       return
     }
+    if (needsPassword && !password.trim()) {
+      setError('Enter the lobby password')
+      return
+    }
 
     setError(null)
     setJoining(true)
     try {
-      const { room_id } = await joinLobby(trimmedCode)
-      setNickname(room_id, trimmedNickname)
-      navigate(roomPath(room_id))
+      const result = await joinLobby(
+        trimmedCode,
+        needsPassword ? password : undefined,
+      )
+
+      if (result.status === 'ok') {
+        setNickname(result.room.room_id, trimmedNickname)
+        if (needsPassword) {
+          sessionStorage.setItem(`ytmq_access_${result.room.room_id}`, '1')
+        }
+        navigate(roomPath(result.room.room_id))
+        return
+      }
+
+      if (result.status === 'password') {
+        setNeedsPassword(true)
+        setError(password ? 'Wrong password' : null)
+        return
+      }
+
+      if (result.status === 'locked') {
+        setError('This lobby is locked — new people can’t join right now.')
+        return
+      }
+
+      setError('Lobby not found or expired')
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Could not join lobby')
     } finally {
@@ -79,6 +108,20 @@ export function Join() {
             className="min-h-12 w-full rounded-xl border border-zinc-700 bg-zinc-900 px-4 outline-none transition-colors focus:border-violet-500"
           />
         </label>
+        {needsPassword && (
+          <label className="ytmq-anim-fade-up block space-y-1">
+            <span className="text-sm text-zinc-500">Lobby password</span>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Required by the host"
+              autoFocus
+              maxLength={64}
+              className="min-h-12 w-full rounded-xl border border-zinc-700 bg-zinc-900 px-4 outline-none transition-colors focus:border-violet-500"
+            />
+          </label>
+        )}
         <button
           type="submit"
           disabled={joining}

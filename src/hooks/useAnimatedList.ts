@@ -20,7 +20,9 @@ export function useAnimatedList<T>(
   // Keep getKey in a ref so an inline callback at the call site doesn't make
   // the effect re-run (and loop) on every render.
   const getKeyRef = useRef(getKey)
-  getKeyRef.current = getKey
+  useEffect(() => {
+    getKeyRef.current = getKey
+  })
 
   const [entries, setEntries] = useState<AnimatedEntry<T>[]>(() =>
     items.map((item) => ({ key: getKey(item), item, leaving: false })),

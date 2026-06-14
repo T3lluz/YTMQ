@@ -11,6 +11,7 @@ import { TrackRow } from './TrackRow'
 type RecentlyPlayedProps = {
   roomId: string
   nickname: string
+  canAdd?: boolean
   onAdd: (track: AddTrackInput, mode: QueueInsertMode) => Promise<void>
   onAdded?: (title: string, mode: QueueInsertMode) => void
 }
@@ -37,6 +38,7 @@ function HistoryIcon() {
 export function RecentlyPlayed({
   roomId,
   nickname,
+  canAdd = true,
   onAdd,
   onAdded,
 }: RecentlyPlayedProps) {
@@ -86,7 +88,7 @@ export function RecentlyPlayed({
               subtitle={track.artist || 'Unknown artist'}
               meta={formatPlayedAgo(track.playedAt)}
               pendingMode={pending?.id === track.videoId ? pending.mode : null}
-              disabled={pending !== null}
+              disabled={pending !== null || !canAdd}
               onPlayNext={() => void add(addable, 'play_next')}
               onQueue={() => void add(addable, 'queue')}
             />

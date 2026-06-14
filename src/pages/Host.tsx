@@ -5,8 +5,12 @@ import { SharePanel } from '../components/SharePanel'
 import { NowPlaying } from '../components/NowPlaying'
 import { YtMusicConnect } from '../components/YtMusicConnect'
 import { ToastStack } from '../components/ToastStack'
+import { HostAdminPanel } from '../components/HostAdminPanel'
+import { ListenersBadge } from '../components/ParticipantList'
 import { useQueue } from '../hooks/useQueue'
 import { useToast } from '../hooks/useToast'
+import { useRoomSettings } from '../hooks/useRoomSettings'
+import { useRoomPresence } from '../hooks/useRoomPresence'
 import {
   clearPlaybackSession,
   isTrackInPlaybackSession,
@@ -99,6 +103,10 @@ export function Host() {
   const [error, setError] = useState<string | null>(null)
   const [ending, setEnding] = useState(false)
   const { toasts, showToast, dismiss } = useToast()
+  const settings = useRoomSettings(roomId ?? '', room ?? undefined)
+  const { participants, onlineCount } = useRoomPresence(roomId ?? '', {
+    heartbeat: false,
+  })
 
   useEffect(() => {
     if (!roomId || !hostToken) return
@@ -153,7 +161,10 @@ export function Host() {
   return (
     <main className="mx-auto flex min-h-dvh max-w-lg flex-col gap-6 p-6">
       <header className="ytmq-anim-fade-up space-y-1">
-        <p className="text-sm font-medium text-violet-400">Host</p>
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-sm font-medium text-violet-400">Host</p>
+          <ListenersBadge count={onlineCount} />
+        </div>
         <h1 className="text-2xl font-semibold">Lobby {room.code}</h1>
         <p className="text-sm text-zinc-400">
           Share the lobby, connect YouTube Music once, then let guests build the
@@ -178,6 +189,17 @@ export function Host() {
       </div>
 
       <div className="ytmq-anim-fade-up" style={{ animationDelay: '260ms' }}>
+        <HostAdminPanel
+          roomId={roomId}
+          hostToken={hostToken}
+          settings={settings}
+          participants={participants}
+          onlineCount={onlineCount}
+          onToast={showToast}
+        />
+      </div>
+
+      <div className="ytmq-anim-fade-up" style={{ animationDelay: '320ms' }}>
         <HostQueueMirror
           key={roomId}
           roomId={roomId}
@@ -187,7 +209,7 @@ export function Host() {
 
       <div
         className="ytmq-anim-fade-up flex flex-col gap-3"
-        style={{ animationDelay: '320ms' }}
+        style={{ animationDelay: '380ms' }}
       >
         <Link
           to={`/room/${roomId}`}
