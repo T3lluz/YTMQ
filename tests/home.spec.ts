@@ -22,8 +22,15 @@ test.describe('Home', () => {
     await expect(page.getByRole('heading', { name: 'Join lobby' })).toBeVisible()
   })
 
+  test('requires a nickname to create', async ({ page }) => {
+    await gotoApp(page)
+    await page.getByRole('button', { name: 'Create lobby' }).click()
+    await expect(page.getByRole('alert')).toHaveText('Enter a nickname')
+  })
+
   test('create lobby opens host view', async ({ page }) => {
     await gotoApp(page)
+    await page.getByPlaceholder('Your name on the queue').fill('TestHost')
     await page.getByRole('button', { name: 'Create lobby' }).click()
 
     await expect(page).toHaveURL(/\/YTMQ\/host\/[0-9a-f-]{36}\/?$/, {

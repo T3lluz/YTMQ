@@ -207,6 +207,11 @@ async function installMocks(page: Page) {
 
 async function gotoRoom(page: Page) {
   await page.goto(`./room/${ROOM_ID}`)
+  const dialog = page.getByRole('dialog', { name: 'Choose a nickname' })
+  if (await dialog.isVisible().catch(() => false)) {
+    await dialog.getByPlaceholder('Your name on the queue').fill('SmokeGuest')
+    await dialog.getByRole('button', { name: 'Continue' }).click()
+  }
   // Tab bar appears after the room loads.
   await page
     .getByRole('navigation', { name: 'Room navigation' })

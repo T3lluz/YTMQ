@@ -1,25 +1,33 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { setNickname } from '../lib/nickname'
 import { joinLobby, roomPath } from '../lib/room'
 
 export function Join() {
   const navigate = useNavigate()
   const [code, setCode] = useState('')
+  const [nickname, setNicknameInput] = useState('')
   const [joining, setJoining] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    const trimmed = code.trim()
-    if (!trimmed) {
+    const trimmedCode = code.trim()
+    const trimmedNickname = nickname.trim()
+    if (!trimmedCode) {
       setError('Enter a room code')
+      return
+    }
+    if (!trimmedNickname) {
+      setError('Enter a nickname')
       return
     }
 
     setError(null)
     setJoining(true)
     try {
-      const { room_id } = await joinLobby(trimmed)
+      const { room_id } = await joinLobby(trimmedCode)
+      setNickname(room_id, trimmedNickname)
       navigate(roomPath(room_id))
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Could not join lobby')
@@ -39,16 +47,31 @@ export function Join() {
       </header>
 
       <form onSubmit={(e) => void handleSubmit(e)} className="flex flex-col gap-3">
-        <input
-          type="text"
-          value={code}
-          onChange={(e) => setCode(e.target.value.toUpperCase())}
-          placeholder="ABC123"
-          autoComplete="off"
-          autoCapitalize="characters"
-          maxLength={12}
-          className="min-h-12 rounded-xl border border-zinc-700 bg-zinc-900 px-4 text-center font-mono text-xl tracking-widest uppercase outline-none focus:border-violet-500"
-        />
+        <label className="block space-y-1">
+          <span className="text-sm text-zinc-500">Room code</span>
+          <input
+            type="text"
+            value={code}
+            onChange={(e) => setCode(e.target.value.toUpperCase())}
+            placeholder="ABC123"
+            autoComplete="off"
+            autoCapitalize="characters"
+            maxLength={12}
+            className="min-h-12 w-full rounded-xl border border-zinc-700 bg-zinc-900 px-4 text-center font-mono text-xl tracking-widest uppercase outline-none focus:border-violet-500"
+          />
+        </label>
+        <label className="block space-y-1">
+          <span className="text-sm text-zinc-500">Nickname</span>
+          <input
+            type="text"
+            value={nickname}
+            onChange={(e) => setNicknameInput(e.target.value)}
+            placeholder="Your name on the queue"
+            autoComplete="nickname"
+            maxLength={32}
+            className="min-h-12 w-full rounded-xl border border-zinc-700 bg-zinc-900 px-4 outline-none focus:border-violet-500"
+          />
+        </label>
         <button
           type="submit"
           disabled={joining}
