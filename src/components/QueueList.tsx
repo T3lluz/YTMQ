@@ -22,20 +22,11 @@ function InsertModeBadge({ mode }: { mode: QueueInsertMode }) {
   )
 }
 
-function MetaLine({
-  mode,
-  addedBy,
-}: {
-  mode: QueueInsertMode
-  addedBy?: string
-}) {
+function AddedByLine({ addedBy }: { addedBy?: string }) {
+  if (!addedBy) return null
+
   return (
-    <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-xs text-zinc-500">
-      <InsertModeBadge mode={mode} />
-      {addedBy && (
-        <span className="min-w-0 truncate">Added by {addedBy}</span>
-      )}
-    </div>
+    <p className="mt-0.5 truncate text-xs text-zinc-500">Added by {addedBy}</p>
   )
 }
 
@@ -89,14 +80,16 @@ export function QueueList({
               className="h-14 w-14 shrink-0 rounded-lg object-cover"
             />
             <div className="min-w-0 flex-1">
-              <p className="truncate font-medium">{item.title}</p>
+              <div className="flex min-w-0 items-center gap-2">
+                <p className="min-w-0 flex-1 truncate font-medium">
+                  {item.title}
+                </p>
+                <InsertModeBadge mode={item.insert_mode ?? 'play_next'} />
+              </div>
               <p className="truncate text-sm text-zinc-400">
                 {item.channel_title || 'Unknown artist'}
               </p>
-              <MetaLine
-                mode={item.insert_mode ?? 'play_next'}
-                addedBy={item.added_by}
-              />
+              <AddedByLine addedBy={item.added_by} />
             </div>
             <div className="flex shrink-0 flex-col gap-1">
               {showYtMusicLink && (
