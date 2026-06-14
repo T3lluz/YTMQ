@@ -3,6 +3,10 @@ import {
   fetchYtmAlbumTracks,
   fetchYtmArtistDetail,
   fetchYtmArtistTracks,
+  fetchYtmCharts,
+  fetchYtmDiscover,
+  fetchYtmMoodPlaylists,
+  fetchYtmPlaylistTracks,
   searchYtmAll,
   searchYtmArtists,
   searchYtmSongs,
@@ -22,6 +26,10 @@ type SearchType =
   | 'channel_tracks'
   | 'artist_detail'
   | 'album_tracks'
+  | 'discover'
+  | 'charts'
+  | 'playlist_tracks'
+  | 'mood_playlists'
 
 function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -57,6 +65,8 @@ async function parseBody(req: Request): Promise<{
   type: SearchType
   channelId?: string
   browseId?: string
+  country?: string
+  params?: string
 }> {
   if (req.method === 'GET') {
     return parseRequest(req)
@@ -68,12 +78,16 @@ async function parseBody(req: Request): Promise<{
       type?: SearchType
       channelId?: string
       browseId?: string
+      country?: string
+      params?: string
     }
     return {
       q: body.q?.trim() ?? '',
       type: body.type ?? 'all',
       channelId: body.channelId,
       browseId: body.browseId,
+      country: body.country,
+      params: body.params,
     }
   } catch {
     return parseRequest(req)
@@ -86,7 +100,33 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { q, type, channelId, browseId } = await parseBody(req)
+    const { q, type, channelId, browseId, country, params } = await parseBody(req)
+
+    if (type === 'discover') {
+      const discover = await fetchYtmDiscover(country ?? 'ZZ')
+      return jsonResponse(discover)
+    }
+
+    if (type === 'charts') {
+      const charts = await fetchYtmCharts(country ?? 'ZZ')
+      return jsonResponse(charts)
+    }
+
+    if (type === 'playlist_tracks') {
+      if (!browseId) {
+        return jsonResponse({ error: 'browseId is required' }, 400)
+      }
+      const results = await fetchYtmPlaylistTracks(browseId)
+      return jsonResponse({ results })
+    }
+
+    if (type === 'mood_playlists') {
+      if (!params) {
+        return jsonResponse({ error: 'params is required' }, 400)
+      }
+      const playlists = await fetchYtmMoodPlaylists(params)
+      return jsonResponse({ playlists })
+    }
 
     if (type === 'channel_tracks') {
       if (!channelId) {

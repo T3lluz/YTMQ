@@ -6,6 +6,7 @@ import {
   type SearchFilter,
   type SearchResultItem,
 } from '../lib/search'
+import { SearchDiscover } from './SearchDiscover'
 import {
   defaultThumbnail,
   type AddTrackInput,
@@ -380,9 +381,7 @@ export function SearchTab({ nickname, onAdd, onAdded }: SearchTabProps) {
       )}
 
       {query.trim().length < 2 ? (
-        <p className="py-8 text-center text-sm text-zinc-500">
-          Type at least 2 characters to search YouTube Music
-        </p>
+        <SearchDiscover renderSongRow={renderSongRow} />
       ) : loading ? (
         <p className="py-8 text-center text-zinc-500">Searching…</p>
       ) : results.length === 0 ? (

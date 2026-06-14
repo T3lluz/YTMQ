@@ -598,6 +598,19 @@ function findArtistTopSongsEndpoint(
 }
 
 function playlistShelfFromData(data: JsonObject): JsonObject | null {
+  const twoColumn = (
+    data.contents as {
+      twoColumnBrowseResultsRenderer?: {
+        secondaryContents?: {
+          sectionListRenderer?: { contents?: Array<JsonObject> }
+        }
+      }
+    }
+  )?.twoColumnBrowseResultsRenderer?.secondaryContents?.sectionListRenderer
+    ?.contents?.[0]?.musicPlaylistShelfRenderer
+
+  if (twoColumn) return twoColumn as JsonObject
+
   const primary = (
     data.contents as {
       singleColumnBrowseResultsRenderer?: {
@@ -762,6 +775,269 @@ function collectAlbumTracks(data: JsonObject, limit: number): YtmSearchResult[] 
   }
 
   return results.slice(0, limit)
+}
+
+export type YtmChartPlaylist = {
+  title: string
+  browseId: string
+  thumbnail: string
+}
+
+export type YtmMoodCategory = {
+  title: string
+  params: string
+}
+
+export type YtmMoodSection = {
+  title: string
+  categories: YtmMoodCategory[]
+}
+
+export type YtmDiscover = {
+  country: string
+  countries: string[]
+  trending: YtmSearchResult[]
+  charts: YtmChartPlaylist[]
+  moods: YtmMoodSection[]
+}
+
+function parseChartCountryOptions(data: JsonObject): string[] {
+  const mutations =
+    (
+      data.frameworkUpdates as {
+        entityBatchUpdate?: {
+          mutations?: Array<{
+            payload?: {
+              musicFormBooleanChoice?: { opaqueToken?: string }
+            }
+          }>
+        }
+      }
+    )?.entityBatchUpdate?.mutations ?? []
+
+  const options = mutations
+    .map((m) => m.payload?.musicFormBooleanChoice?.opaqueToken)
+    .filter((code): code is string => typeof code === 'string' && code.length === 2)
+
+  return [...new Set(options)]
+}
+
+function parseChartPlaylists(data: JsonObject): YtmChartPlaylist[] {
+  const playlists: YtmChartPlaylist[] = []
+  const seen = new Set<string>()
+
+  for (const section of browseSections(data)) {
+    const carousel = section.musicCarouselShelfRenderer as JsonObject | undefined
+    if (!carousel?.contents) continue
+
+    const label = sectionLabel(section).toLowerCase()
+    if (!/chart|video|daily|top|trending/.test(label)) continue
+
+    for (const entry of carousel.contents as Array<JsonObject>) {
+      const row = entry.musicTwoRowItemRenderer as JsonObject | undefined
+      if (!row) continue
+
+      const playlistBrowseId = browseIdFromNav(row.navigationEndpoint)
+      if (!playlistBrowseId?.startsWith('VL') || seen.has(playlistBrowseId)) continue
+      seen.add(playlistBrowseId)
+
+      const title = runsText(
+        (row.title as { runs?: Array<{ text?: string }> })?.runs,
+      )
+      if (!title) continue
+
+      playlists.push({
+        title,
+        browseId: playlistBrowseId,
+        thumbnail: pickMusicThumbnail(
+          (row.thumbnailRenderer as { musicThumbnailRenderer?: unknown })
+            ?.musicThumbnailRenderer ?? row.thumbnail,
+        ),
+      })
+    }
+  }
+
+  return playlists
+}
+
+function browseIdFromNav(endpoint: unknown): string | null {
+  return (
+    browseId(endpoint) ??
+    (
+      endpoint as {
+        browseEndpoint?: { browseId?: string }
+      }
+    )?.browseEndpoint?.browseId ??
+    null
+  )
+}
+
+function collectCarouselSongs(
+  section: JsonObject,
+  limit: number,
+): YtmSearchResult[] {
+  const carousel = section.musicCarouselShelfRenderer as JsonObject | undefined
+  if (!carousel?.contents) return []
+
+  const results: YtmSearchResult[] = []
+  const seen = new Set<string>()
+
+  for (const entry of carousel.contents as Array<JsonObject>) {
+    const parsed = parseSongEntry(entry)
+    if (!parsed || parsed.type !== 'song' || seen.has(parsed.id)) continue
+    seen.add(parsed.id)
+    results.push(parsed)
+    if (results.length >= limit) break
+  }
+
+  return results
+}
+
+function parseMoodCategories(data: JsonObject): YtmMoodSection[] {
+  const sections: YtmMoodSection[] = []
+
+  for (const section of browseSections(data)) {
+    const grid = section.gridRenderer as JsonObject | undefined
+    if (!grid?.items) continue
+
+    const title = runsText(
+      (grid.header as {
+        gridHeaderRenderer?: { title?: { runs?: Array<{ text?: string }> } }
+      })?.gridHeaderRenderer?.title?.runs,
+    )
+
+    const categories: YtmMoodCategory[] = []
+    for (const entry of grid.items as Array<JsonObject>) {
+      const button = entry.musicNavigationButtonRenderer as JsonObject | undefined
+      if (!button) continue
+
+      const params = (
+        button.clickCommand as {
+          browseEndpoint?: { params?: string }
+        }
+      )?.browseEndpoint?.params
+
+      const categoryTitle = runsText(
+        (button.buttonText as { runs?: Array<{ text?: string }> })?.runs,
+      )
+
+      if (!params || !categoryTitle) continue
+      categories.push({ title: categoryTitle, params })
+    }
+
+    if (categories.length > 0) {
+      sections.push({ title: title || 'Browse', categories })
+    }
+  }
+
+  return sections
+}
+
+function parseMoodPlaylists(data: JsonObject): YtmChartPlaylist[] {
+  const playlists: YtmChartPlaylist[] = []
+  const seen = new Set<string>()
+
+  for (const section of browseSections(data)) {
+    const carousel = section.musicCarouselShelfRenderer as JsonObject | undefined
+    const grid = section.gridRenderer as JsonObject | undefined
+    const entries = (carousel?.contents ?? grid?.items ?? []) as Array<JsonObject>
+
+    for (const entry of entries) {
+      const row = entry.musicTwoRowItemRenderer as JsonObject | undefined
+      if (!row) continue
+
+      const playlistBrowseId = browseIdFromNav(row.navigationEndpoint)
+      if (!playlistBrowseId || seen.has(playlistBrowseId)) continue
+      seen.add(playlistBrowseId)
+
+      const title = runsText(
+        (row.title as { runs?: Array<{ text?: string }> })?.runs,
+      )
+      if (!title) continue
+
+      playlists.push({
+        title,
+        browseId: playlistBrowseId,
+        thumbnail: pickMusicThumbnail(
+          (row.thumbnailRenderer as { musicThumbnailRenderer?: unknown })
+            ?.musicThumbnailRenderer ?? row.thumbnail,
+        ),
+      })
+    }
+  }
+
+  return playlists
+}
+
+export async function fetchYtmExploreTrending(
+  limit = 12,
+): Promise<YtmSearchResult[]> {
+  const data = await ytmusicRequest('browse', { browseId: 'FEmusic_explore' })
+
+  for (const section of browseSections(data)) {
+    const label = sectionLabel(section).toLowerCase()
+    if (!/trending/.test(label)) continue
+    const songs = collectCarouselSongs(section, limit)
+    if (songs.length > 0) return songs
+  }
+
+  return []
+}
+
+export async function fetchYtmCharts(
+  country = 'ZZ',
+): Promise<{ country: string; countries: string[]; playlists: YtmChartPlaylist[] }> {
+  const data = await ytmusicRequest('browse', {
+    browseId: 'FEmusic_charts',
+    formData: { selectedValues: [country] },
+  })
+
+  return {
+    country,
+    countries: parseChartCountryOptions(data),
+    playlists: parseChartPlaylists(data),
+  }
+}
+
+export async function fetchYtmMoodCategories(): Promise<YtmMoodSection[]> {
+  const data = await ytmusicRequest('browse', {
+    browseId: 'FEmusic_moods_and_genres',
+  })
+  return parseMoodCategories(data)
+}
+
+export async function fetchYtmMoodPlaylists(
+  params: string,
+): Promise<YtmChartPlaylist[]> {
+  const data = await ytmusicRequest('browse', {
+    browseId: 'FEmusic_moods_and_genres_category',
+    params,
+  })
+  return parseMoodPlaylists(data)
+}
+
+export async function fetchYtmPlaylistTracks(
+  browseId: string,
+  limit = 30,
+): Promise<YtmSearchResult[]> {
+  const songs = await fetchPaginatedPlaylistSongs(browseId)
+  return songs.slice(0, limit)
+}
+
+export async function fetchYtmDiscover(country = 'ZZ'): Promise<YtmDiscover> {
+  const [trending, charts, moods] = await Promise.all([
+    fetchYtmExploreTrending(10),
+    fetchYtmCharts(country),
+    fetchYtmMoodCategories(),
+  ])
+
+  return {
+    country: charts.country,
+    countries: charts.countries,
+    trending,
+    charts: charts.playlists,
+    moods,
+  }
 }
 
 export async function searchYtmSongs(
