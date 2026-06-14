@@ -1,5 +1,12 @@
+import {
+  getOrStartPlaybackSince,
+  resetPlaybackSession,
+} from './playbackSession'
+
 /** postMessage type when the bridge subscribes on music.youtube.com */
 export const YTMQ_CONNECTED_MESSAGE = 'ytmq:connected' as const
+
+const HOST_INITIALIZED_KEY = 'ytmq_host_initialized'
 
 const viteBasePath = () => import.meta.env.BASE_URL.replace(/\/$/, '')
 
@@ -83,6 +90,39 @@ export function buildYtmConnectDeepLink(
     ytmqBridge: bridgeUrls.join(','),
   })
   return `https://music.youtube.com/?${q}`
+}
+
+/** Whether this browser completed a successful YTMQ ↔ YT Music link before. */
+export function isYtmHostInitialized(): boolean {
+  try {
+    return localStorage.getItem(HOST_INITIALIZED_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+export function markYtmHostInitialized(): void {
+  try {
+    localStorage.setItem(HOST_INITIALIZED_KEY, '1')
+  } catch {
+    /* private mode */
+  }
+}
+
+/** Open music.youtube.com; userscript loads the bridge from URL params or saved session. */
+export function openYtmMusicWindow(
+  roomId: string,
+  options?: { resetSession?: boolean },
+): void {
+  const since = options?.resetSession
+    ? resetPlaybackSession(roomId)
+    : getOrStartPlaybackSince(roomId)
+  const link = buildYtmConnectDeepLink(roomId, since)
+  window.open(
+    link ?? 'https://music.youtube.com',
+    '_blank',
+    'noopener,noreferrer',
+  )
 }
 
 /** Tampermonkey / Violentmonkey install URL (hosted on your Pages site). */

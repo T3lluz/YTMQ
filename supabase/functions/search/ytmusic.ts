@@ -111,28 +111,9 @@ function browseId(endpoint: unknown): string | null {
   return browse?.browseId ?? null
 }
 
-function songVideoType(item: JsonObject): string | null {
-  const playEndpoint = (
-    item.overlay as {
-      musicItemThumbnailOverlayRenderer?: {
-        content?: {
-          musicPlayButtonRenderer?: {
-            playNavigationEndpoint?: {
-              watchEndpoint?: {
-                watchEndpointMusicSupportedConfigs?: {
-                  watchEndpointMusicConfig?: { musicVideoType?: string }
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-  )?.musicItemThumbnailOverlayRenderer?.content?.musicPlayButtonRenderer
-    ?.playNavigationEndpoint
-
+function musicVideoTypeFromPlayEndpoint(endpoint: unknown): string | null {
   return (
-    playEndpoint as {
+    endpoint as {
       watchEndpoint?: {
         watchEndpointMusicSupportedConfigs?: {
           watchEndpointMusicConfig?: { musicVideoType?: string }
@@ -143,9 +124,48 @@ function songVideoType(item: JsonObject): string | null {
     ?.musicVideoType ?? null
 }
 
+function songVideoType(item: JsonObject): string | null {
+  const playEndpoint = (
+    item.overlay as {
+      musicItemThumbnailOverlayRenderer?: {
+        content?: {
+          musicPlayButtonRenderer?: {
+            playNavigationEndpoint?: unknown
+          }
+        }
+      }
+    }
+  )?.musicItemThumbnailOverlayRenderer?.content?.musicPlayButtonRenderer
+    ?.playNavigationEndpoint
+
+  return musicVideoTypeFromPlayEndpoint(playEndpoint)
+}
+
+function songVideoTypeFromTwoRow(item: JsonObject): string | null {
+  const playEndpoint = (
+    item.thumbnailOverlay as {
+      musicItemThumbnailOverlayRenderer?: {
+        content?: {
+          musicPlayButtonRenderer?: {
+            playNavigationEndpoint?: unknown
+          }
+        }
+      }
+    }
+  )?.musicItemThumbnailOverlayRenderer?.content?.musicPlayButtonRenderer
+    ?.playNavigationEndpoint
+
+  return musicVideoTypeFromPlayEndpoint(playEndpoint)
+}
+
+/** Audio tracks only — exclude official music videos, UGC, and compilations. */
 function isMusicTrackItem(item: JsonObject): boolean {
-  const mvType = songVideoType(item)
-  return mvType !== 'MUSIC_VIDEO_TYPE_UGC'
+  const mvType = songVideoType(item) ?? songVideoTypeFromTwoRow(item)
+  if (!mvType) return true
+  return (
+    mvType === 'MUSIC_VIDEO_TYPE_ATV' ||
+    mvType === 'MUSIC_VIDEO_TYPE_PRIVATELY_OWNED_TRACK'
+  )
 }
 
 function parseSongItem(item: JsonObject): YtmSearchResult | null {
@@ -227,6 +247,8 @@ function parseArtistItem(item: JsonObject): YtmSearchResult | null {
 }
 
 function parseSongTwoRow(item: JsonObject): YtmSearchResult | null {
+  if (!isMusicTrackItem(item)) return null
+
   const videoId =
     watchVideoId(item.navigationEndpoint) ??
     watchVideoId(
@@ -822,7 +844,26 @@ function parseChartCountryOptions(data: JsonObject): string[] {
   return [...new Set(options)]
 }
 
-function parseChartPlaylists(data: JsonObject): YtmChartPlaylist[] {
+function isSongChartTitle(title: string): boolean {
+  const t = title.toLowerCase()
+  if (/\bvideo\b|\bmv\b|\bshorts\b/.test(t)) return false
+  return /\bsong|\btop|\bdaily|\bchart|\btrending|\b100\b/.test(t)
+}
+
+function normalizeChartTitle(title: string, country: string): string {
+  if (country === 'ZZ') {
+    return title
+      .replace(/\bUnited States\b/i, 'Worldwide')
+      .replace(/\bUS\b(?=\s*$|\s*[-–—])/i, 'Worldwide')
+      .replace(/\(\s*US\s*\)/i, '(Worldwide)')
+  }
+  return title
+}
+
+function parseChartPlaylists(
+  data: JsonObject,
+  country = 'ZZ',
+): YtmChartPlaylist[] {
   const playlists: YtmChartPlaylist[] = []
   const seen = new Set<string>()
 
@@ -831,7 +872,8 @@ function parseChartPlaylists(data: JsonObject): YtmChartPlaylist[] {
     if (!carousel?.contents) continue
 
     const label = sectionLabel(section).toLowerCase()
-    if (!/chart|video|daily|top|trending/.test(label)) continue
+    if (!/chart|daily|top|trending/.test(label)) continue
+    if (/\bvideo\b|\bmv\b/.test(label)) continue
 
     for (const entry of carousel.contents as Array<JsonObject>) {
       const row = entry.musicTwoRowItemRenderer as JsonObject | undefined
@@ -841,13 +883,13 @@ function parseChartPlaylists(data: JsonObject): YtmChartPlaylist[] {
       if (!playlistBrowseId?.startsWith('VL') || seen.has(playlistBrowseId)) continue
       seen.add(playlistBrowseId)
 
-      const title = runsText(
+      const rawTitle = runsText(
         (row.title as { runs?: Array<{ text?: string }> })?.runs,
       )
-      if (!title) continue
+      if (!rawTitle || !isSongChartTitle(rawTitle)) continue
 
       playlists.push({
-        title,
+        title: normalizeChartTitle(rawTitle, country),
         browseId: playlistBrowseId,
         thumbnail: pickMusicThumbnail(
           (row.thumbnailRenderer as { musicThumbnailRenderer?: unknown })
@@ -995,7 +1037,7 @@ export async function fetchYtmCharts(
   return {
     country,
     countries: parseChartCountryOptions(data),
-    playlists: parseChartPlaylists(data),
+    playlists: parseChartPlaylists(data, country),
   }
 }
 

@@ -2,9 +2,11 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { resetPlaybackSession } from '../lib/playbackSession'
 import {
   bridgeSiteRoot,
-  buildYtmConnectDeepLink,
   buildYtmConnectSnippet,
+  isYtmHostInitialized,
+  markYtmHostInitialized,
   needsHttpsBridgeOrigin,
+  openYtmMusicWindow,
   YTMQ_CONNECTED_MESSAGE,
   ytmUserscriptInstallUrl,
 } from '../lib/ytmusicConnect'
@@ -34,14 +36,15 @@ export function YtMusicConnect({ roomId }: YtMusicConnectProps) {
     [roomId, playbackSince],
   )
 
+  const hostInitialized = isYtmHostInitialized()
+
   const markDone = useCallback(() => {
     sessionStorage.setItem(doneKey(roomId), '1')
+    markYtmHostInitialized()
     setStep('done')
   }, [roomId])
 
   useEffect(() => {
-    if (step !== 'waiting') return
-
     function onMessage(event: MessageEvent) {
       if (event.data?.type !== YTMQ_CONNECTED_MESSAGE) return
       if (event.data.roomId !== roomId) return
@@ -50,19 +53,18 @@ export function YtMusicConnect({ roomId }: YtMusicConnectProps) {
 
     window.addEventListener('message', onMessage)
     return () => window.removeEventListener('message', onMessage)
-  }, [step, roomId, markDone])
+  }, [roomId, markDone])
 
   const startConnect = useCallback(() => {
     const since = resetPlaybackSession(roomId)
     setPlaybackSince(since)
-    const link = buildYtmConnectDeepLink(roomId, since)
-    window.open(
-      link ?? 'https://music.youtube.com',
-      '_blank',
-      'noopener,noreferrer',
-    )
+    openYtmMusicWindow(roomId, { resetSession: false })
     setStep('waiting')
     setShowManual(false)
+  }, [roomId])
+
+  const reopenYtm = useCallback(() => {
+    openYtmMusicWindow(roomId)
   }, [roomId])
 
   const copySnippet = useCallback(async () => {
@@ -107,17 +109,26 @@ export function YtMusicConnect({ roomId }: YtMusicConnectProps) {
             Guest picks play next in YouTube Music. Keep this tab and YouTube Music open.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => {
-            sessionStorage.removeItem(doneKey(roomId))
-            setPlaybackSince(null)
-            setStep('connect')
-          }}
-          className="shrink-0 text-xs text-zinc-500 underline"
-        >
-          Reconnect
-        </button>
+        <div className="flex shrink-0 flex-col items-end gap-1">
+          <button
+            type="button"
+            onClick={reopenYtm}
+            className="text-xs font-medium text-violet-300 underline"
+          >
+            Open YouTube Music
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              sessionStorage.removeItem(doneKey(roomId))
+              setPlaybackSince(null)
+              setStep('connect')
+            }}
+            className="text-xs text-zinc-500 underline"
+          >
+            Reconnect
+          </button>
+        </div>
       </section>
     )
   }
@@ -175,22 +186,29 @@ export function YtMusicConnect({ roomId }: YtMusicConnectProps) {
         links your queue. Use Chrome on desktop (not the phone app).
       </p>
       <ol className="list-decimal space-y-1 pl-5 text-xs text-zinc-500">
-        <li>Install the helper below (once), then click Connect.</li>
-        <li>On YouTube Music, open the queue panel (icon by the player).</li>
-        <li>Wait for the &quot;YTMQ connected&quot; toast, then let guests add songs.</li>
+        {!hostInitialized && userscriptUrl && (
+          <li>
+            Install the{' '}
+            <a
+              href={userscriptUrl}
+              className="text-violet-300 underline"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              YTMQ helper
+            </a>{' '}
+            in Tampermonkey (one time).
+          </li>
+        )}
+        <li>Click Connect — a YouTube Music tab opens and links automatically.</li>
+        <li>Open the queue panel on YouTube Music and wait for &quot;YTMQ connected&quot;.</li>
+        <li>
+          After that, every new YouTube Music tab from here reconnects on its own.
+        </li>
       </ol>
-      {userscriptUrl && (
-        <p className="text-xs text-zinc-500">
-          First time only:{' '}
-          <a
-            href={userscriptUrl}
-            className="text-violet-300 underline"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            install YTMQ helper
-          </a>{' '}
-          (Tampermonkey) — then Connect just works.
+      {hostInitialized && (
+        <p className="text-xs text-emerald-400/90">
+          Helper already set up on this browser — just click Connect.
         </p>
       )}
       <button

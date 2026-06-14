@@ -70,6 +70,13 @@ function songsOnly(items: SearchResultItem[]): SearchResultItem[] {
   return items.filter((item) => item.type === 'song')
 }
 
+function songChartsOnly(charts: ChartPlaylist[]): ChartPlaylist[] {
+  return charts.filter((chart) => {
+    const t = chart.title.toLowerCase()
+    return !/\bvideo\b|\bmv\b|\bshorts\b/.test(t)
+  })
+}
+
 export async function searchByFilter(
   query: string,
   filter: SearchFilter,
@@ -126,7 +133,7 @@ export function countryLabel(code: string): string {
 }
 
 export async function fetchDiscover(
-  country = guessCountryCode(),
+  country = 'ZZ',
 ): Promise<DiscoverFeed> {
   try {
     const data = await invokeSearch({ type: 'discover', country })
@@ -136,7 +143,7 @@ export async function fetchDiscover(
         country: feed.country ?? country,
         countries: feed.countries ?? [],
         trending: songsOnly(feed.trending ?? []),
-        charts: feed.charts ?? [],
+        charts: songChartsOnly(feed.charts ?? []),
         moods: feed.moods ?? [],
       }
     }

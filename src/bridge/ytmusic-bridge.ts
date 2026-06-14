@@ -118,6 +118,27 @@ function log(msg: string, ...rest: unknown[]) {
   console.log('[YTMQ]', msg, ...rest)
 }
 
+const SESSION_KEY = 'ytmq_session'
+const SESSION_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000
+
+function readStoredSession(): BridgeParams | null {
+  try {
+    const raw = localStorage.getItem(SESSION_KEY)
+    if (!raw) return null
+    const stored = JSON.parse(raw) as BridgeParams & { at?: number }
+    if (!stored.roomId || !stored.sb || !stored.key) return null
+    if (stored.at && Date.now() - stored.at >= SESSION_MAX_AGE_MS) return null
+    return {
+      roomId: stored.roomId,
+      sb: stored.sb,
+      key: stored.key,
+      since: stored.since || new Date().toISOString(),
+    }
+  } catch {
+    return null
+  }
+}
+
 function readParams(): BridgeParams | null {
   const inline = window.__YTMQ_BRIDGE_PARAMS__
   const current = document.currentScript
@@ -133,8 +154,8 @@ function readParams(): BridgeParams | null {
   const since =
     inline?.since ?? fromQuery.get('since') ?? new Date().toISOString()
 
-  if (!roomId || !sb || !key) return null
-  return { roomId, sb, key, since }
+  if (roomId && sb && key) return { roomId, sb, key, since }
+  return readStoredSession()
 }
 
 function isInPlaybackSession(createdAt: string, playbackSince: string): boolean {

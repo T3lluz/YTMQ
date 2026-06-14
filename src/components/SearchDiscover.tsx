@@ -4,7 +4,6 @@ import {
   fetchDiscover,
   fetchMoodCategoryTracks,
   fetchPlaylistTracks,
-  guessCountryCode,
   type ChartPlaylist,
   type DiscoverFeed,
   type MoodCategory,
@@ -20,7 +19,7 @@ type SearchDiscoverProps = {
 }
 
 export function SearchDiscover({ renderSongRow }: SearchDiscoverProps) {
-  const [country, setCountry] = useState(guessCountryCode)
+  const [country, setCountry] = useState('ZZ')
   const [feedState, setFeedState] = useState<{
     country: string
     feed: DiscoverFeed | null

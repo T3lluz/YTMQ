@@ -96,7 +96,66 @@ function sectionLabel(section: JsonObject): string {
   return ''
 }
 
+function musicVideoTypeFromPlayEndpoint(endpoint: unknown): string | null {
+  return (
+    endpoint as {
+      watchEndpoint?: {
+        watchEndpointMusicSupportedConfigs?: {
+          watchEndpointMusicConfig?: { musicVideoType?: string }
+        }
+      }
+    }
+  )?.watchEndpoint?.watchEndpointMusicSupportedConfigs?.watchEndpointMusicConfig
+    ?.musicVideoType ?? null
+}
+
+function songVideoTypeFromListItem(item: JsonObject): string | null {
+  const playEndpoint = (
+    item.overlay as {
+      musicItemThumbnailOverlayRenderer?: {
+        content?: {
+          musicPlayButtonRenderer?: {
+            playNavigationEndpoint?: unknown
+          }
+        }
+      }
+    }
+  )?.musicItemThumbnailOverlayRenderer?.content?.musicPlayButtonRenderer
+    ?.playNavigationEndpoint
+
+  return musicVideoTypeFromPlayEndpoint(playEndpoint)
+}
+
+function songVideoTypeFromTwoRow(item: JsonObject): string | null {
+  const playEndpoint = (
+    item.thumbnailOverlay as {
+      musicItemThumbnailOverlayRenderer?: {
+        content?: {
+          musicPlayButtonRenderer?: {
+            playNavigationEndpoint?: unknown
+          }
+        }
+      }
+    }
+  )?.musicItemThumbnailOverlayRenderer?.content?.musicPlayButtonRenderer
+    ?.playNavigationEndpoint
+
+  return musicVideoTypeFromPlayEndpoint(playEndpoint)
+}
+
+/** Audio tracks only — exclude official music videos, UGC, and compilations. */
+function isMusicTrackItem(item: JsonObject): boolean {
+  const mvType = songVideoTypeFromListItem(item) ?? songVideoTypeFromTwoRow(item)
+  if (!mvType) return true
+  return (
+    mvType === 'MUSIC_VIDEO_TYPE_ATV' ||
+    mvType === 'MUSIC_VIDEO_TYPE_PRIVATELY_OWNED_TRACK'
+  )
+}
+
 function parseSongItem(item: JsonObject): SearchResultItem | null {
+  if (!isMusicTrackItem(item)) return null
+
   const videoId = watchVideoId(item.navigationEndpoint)
   if (!videoId) return null
 
@@ -130,7 +189,7 @@ function parseSongEntry(entry: JsonObject): SearchResultItem | null {
   if (list) return parseSongItem(list)
 
   const twoRow = entry.musicTwoRowItemRenderer as JsonObject | undefined
-  if (!twoRow) return null
+  if (!twoRow || !isMusicTrackItem(twoRow)) return null
 
   const videoId = watchVideoId(twoRow.navigationEndpoint)
   if (!videoId) return null
@@ -186,14 +245,33 @@ function parseTrending(data: JsonObject, limit = 10): SearchResultItem[] {
   return []
 }
 
-function parseCharts(data: JsonObject): ChartPlaylist[] {
+function isSongChartTitle(title: string): boolean {
+  const t = title.toLowerCase()
+  if (/\bvideo\b|\bmv\b|\bshorts\b/.test(t)) return false
+  return /\bsong|\btop|\bdaily|\bchart|\btrending|\b100\b/.test(t)
+}
+
+function normalizeChartTitle(title: string, country: string): string {
+  if (country === 'ZZ') {
+    return title
+      .replace(/\bUnited States\b/i, 'Worldwide')
+      .replace(/\bUS\b(?=\s*$|\s*[-–—])/i, 'Worldwide')
+      .replace(/\(\s*US\s*\)/i, '(Worldwide)')
+  }
+  return title
+}
+
+function parseCharts(data: JsonObject, country = 'ZZ'): ChartPlaylist[] {
   const playlists: ChartPlaylist[] = []
   const seen = new Set<string>()
 
   for (const section of browseSections(data)) {
     const carousel = section.musicCarouselShelfRenderer as JsonObject | undefined
     if (!carousel?.contents) continue
-    if (!/chart|video|daily|top/i.test(sectionLabel(section).toLowerCase())) {
+    if (!/chart|daily|top/i.test(sectionLabel(section).toLowerCase())) {
+      continue
+    }
+    if (/\bvideo\b|\bmv\b/.test(sectionLabel(section).toLowerCase())) {
       continue
     }
 
@@ -204,13 +282,13 @@ function parseCharts(data: JsonObject): ChartPlaylist[] {
       if (!id?.startsWith('VL') || seen.has(id)) continue
       seen.add(id)
 
-      const title = runsText(
+      const rawTitle = runsText(
         (row.title as { runs?: Array<{ text?: string }> })?.runs,
       )
-      if (!title) continue
+      if (!rawTitle || !isSongChartTitle(rawTitle)) continue
 
       playlists.push({
-        title,
+        title: normalizeChartTitle(rawTitle, country),
         browseId: id,
         thumbnail: pickThumb(
           (row.thumbnailRenderer as { musicThumbnailRenderer?: unknown })
@@ -363,7 +441,7 @@ export async function fetchDiscoverViaProxy(
     country,
     countries: parseCountries(chartsData),
     trending: parseTrending(explore, 10),
-    charts: parseCharts(chartsData),
+    charts: parseCharts(chartsData, country),
     moods: parseMoods(moodsData),
   }
 }
