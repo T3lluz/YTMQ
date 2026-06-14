@@ -1331,6 +1331,7 @@ async function runBridge() {
 
   let lastPlaybackKey = ''
   let lastPublishedVideoId = ''
+  let playbackJoined = false
 
   const playbackChannel = supabase.channel(`ytmq-playback:${roomId}`)
 
@@ -1373,6 +1374,10 @@ async function runBridge() {
       }
     }
 
+    // Defer realtime sends until the channel is actually joined; otherwise
+    // supabase-js falls back to REST and logs a deprecation warning.
+    if (!playbackJoined) return
+
     void playbackChannel.send({
       type: 'broadcast',
       event: 'now_playing',
@@ -1380,9 +1385,15 @@ async function runBridge() {
     })
   }
 
-  void playbackChannel.subscribe()
+  void playbackChannel.subscribe((status) => {
+    if (status === 'SUBSCRIBED') {
+      playbackJoined = true
+      publishNowPlaying()
+    } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
+      playbackJoined = false
+    }
+  })
   const playbackTimer = window.setInterval(publishNowPlaying, 2000)
-  publishNowPlaying()
 
   const nextToastTimer = window.setInterval(() => {
     try {
@@ -1392,18 +1403,31 @@ async function runBridge() {
     }
   }, 500)
 
-  const { data: initial, error: loadError } = await supabase
-    .from('queue_items')
-    .select('id, video_id, title, created_at, insert_mode')
-    .eq('room_id', roomId)
-    .order('position', { ascending: true })
+  async function loadInitialQueue(): Promise<QueueRow[]> {
+    const primary = await supabase
+      .from('queue_items')
+      .select('id, video_id, title, created_at, insert_mode')
+      .eq('room_id', roomId)
+      .order('position', { ascending: true })
 
-  if (loadError) {
-    console.error('[YTMQ] Could not load queue', loadError.message)
-    return
+    if (!primary.error) return (primary.data ?? []) as QueueRow[]
+
+    // Fall back if the live schema is missing `insert_mode` (older deploy).
+    log('Initial queue load failed, retrying without insert_mode column:', primary.error.message)
+    const fallback = await supabase
+      .from('queue_items')
+      .select('id, video_id, title, created_at')
+      .eq('room_id', roomId)
+      .order('position', { ascending: true })
+
+    if (fallback.error) {
+      log('Initial queue load failed (continuing anyway):', fallback.error.message)
+      return []
+    }
+    return (fallback.data ?? []) as QueueRow[]
   }
 
-  const existingRows = (initial ?? []) as QueueRow[]
+  const existingRows = await loadInitialQueue()
   for (const row of existingRows) {
     trackRowVideo(row)
   }
@@ -1541,20 +1565,11 @@ async function runBridge() {
     addVideoToQueue: (videoId: string) => addVideoToYtm(videoId, 'queue'),
     removeVideoFromQueue: removeVideoFromQueueWithRetry,
     async syncAll() {
-      const { data, error } = await supabase
-        .from('queue_items')
-        .select('id, video_id, title, created_at, insert_mode')
-        .eq('room_id', roomId)
-        .order('position', { ascending: true })
-
-      if (error) {
-        log('Sync failed', error.message)
-        return 0
-      }
+      const rows = await loadInitialQueue()
 
       let added = 0
       // Reverse so "play next" inserts retain shared-queue order on YT Music.
-      for (const row of [...((data ?? []) as QueueRow[])].reverse()) {
+      for (const row of [...rows].reverse()) {
         if (!isInPlaybackSession(row.created_at, playbackSince)) continue
         if (syncedIds.has(row.id)) continue
         const mode = normalizeMode(row.insert_mode)
