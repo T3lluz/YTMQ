@@ -115,14 +115,15 @@ export function NowPlaying({
         <div className="ytmq-now-light ytmq-now-light-b" />
         <div className="ytmq-now-light ytmq-now-light-c" />
         <div className="ytmq-now-light ytmq-now-light-d" />
+        <div className="ytmq-now-light ytmq-now-light-e" />
       </div>
       <div
         aria-hidden
-        className="absolute inset-0 -z-10 bg-gradient-to-br from-zinc-950/55 via-zinc-950/45 to-zinc-950/65"
+        className="absolute inset-0 -z-10 bg-gradient-to-br from-zinc-950/40 via-zinc-950/30 to-zinc-950/55"
       />
       <div
         aria-hidden
-        className="absolute inset-0 -z-[5] bg-zinc-950/10 backdrop-blur-md"
+        className="absolute inset-0 -z-[5] bg-zinc-950/5 backdrop-blur-[6px]"
       />
 
       <div
@@ -141,11 +142,11 @@ export function NowPlaying({
 
         <div className="min-w-0 flex-1 pr-2">
           <p
-            className="text-[10px] font-semibold uppercase tracking-wider transition-colors duration-700"
+            className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider transition-colors duration-700"
             style={{ color: 'color-mix(in srgb, var(--np-accent-light) 88%, white)' }}
           >
-            Now playing
-            {stale ? ' · paused?' : ''}
+            {live && <Equalizer />}
+            {live ? 'Now playing' : 'Paused'}
           </p>
           <p className="truncate text-sm font-semibold text-white drop-shadow-sm sm:text-base">
             {nowPlaying.title}
@@ -198,8 +199,20 @@ export function NowPlaying({
         position={position}
         duration={nowPlaying.duration}
         compact={compact}
+        live={live}
       />
     </section>
+  )
+}
+
+function Equalizer() {
+  return (
+    <span className="ytmq-eq" aria-hidden>
+      <span className="ytmq-eq-bar" />
+      <span className="ytmq-eq-bar" />
+      <span className="ytmq-eq-bar" />
+      <span className="ytmq-eq-bar" />
+    </span>
   )
 }
 
@@ -251,17 +264,20 @@ type PlaybackProgressProps = {
   position: number
   duration?: number
   compact?: boolean
+  live?: boolean
 }
 
 function PlaybackProgress({
   position,
   duration,
   compact = false,
+  live = false,
 }: PlaybackProgressProps) {
   const hasDuration = duration != null && duration > 0
   const percent = hasDuration
     ? Math.min(100, Math.max(0, (position / duration) * 100))
     : 0
+  const remaining = hasDuration ? Math.max(0, duration - position) : 0
   const inset = compact ? 'px-3' : 'px-4'
 
   return (
@@ -277,9 +293,11 @@ function PlaybackProgress({
       aria-label="Track progress"
     >
       <div className={inset}>
-        <div className="ytmq-now-progress-track h-1.5 w-full overflow-hidden rounded-full">
+        <div className="ytmq-now-progress-track h-1.5 w-full overflow-visible rounded-full">
           <div
-            className="ytmq-now-progress-fill h-full rounded-full transition-[width] duration-300 ease-linear"
+            className={`ytmq-now-progress-fill h-full rounded-full transition-[width] duration-300 ease-linear ${
+              live && percent > 1 && percent < 99 ? 'is-live' : ''
+            }`}
             style={{ width: `${percent}%` }}
           />
         </div>
@@ -288,7 +306,9 @@ function PlaybackProgress({
           style={{ color: 'color-mix(in srgb, var(--np-accent-light) 55%, #a1a1aa)' }}
         >
           <span>{formatPlaybackTime(position)}</span>
-          <span>{hasDuration ? formatPlaybackTime(duration) : '--:--'}</span>
+          <span>
+            {hasDuration ? `-${formatPlaybackTime(remaining)}` : '--:--'}
+          </span>
         </div>
       </div>
     </div>

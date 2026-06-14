@@ -360,6 +360,39 @@ body {
   }
 }
 
+@keyframes ytmq-light-drift-e {
+  0%,
+  100% {
+    transform: translate(0%, 0%) rotate(-20deg) scale(1);
+  }
+  45% {
+    transform: translate(14%, -16%) rotate(8deg) scale(1.18);
+  }
+  75% {
+    transform: translate(-12%, 8%) rotate(-30deg) scale(0.9);
+  }
+}
+
+@keyframes ytmq-lights-breathe {
+  0%,
+  100% {
+    filter: saturate(1.25) brightness(1.02);
+  }
+  50% {
+    filter: saturate(1.6) brightness(1.22);
+  }
+}
+
+@keyframes ytmq-eq {
+  0%,
+  100% {
+    transform: scaleY(0.32);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+
 @keyframes ytmq-art-pulse {
   0%,
   100% {
@@ -381,59 +414,75 @@ body {
 .ytmq-now-lights {
   pointer-events: none;
   mix-blend-mode: screen;
+  filter: saturate(1.25);
+}
+
+.ytmq-now-lights.is-live {
+  animation: ytmq-lights-breathe 7s ease-in-out infinite;
 }
 
 .ytmq-now-light {
   position: absolute;
-  filter: blur(24px);
+  filter: blur(30px);
   will-change: transform;
 }
 
 .ytmq-now-light-a {
-  top: -15%;
-  left: -18%;
-  width: 65%;
-  height: 75%;
+  top: -22%;
+  left: -22%;
+  width: 78%;
+  height: 92%;
   border-radius: 42% 58% 64% 36% / 48% 42% 58% 52%;
-  background: rgb(var(--np-accent-rgb) / 0.72);
-  animation: ytmq-light-drift-a 14s ease-in-out infinite;
+  background: rgb(var(--np-accent-rgb) / 0.92);
+  animation: ytmq-light-drift-a 13s ease-in-out infinite;
 }
 
 .ytmq-now-light-b {
-  right: -18%;
-  top: 5%;
-  width: 58%;
-  height: 62%;
+  right: -22%;
+  top: -5%;
+  width: 70%;
+  height: 78%;
   border-radius: 58% 42% 38% 62% / 52% 58% 42% 48%;
-  background: color-mix(in srgb, var(--np-accent-light) 82%, white);
-  opacity: 0.7;
-  animation: ytmq-light-drift-b 17s ease-in-out infinite;
+  background: color-mix(in srgb, var(--np-accent-light) 86%, white);
+  opacity: 0.88;
+  animation: ytmq-light-drift-b 16s ease-in-out infinite;
 }
 
 .ytmq-now-light-c {
-  left: 18%;
-  bottom: -25%;
-  width: 50%;
-  height: 55%;
+  left: 14%;
+  bottom: -32%;
+  width: 62%;
+  height: 70%;
   border-radius: 63% 37% 54% 46% / 44% 56% 44% 56%;
-  background: rgb(var(--np-accent-rgb) / 0.55);
-  animation: ytmq-light-drift-c 11s ease-in-out infinite;
+  background: rgb(var(--np-accent-rgb) / 0.78);
+  animation: ytmq-light-drift-c 10s ease-in-out infinite;
 }
 
 .ytmq-now-light-d {
-  right: 10%;
-  bottom: -5%;
-  width: 40%;
-  height: 48%;
+  right: 6%;
+  bottom: -12%;
+  width: 52%;
+  height: 60%;
   border-radius: 30% 70% 70% 30% / 30% 30% 70% 70%;
-  background: color-mix(in srgb, var(--np-accent-light) 75%, white);
-  opacity: 0.55;
-  animation: ytmq-light-drift-d 19s ease-in-out infinite;
+  background: color-mix(in srgb, var(--np-accent-light) 78%, white);
+  opacity: 0.72;
+  animation: ytmq-light-drift-d 18s ease-in-out infinite;
+}
+
+.ytmq-now-light-e {
+  left: 32%;
+  top: 18%;
+  width: 46%;
+  height: 56%;
+  border-radius: 52% 48% 44% 56% / 56% 44% 56% 44%;
+  background: rgb(var(--np-accent-rgb) / 0.6);
+  opacity: 0.7;
+  animation: ytmq-light-drift-e 21s ease-in-out infinite;
 }
 
 .ytmq-now-lights:not(.is-live) .ytmq-now-light {
   animation-play-state: paused;
-  opacity: 0.45;
+  opacity: 0.5;
 }
 
 .ytmq-now-art.is-live {
@@ -445,11 +494,57 @@ body {
 }
 
 .ytmq-now-progress-fill {
+  position: relative;
   background: linear-gradient(
     90deg,
     var(--np-accent) 0%,
     var(--np-accent-light) 100%
   );
+}
+
+/* Glowing head at the leading edge of the progress fill while live. */
+.ytmq-now-progress-fill.is-live::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  right: 0;
+  width: 7px;
+  height: 7px;
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--np-accent-light) 70%, white);
+  transform: translate(50%, -50%);
+  box-shadow: 0 0 8px 1px var(--np-accent-glow-strong);
+}
+
+/* Live audio equalizer bars next to the "Now playing" label. */
+.ytmq-eq {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 1.5px;
+  height: 9px;
+}
+.ytmq-eq-bar {
+  width: 2px;
+  height: 100%;
+  border-radius: 9999px;
+  transform-origin: bottom;
+  background: color-mix(in srgb, var(--np-accent-light) 86%, white);
+  animation: ytmq-eq 0.9s ease-in-out infinite;
+}
+.ytmq-eq-bar:nth-child(1) {
+  animation-duration: 0.78s;
+}
+.ytmq-eq-bar:nth-child(2) {
+  animation-duration: 1.05s;
+  animation-delay: -0.35s;
+}
+.ytmq-eq-bar:nth-child(3) {
+  animation-duration: 0.66s;
+  animation-delay: -0.18s;
+}
+.ytmq-eq-bar:nth-child(4) {
+  animation-duration: 0.92s;
+  animation-delay: -0.5s;
 }
 
 .ytmq-now-controls {
