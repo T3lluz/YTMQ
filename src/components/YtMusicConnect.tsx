@@ -59,9 +59,15 @@ export function YtMusicConnect({ roomId }: YtMusicConnectProps) {
     const since = resetPlaybackSession(roomId)
     setPlaybackSince(since)
     openYtmMusicWindow(roomId, { resetSession: false })
-    setStep('waiting')
     setShowManual(false)
-  }, [roomId])
+    // Returning hosts already have the helper installed, which auto-injects on
+    // music.youtube.com — link immediately instead of asking them to verify.
+    if (isYtmHostInitialized()) {
+      markDone()
+    } else {
+      setStep('waiting')
+    }
+  }, [roomId, markDone])
 
   const reopenYtm = useCallback(() => {
     openYtmMusicWindow(roomId)

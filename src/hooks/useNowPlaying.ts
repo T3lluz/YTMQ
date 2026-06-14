@@ -4,6 +4,7 @@ import {
   type NowPlaying,
   type PlaybackState,
 } from '../lib/playback'
+import { recordPlayed } from '../lib/recentlyPlayed'
 import { supabase } from '../lib/supabase'
 
 const STALE_MS = 15_000
@@ -11,6 +12,12 @@ const STALE_MS = 15_000
 export function useNowPlaying(roomId: string) {
   const [nowPlaying, setNowPlaying] = useState<NowPlaying | null>(null)
   const [connected, setConnected] = useState(false)
+  const [now, setNow] = useState(() => Date.now())
+
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(Date.now()), 5_000)
+    return () => window.clearInterval(id)
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -21,6 +28,11 @@ export function useNowPlaying(roomId: string) {
         if (cancelled || !payload || typeof payload !== 'object') return
         const p = payload as Partial<NowPlaying> & { state?: PlaybackState }
         if (!p.videoId || !p.title) return
+        recordPlayed(roomId, {
+          videoId: p.videoId,
+          title: p.title,
+          artist: p.artist ?? '',
+        })
         setNowPlaying({
           videoId: p.videoId,
           title: p.title,
@@ -48,8 +60,7 @@ export function useNowPlaying(roomId: string) {
     }
   }, [roomId])
 
-  const stale =
-    !nowPlaying || Date.now() - nowPlaying.updatedAt > STALE_MS
+  const stale = !nowPlaying || now - nowPlaying.updatedAt > STALE_MS
 
   return { nowPlaying, connected, stale }
 }

@@ -115,6 +115,7 @@ export function Room() {
 
       {tab === 'search' && (
         <SearchTab
+          roomId={roomId}
           nickname={nickname}
           onAdd={async (track, mode) => {
             await addTrack(track, mode)

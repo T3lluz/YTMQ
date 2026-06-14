@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react'
 import {
-  fetchArtistDetail,
   searchByFilter,
-  type ArtistDetail,
   type SearchFilter,
   type SearchResultItem,
 } from '../lib/search'
-import { SearchDiscover } from './SearchDiscover'
+import { RecentlyPlayed } from './RecentlyPlayed'
+import { TrackRow } from './TrackRow'
+import { useQueueAdder } from '../hooks/useQueueAdder'
 import {
   defaultThumbnail,
   type AddTrackInput,
@@ -14,49 +14,17 @@ import {
 } from '../lib/queue'
 
 type SearchTabProps = {
+  roomId: string
   nickname: string
   onAdd: (track: AddTrackInput, mode: QueueInsertMode) => Promise<void>
   onAdded?: (title: string, mode: QueueInsertMode) => void
 }
 
-function PlayNextIcon({ className = 'h-4 w-4' }: { className?: string }) {
-  return (
-    <svg
-      aria-hidden="true"
-      viewBox="0 0 20 20"
-      fill="currentColor"
-      className={className}
-    >
-      <path d="M3.5 4.75A.75.75 0 0 1 4.62 4.1l8.5 5.25a.75.75 0 0 1 0 1.3l-8.5 5.25a.75.75 0 0 1-1.12-.65V4.75Z" />
-      <path d="M15.5 4.75a.75.75 0 0 1 1.5 0v10.5a.75.75 0 0 1-1.5 0V4.75Z" />
-    </svg>
-  )
-}
-
-function AddToQueueIcon({ className = 'h-4 w-4' }: { className?: string }) {
-  return (
-    <svg
-      aria-hidden="true"
-      viewBox="0 0 20 20"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.75"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
-    >
-      <path d="M3 6h10" />
-      <path d="M3 10h7" />
-      <path d="M3 14h7" />
-      <path d="M14.5 11v6" />
-      <path d="M11.5 14h6" />
-    </svg>
-  )
-}
-
-type View =
-  | { kind: 'search' }
-  | { kind: 'artist'; artist: SearchResultItem; detail: ArtistDetail | null }
+const FILTERS: { id: SearchFilter; label: string }[] = [
+  { id: 'all', label: 'All' },
+  { id: 'song', label: 'Songs' },
+  { id: 'artist', label: 'Artists' },
+]
 
 function FilterPills({
   value,
@@ -65,18 +33,9 @@ function FilterPills({
   value: SearchFilter
   onChange: (filter: SearchFilter) => void
 }) {
-  const options: { id: SearchFilter; label: string }[] = [
-    { id: 'song', label: 'Songs' },
-    { id: 'artist', label: 'Artists' },
-  ]
-
   return (
-    <div
-      className="flex rounded-xl border border-zinc-800 bg-zinc-950/80 p-1"
-      role="tablist"
-      aria-label="Search filter"
-    >
-      {options.map((option) => {
+    <div className="flex gap-2" role="tablist" aria-label="Search filter">
+      {FILTERS.map((option) => {
         const active = value === option.id
         return (
           <button
@@ -85,10 +44,10 @@ function FilterPills({
             role="tab"
             aria-selected={active}
             onClick={() => onChange(option.id)}
-            className={`flex-1 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+            className={`rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
               active
-                ? 'bg-violet-600 text-white shadow-sm'
-                : 'text-zinc-400 hover:text-zinc-200'
+                ? 'bg-violet-600 text-white'
+                : 'bg-zinc-900 text-zinc-300 hover:bg-zinc-800'
             }`}
           >
             {option.label}
@@ -99,261 +58,249 @@ function FilterPills({
   )
 }
 
-type Pending = { id: string; mode: QueueInsertMode } | null
-
-export function SearchTab({ nickname, onAdd, onAdded }: SearchTabProps) {
+export function SearchTab({
+  roomId,
+  nickname,
+  onAdd,
+  onAdded,
+}: SearchTabProps) {
   const [query, setQuery] = useState('')
-  const [filter, setFilter] = useState<SearchFilter>('song')
+  const [filter, setFilter] = useState<SearchFilter>('all')
   const [results, setResults] = useState<SearchResultItem[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [pending, setPending] = useState<Pending>(null)
-  const [view, setView] = useState<View>({ kind: 'search' })
-  const [detailLoading, setDetailLoading] = useState(false)
+  const { pending, add } = useQueueAdder(nickname, onAdd, onAdded)
+
+  const trimmed = query.trim()
 
   useEffect(() => {
-    const trimmed = query.trim()
-    if (trimmed.length < 2) {
-      setResults([])
-      setError(null)
-      return
-    }
-
     let cancelled = false
-    const timer = window.setTimeout(() => {
-      setLoading(true)
-      setError(null)
-      void searchByFilter(trimmed, filter)
-        .then((items) => {
-          if (!cancelled) setResults(items)
-        })
-        .catch((err: unknown) => {
-          if (!cancelled) {
-            setResults([])
-            setError(
-              err instanceof Error ? err.message : 'Search failed',
-            )
-          }
-        })
-        .finally(() => {
-          if (!cancelled) setLoading(false)
-        })
-    }, 300)
+
+    const timer = window.setTimeout(
+      () => {
+        if (trimmed.length < 2) {
+          setResults([])
+          setError(null)
+          setLoading(false)
+          return
+        }
+
+        setLoading(true)
+        setError(null)
+        void searchByFilter(trimmed, filter)
+          .then((items) => {
+            if (!cancelled) setResults(items)
+          })
+          .catch((err: unknown) => {
+            if (!cancelled) {
+              setResults([])
+              setError(err instanceof Error ? err.message : 'Search failed')
+            }
+          })
+          .finally(() => {
+            if (!cancelled) setLoading(false)
+          })
+      },
+      trimmed.length < 2 ? 0 : 300,
+    )
 
     return () => {
       cancelled = true
       window.clearTimeout(timer)
     }
-  }, [query, filter])
+  }, [trimmed, filter])
 
-  const artistBrowseId = view.kind === 'artist' ? view.artist.id : null
-
-  useEffect(() => {
-    if (!artistBrowseId) return
-
-    let cancelled = false
-    setDetailLoading(true)
-    setError(null)
-    void fetchArtistDetail(artistBrowseId)
-      .then((detail) => {
-        if (!cancelled) {
-          setView((current) =>
-            current.kind === 'artist' && current.artist.id === artistBrowseId
-              ? { kind: 'artist', artist: current.artist, detail }
-              : current,
-          )
-        }
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) {
-          setError(
-            err instanceof Error ? err.message : 'Could not load artist',
-          )
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setDetailLoading(false)
-      })
-
-    return () => {
-      cancelled = true
-    }
-  }, [artistBrowseId])
-
-  async function handleAdd(item: SearchResultItem, mode: QueueInsertMode) {
-    if (item.type !== 'song') return
-    setPending({ id: item.id, mode })
-    setError(null)
-    try {
-      await onAdd(
-        {
-          video_id: item.id,
-          title: item.title,
-          channel_title: item.channelTitle,
-          thumbnail_url: item.thumbnail || defaultThumbnail(item.id),
-          added_by: nickname,
-          insert_mode: mode,
-        },
-        mode,
-      )
-      onAdded?.(item.title, mode)
-    } catch {
-      // hook surfaces queue errors
-    } finally {
-      setPending(null)
-    }
+  function addSong(item: SearchResultItem, mode: QueueInsertMode) {
+    void add(
+      {
+        videoId: item.id,
+        title: item.title,
+        channelTitle: item.channelTitle,
+        thumbnail: item.thumbnail,
+      },
+      mode,
+    )
   }
 
-  function openArtist(artist: SearchResultItem) {
-    setView({ kind: 'artist', artist, detail: null })
-    setQuery('')
-    setResults([])
+  // Tapping an artist filters the view to that artist's songs (no detail page).
+  function filterByArtist(artist: SearchResultItem) {
+    setQuery(artist.title)
+    setFilter('song')
   }
 
-  function renderSongRow(item: SearchResultItem, rank?: number) {
-    const thumb = item.thumbnail || defaultThumbnail(item.id)
-    const isPending = pending?.id === item.id
-    const pendingMode = isPending ? pending?.mode : null
-    const anyBusy = pending !== null
+  const songs = results.filter((item) => item.type === 'song')
+  const artists = results.filter((item) => item.type === 'artist')
 
+  function renderSong(item: SearchResultItem, rank?: number) {
     return (
-      <li
+      <TrackRow
         key={item.id}
-        className="flex items-center gap-3 rounded-xl border border-zinc-800/80 bg-zinc-900/60 px-3 py-2.5"
-      >
-        {rank != null && (
-          <span className="w-6 shrink-0 text-center text-sm tabular-nums text-zinc-500">
-            {rank}
-          </span>
-        )}
-        <img
-          src={thumb}
-          alt=""
-          className="h-12 w-12 shrink-0 rounded-lg object-cover"
-        />
-        <div className="min-w-0 flex-1">
-          <p className="truncate font-medium">{item.title}</p>
-          <p className="truncate text-sm text-zinc-400">
-            {item.subtitle || item.channelTitle}
-          </p>
-        </div>
-        <div className="flex shrink-0 items-center gap-1.5">
-          <button
-            type="button"
-            disabled={anyBusy}
-            onClick={() => void handleAdd(item, 'play_next')}
-            aria-label="Play next"
-            title="Play next"
-            className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-lg bg-violet-600 px-2.5 text-xs font-medium text-white active:bg-violet-700 disabled:opacity-60"
-          >
-            {pendingMode === 'play_next' ? (
-              <span aria-hidden="true">…</span>
-            ) : (
-              <PlayNextIcon />
-            )}
-            <span className="hidden sm:inline">Next</span>
-          </button>
-          <button
-            type="button"
-            disabled={anyBusy}
-            onClick={() => void handleAdd(item, 'queue')}
-            aria-label="Add to queue"
-            title="Add to queue"
-            className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-lg border border-violet-500/70 px-2.5 text-xs font-medium text-violet-200 active:bg-violet-500/10 disabled:opacity-60"
-          >
-            {pendingMode === 'queue' ? (
-              <span aria-hidden="true">…</span>
-            ) : (
-              <AddToQueueIcon />
-            )}
-            <span className="hidden sm:inline">Queue</span>
-          </button>
-        </div>
-      </li>
+        thumbnail={item.thumbnail || defaultThumbnail(item.id)}
+        title={item.title}
+        subtitle={item.subtitle || item.channelTitle}
+        rank={rank}
+        pendingMode={pending?.id === item.id ? pending.mode : null}
+        disabled={pending !== null}
+        onPlayNext={() => addSong(item, 'play_next')}
+        onQueue={() => addSong(item, 'queue')}
+      />
     )
   }
 
   function renderArtistRow(item: SearchResultItem) {
-    const thumb = item.thumbnail || defaultThumbnail(item.id)
-
     return (
       <li key={item.id}>
         <button
           type="button"
-          onClick={() => openArtist(item)}
-          className="flex w-full items-center gap-3 rounded-xl border border-zinc-800/80 bg-zinc-900/60 px-3 py-2.5 text-left active:bg-zinc-900"
+          onClick={() => filterByArtist(item)}
+          className="flex w-full items-center gap-3 rounded-xl border border-zinc-800/80 bg-zinc-900/60 px-3 py-2.5 text-left transition-colors hover:border-zinc-700 active:bg-zinc-900"
         >
           <img
-            src={thumb}
+            src={item.thumbnail || defaultThumbnail(item.id)}
             alt=""
+            loading="lazy"
             className="h-12 w-12 shrink-0 rounded-full object-cover"
           />
           <div className="min-w-0 flex-1">
             <p className="truncate font-medium">{item.title}</p>
             <p className="truncate text-sm text-zinc-400">Artist</p>
           </div>
-          <span className="shrink-0 text-sm text-violet-400">View →</span>
+          <span className="shrink-0 text-sm font-medium text-violet-400">
+            Songs →
+          </span>
         </button>
       </li>
     )
   }
 
-  if (view.kind === 'artist') {
-    const detail = view.detail
-    const artistTitle = detail?.title ?? view.artist.title
-    const artistThumb =
-      detail?.thumbnail || view.artist.thumbnail || defaultThumbnail(view.artist.id)
-    const songs = detail?.songs ?? []
+  function renderResults() {
+    if (loading) {
+      return <p className="py-8 text-center text-zinc-500">Searching…</p>
+    }
+    if (error) {
+      return (
+        <p className="py-8 text-center text-sm text-red-400" role="alert">
+          {error}
+        </p>
+      )
+    }
+    if (results.length === 0) {
+      return (
+        <p className="py-8 text-center text-zinc-500">
+          No results for “{trimmed}”
+        </p>
+      )
+    }
+
+    if (filter === 'artist') {
+      return (
+        <ul className="flex flex-col gap-2 pb-4">
+          {artists.map((item) => renderArtistRow(item))}
+        </ul>
+      )
+    }
+
+    if (filter === 'song') {
+      return (
+        <ul className="flex flex-col gap-1.5 pb-4">
+          {songs.map((item, index) => renderSong(item, index + 1))}
+        </ul>
+      )
+    }
+
+    // filter === 'all' — Spotify-style: top result, songs, then artists.
+    const top = results[0]
+    const restSongs =
+      top.type === 'song' ? songs.filter((s) => s.id !== top.id) : songs
 
     return (
-      <section className="flex flex-1 flex-col gap-4">
-        <button
-          type="button"
-          onClick={() => setView({ kind: 'search' })}
-          className="self-start text-sm text-violet-400 underline"
-        >
-          ← Back to search
-        </button>
-
-        <div className="flex items-center gap-4 rounded-2xl border border-zinc-800 bg-gradient-to-br from-zinc-900 to-zinc-950 p-4">
-          <img
-            src={artistThumb}
-            alt=""
-            className="h-20 w-20 shrink-0 rounded-full object-cover ring-2 ring-zinc-700"
-          />
-          <div className="min-w-0">
-            <h2 className="truncate text-xl font-semibold">{artistTitle}</h2>
-            <p className="text-sm text-zinc-400">
-              {detailLoading
-                ? 'Loading songs…'
-                : `${songs.length} song${songs.length === 1 ? '' : 's'}`}
-            </p>
-          </div>
-        </div>
-
-        {error && (
-          <p className="text-sm text-red-400" role="alert">
-            {error}
-          </p>
+      <div className="flex flex-col gap-6 pb-4">
+        {top && (
+          <section className="space-y-2">
+            <h3 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">
+              Top result
+            </h3>
+            {top.type === 'song' ? (
+              <div className="flex items-center gap-4 rounded-2xl border border-zinc-800 bg-gradient-to-br from-zinc-900 to-zinc-950 p-4">
+                <img
+                  src={top.thumbnail || defaultThumbnail(top.id)}
+                  alt=""
+                  className="h-20 w-20 shrink-0 rounded-xl object-cover"
+                />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-lg font-semibold">{top.title}</p>
+                  <p className="truncate text-sm text-zinc-400">
+                    {top.subtitle || top.channelTitle}
+                  </p>
+                  <div className="mt-2 flex gap-2">
+                    <button
+                      type="button"
+                      disabled={pending !== null}
+                      onClick={() => addSong(top, 'play_next')}
+                      className="rounded-full bg-violet-600 px-4 py-1.5 text-sm font-medium text-white active:bg-violet-700 disabled:opacity-60"
+                    >
+                      {pending?.id === top.id && pending.mode === 'play_next'
+                        ? 'Adding…'
+                        : 'Play next'}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={pending !== null}
+                      onClick={() => addSong(top, 'queue')}
+                      className="rounded-full border border-violet-500/70 px-4 py-1.5 text-sm font-medium text-violet-200 active:bg-violet-500/10 disabled:opacity-60"
+                    >
+                      {pending?.id === top.id && pending.mode === 'queue'
+                        ? 'Adding…'
+                        : 'Queue'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => filterByArtist(top)}
+                className="flex w-full items-center gap-4 rounded-2xl border border-zinc-800 bg-gradient-to-br from-zinc-900 to-zinc-950 p-4 text-left transition-colors hover:border-zinc-700"
+              >
+                <img
+                  src={top.thumbnail || defaultThumbnail(top.id)}
+                  alt=""
+                  className="h-20 w-20 shrink-0 rounded-full object-cover ring-2 ring-zinc-700"
+                />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-lg font-semibold">{top.title}</p>
+                  <p className="text-sm text-zinc-400">Artist</p>
+                  <span className="mt-2 inline-block rounded-full bg-violet-600 px-4 py-1.5 text-sm font-medium text-white">
+                    Show songs
+                  </span>
+                </div>
+              </button>
+            )}
+          </section>
         )}
 
-        {detailLoading || !detail ? (
-          <p className="py-8 text-center text-zinc-500">Loading songs…</p>
-        ) : songs.length === 0 ? (
-          <p className="py-8 text-center text-sm text-zinc-500">
-            No songs found for this artist
-          </p>
-        ) : (
-          <div className="space-y-2 pb-4">
+        {restSongs.length > 0 && (
+          <section className="space-y-2">
             <h3 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">
-              Popular songs
+              Songs
             </h3>
             <ul className="flex flex-col gap-1.5">
-              {songs.map((song, index) => renderSongRow(song, index + 1))}
+              {restSongs.map((item) => renderSong(item))}
             </ul>
-          </div>
+          </section>
         )}
-      </section>
+
+        {artists.length > 0 && (
+          <section className="space-y-2">
+            <h3 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">
+              Artists
+            </h3>
+            <ul className="flex flex-col gap-2">
+              {artists.map((item) => renderArtistRow(item))}
+            </ul>
+          </section>
+        )}
+      </div>
     )
   }
 
@@ -361,37 +308,40 @@ export function SearchTab({ nickname, onAdd, onAdded }: SearchTabProps) {
     <section className="flex flex-1 flex-col gap-3">
       <h2 className="text-lg font-semibold">Search</h2>
 
-      <input
-        type="search"
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-        placeholder={
-          filter === 'song' ? 'Search songs…' : 'Search artists…'
-        }
-        autoComplete="off"
-        className="min-h-12 rounded-xl border border-zinc-700 bg-zinc-900 px-4 text-base outline-none focus:border-violet-500"
-      />
+      <div className="relative">
+        <input
+          type="search"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Songs, artists…"
+          autoComplete="off"
+          className="min-h-12 w-full rounded-xl border border-zinc-700 bg-zinc-900 px-4 pr-10 text-base outline-none focus:border-violet-500"
+        />
+        {query && (
+          <button
+            type="button"
+            onClick={() => setQuery('')}
+            aria-label="Clear search"
+            className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-1.5 text-zinc-500 hover:text-zinc-200"
+          >
+            <svg viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
+              <path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" />
+            </svg>
+          </button>
+        )}
+      </div>
 
-      <FilterPills value={filter} onChange={setFilter} />
+      {trimmed.length >= 2 && <FilterPills value={filter} onChange={setFilter} />}
 
-      {error && (
-        <p className="text-sm text-red-400" role="alert">
-          {error}
-        </p>
-      )}
-
-      {query.trim().length < 2 ? (
-        <SearchDiscover renderSongRow={renderSongRow} />
-      ) : loading ? (
-        <p className="py-8 text-center text-zinc-500">Searching…</p>
-      ) : results.length === 0 ? (
-        <p className="py-8 text-center text-zinc-500">No results</p>
+      {trimmed.length < 2 ? (
+        <RecentlyPlayed
+          roomId={roomId}
+          nickname={nickname}
+          onAdd={onAdd}
+          onAdded={onAdded}
+        />
       ) : (
-        <ul className="flex flex-col gap-2 pb-4">
-          {filter === 'song'
-            ? results.map((item) => renderSongRow(item))
-            : results.map((item) => renderArtistRow(item))}
-        </ul>
+        renderResults()
       )}
     </section>
   )
