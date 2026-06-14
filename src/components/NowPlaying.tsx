@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { defaultThumbnail } from '../lib/queue'
 import { useNowPlaying } from '../hooks/useNowPlaying'
 import { useImagePalette } from '../hooks/useImagePalette'
@@ -80,8 +80,8 @@ export function NowPlaying({ roomId, compact = false }: NowPlayingProps) {
 
   return (
     <section
-      className={`ytmq-now-playing-card relative isolate overflow-hidden rounded-2xl border bg-zinc-900 shadow-lg ${
-        stale ? 'border-zinc-800 opacity-90' : 'is-live'
+      className={`ytmq-now-playing-card relative isolate overflow-hidden rounded-2xl border bg-zinc-900 ${
+        stale ? 'border-zinc-800 opacity-90' : ''
       }`}
       style={{
         ...themeStyle,
@@ -91,29 +91,25 @@ export function NowPlaying({ roomId, compact = false }: NowPlayingProps) {
     >
       <div
         aria-hidden
-        className="absolute inset-0 -z-10 scale-110 bg-cover bg-center blur-2xl saturate-150 transition-opacity duration-700"
+        className="absolute inset-0 -z-20 scale-110 bg-cover bg-center blur-2xl saturate-150 transition-opacity duration-700"
         style={{
           backgroundImage: `url(${thumb})`,
           opacity: paletteReady ? 1 : 0.75,
         }}
       />
-      <div
-        aria-hidden
-        className={`ytmq-now-ambient absolute -inset-6 -z-10 rounded-[inherit] transition-opacity duration-700 ${
-          live ? '' : 'opacity-60'
-        }`}
-        style={{
-          background: `radial-gradient(circle at 20% 50%, var(--np-accent-soft), transparent 58%), radial-gradient(circle at 85% 30%, color-mix(in srgb, var(--np-accent-light) 35%, transparent), transparent 52%)`,
-          opacity: paletteReady ? 1 : 0,
-        }}
-      />
+      <div aria-hidden className="ytmq-now-lights absolute inset-0 -z-10 overflow-hidden">
+        <div className="ytmq-now-light ytmq-now-light-a" />
+        <div className="ytmq-now-light ytmq-now-light-b" />
+        <div className="ytmq-now-light ytmq-now-light-c" />
+        <div className="ytmq-now-light ytmq-now-light-d" />
+      </div>
       <div
         aria-hidden
         className="absolute inset-0 -z-10 bg-gradient-to-r from-zinc-950/88 via-zinc-950/72 to-zinc-950/45"
       />
       <div
         aria-hidden
-        className="absolute inset-0 -z-10 bg-zinc-900/25 backdrop-blur-sm"
+        className="absolute inset-0 -z-10 bg-zinc-900/25 backdrop-blur-md"
       />
 
       <div
@@ -132,9 +128,7 @@ export function NowPlaying({ roomId, compact = false }: NowPlayingProps) {
 
         <div className="min-w-0 flex-1 pr-2">
           <p
-            className={`text-[10px] font-semibold uppercase tracking-wider transition-colors duration-700 ${
-              live ? 'ytmq-now-label is-live' : ''
-            }`}
+            className="text-[10px] font-semibold uppercase tracking-wider transition-colors duration-700"
             style={{ color: 'color-mix(in srgb, var(--np-accent-light) 88%, white)' }}
           >
             Now playing
@@ -253,11 +247,14 @@ function PlaybackProgress({
   compact = false,
   live = false,
 }: PlaybackProgressProps) {
+  const clipId = useId().replace(/:/g, '')
   const hasDuration = duration != null && duration > 0
   const percent = hasDuration
     ? Math.min(100, Math.max(0, (position / duration) * 100))
     : 0
   const inset = compact ? 'px-3' : 'px-4'
+  const waveClip =
+    'M0 0.62 C 0.07 0.38 0.14 0.86 0.21 0.62 S 0.35 0.38 0.42 0.62 S 0.56 0.86 0.63 0.62 S 0.77 0.38 0.84 0.62 S 0.98 0.86 1.05 0.62 L 1.05 1 L 0 1 Z'
 
   return (
     <div
@@ -272,13 +269,26 @@ function PlaybackProgress({
       aria-label="Track progress"
     >
       <div className={inset}>
-        <div className="ytmq-now-progress-track h-1.5 w-full overflow-hidden rounded-full">
+        <div className="ytmq-now-progress-track relative h-2.5 w-full overflow-hidden rounded-full">
+          <svg width="0" height="0" aria-hidden className="absolute">
+            <defs>
+              <clipPath id={clipId} clipPathUnits="objectBoundingBox">
+                <path d={waveClip} />
+              </clipPath>
+            </defs>
+          </svg>
           <div
-            className={`ytmq-now-progress-fill relative h-full rounded-full transition-[width] duration-300 ease-linear ${
-              live ? 'is-live' : ''
-            }`}
+            className="absolute inset-y-0 left-0 overflow-hidden rounded-full transition-[width] duration-300 ease-linear"
             style={{ width: `${percent}%` }}
-          />
+          >
+            <div
+              className={`ytmq-now-progress-fill h-full ${live && percent > 0 ? 'ytmq-now-progress-fill-live' : ''}`}
+              style={{
+                clipPath: percent > 0 ? `url(#${clipId})` : undefined,
+                width: live && percent > 0 ? '200%' : '100%',
+              }}
+            />
+          </div>
         </div>
         <div
           className="mt-1.5 flex justify-between text-[10px] tabular-nums"
