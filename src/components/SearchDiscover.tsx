@@ -137,8 +137,19 @@ export function SearchDiscover({ renderSongRow }: SearchDiscoverProps) {
         ? `${curated.section}: ${curated.category.title}`
         : null
 
+  const hasContent =
+    discover.trending.length > 0 ||
+    discover.charts.length > 0 ||
+    discover.moods.some((section) => section.categories.length > 0)
+
   return (
     <div className="flex flex-col gap-5 pb-4">
+      {!hasContent && (
+        <p className="py-6 text-center text-sm text-zinc-500">
+          Nothing to show yet. Try searching above, or redeploy the search edge
+          function for charts and moods in production.
+        </p>
+      )}
       {discover.trending.length > 0 && (
         <section className="space-y-2">
           <h3 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">

@@ -1,4 +1,10 @@
 import { supabase } from './supabase'
+import {
+  fetchDiscoverViaProxy,
+  fetchMoodTracksViaProxy,
+  fetchPlaylistTracksViaProxy,
+  isDiscoverPayload,
+} from './ytmusicDiscoverClient'
 
 export type SearchResultItem = {
   id: string
@@ -122,33 +128,69 @@ export function countryLabel(code: string): string {
 export async function fetchDiscover(
   country = guessCountryCode(),
 ): Promise<DiscoverFeed> {
-  const data = await invokeSearch({ type: 'discover', country })
-  return {
-    country: (data as DiscoverFeed).country ?? country,
-    countries: (data as DiscoverFeed).countries ?? [],
-    trending: songsOnly((data as DiscoverFeed).trending ?? []),
-    charts: (data as DiscoverFeed).charts ?? [],
-    moods: (data as DiscoverFeed).moods ?? [],
+  try {
+    const data = await invokeSearch({ type: 'discover', country })
+    if (isDiscoverPayload(data as Record<string, unknown>)) {
+      const feed = data as DiscoverFeed
+      return {
+        country: feed.country ?? country,
+        countries: feed.countries ?? [],
+        trending: songsOnly(feed.trending ?? []),
+        charts: feed.charts ?? [],
+        moods: feed.moods ?? [],
+      }
+    }
+  } catch {
+    /* fall through to dev proxy */
   }
+
+  if (import.meta.env.DEV) {
+    return fetchDiscoverViaProxy(country)
+  }
+
+  throw new Error(
+    'Charts and moods need an updated search edge function. Redeploy with: supabase functions deploy search',
+  )
 }
 
 export async function fetchPlaylistTracks(
   browseId: string,
 ): Promise<SearchResultItem[]> {
-  const data = await invokeSearch({ type: 'playlist_tracks', browseId })
-  return songsOnly(data.results ?? [])
+  try {
+    const data = await invokeSearch({ type: 'playlist_tracks', browseId })
+    const tracks = songsOnly(data.results ?? [])
+    if (tracks.length > 0) return tracks
+  } catch {
+    /* fall through */
+  }
+
+  if (import.meta.env.DEV) {
+    return fetchPlaylistTracksViaProxy(browseId)
+  }
+
+  return []
 }
 
 export async function fetchMoodCategoryTracks(
   params: string,
 ): Promise<{ label: string; tracks: SearchResultItem[] }> {
-  const moodData = await invokeSearch({ type: 'mood_playlists', params })
-  const playlists = (moodData as { playlists?: ChartPlaylist[] }).playlists ?? []
-  const first = playlists[0]
-  if (!first) {
-    return { label: 'Browse', tracks: [] }
+  try {
+    const moodData = await invokeSearch({ type: 'mood_playlists', params })
+    const playlists = (moodData as { playlists?: ChartPlaylist[] }).playlists ?? []
+    const first = playlists[0]
+    if (first) {
+      const tracks = await fetchPlaylistTracks(first.browseId)
+      if (tracks.length > 0) {
+        return { label: first.title, tracks }
+      }
+    }
+  } catch {
+    /* fall through */
   }
 
-  const tracks = await fetchPlaylistTracks(first.browseId)
-  return { label: first.title, tracks }
+  if (import.meta.env.DEV) {
+    return fetchMoodTracksViaProxy(params)
+  }
+
+  return { label: 'Browse', tracks: [] }
 }
