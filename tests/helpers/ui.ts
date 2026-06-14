@@ -7,6 +7,17 @@ export async function gotoApp(page: Page, path = '') {
   await page.goto(segment ? `./${segment}` : './')
 }
 
+export async function enterNickname(
+  page: Page,
+  nickname = 'TestGuest',
+) {
+  const dialog = page.getByRole('dialog', { name: 'Choose a nickname' })
+  await dialog.waitFor({ state: 'visible', timeout: 5_000 })
+  await dialog.getByPlaceholder('Your name on the queue').fill(nickname)
+  await dialog.getByRole('button', { name: 'Continue' }).click()
+  await dialog.waitFor({ state: 'hidden', timeout: 5_000 })
+}
+
 export function hostStorageKey(roomId: string) {
   return `ytmq_host_${roomId}`
 }
@@ -24,8 +35,26 @@ export async function seedHostSession(page: Page, lobby: LobbyApiResult) {
   )
 }
 
-export async function goToGuestRoom(page: Page, roomId: string) {
+export async function joinLobbyWithNickname(
+  page: Page,
+  code: string,
+  nickname = 'TestGuest',
+) {
+  await page.getByPlaceholder('ABC123').fill(code)
+  await page.getByPlaceholder('Your name on the queue').fill(nickname)
+  await page.getByRole('button', { name: 'Join' }).click()
+}
+
+export async function goToGuestRoom(
+  page: Page,
+  roomId: string,
+  nickname = 'TestGuest',
+) {
   await gotoApp(page, `room/${roomId}`)
+  const dialog = page.getByRole('dialog', { name: 'Choose a nickname' })
+  if (await dialog.isVisible().catch(() => false)) {
+    await enterNickname(page, nickname)
+  }
   await page.getByRole('navigation', { name: 'Room navigation' }).waitFor()
 }
 

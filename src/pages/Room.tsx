@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
+import { NicknamePrompt } from '../components/NicknamePrompt'
 import { SearchTab } from '../components/SearchTab'
 import { QueueList } from '../components/QueueList'
 import { NowPlaying } from '../components/NowPlaying'
@@ -28,7 +29,12 @@ export function Room() {
   const [roomLoading, setRoomLoading] = useState(true)
   const [roomError, setRoomError] = useState<string | null>(null)
   const [tab, setTab] = useState<RoomTab>('search')
-  const [nickname, setNicknameState] = useState('')
+  const [nickname, setNicknameState] = useState(() =>
+    roomId ? getNickname(roomId) : '',
+  )
+  const [needsNickname, setNeedsNickname] = useState(() =>
+    roomId ? !getNickname(roomId) : false,
+  )
   const { toasts, showToast } = useToast()
 
   const {
@@ -53,7 +59,9 @@ export function Room() {
           return
         }
         setRoom(info)
-        setNicknameState(getNickname(roomId))
+        const stored = getNickname(roomId)
+        setNicknameState(stored)
+        setNeedsNickname(!stored)
       })
       .catch((err: unknown) => {
         if (cancelled) return
@@ -91,8 +99,16 @@ export function Room() {
     setNickname(activeRoomId, value)
   }
 
+  function completeNickname(value: string) {
+    saveNickname(value)
+    setNeedsNickname(false)
+  }
+
   return (
     <main className="mx-auto flex min-h-dvh max-w-lg flex-col p-4 pb-24">
+      {needsNickname && (
+        <NicknamePrompt onSubmit={completeNickname} />
+      )}
       <div className="mb-4">
         <NowPlaying roomId={roomId} compact />
       </div>
@@ -139,7 +155,7 @@ export function Room() {
           </p>
 
           <label className="block space-y-1">
-            <span className="text-sm text-zinc-500">Nickname (optional)</span>
+            <span className="text-sm text-zinc-500">Nickname</span>
             <input
               type="text"
               value={nickname}

@@ -4,6 +4,7 @@ import {
   goToGuestRoom,
   goToHost,
   gotoApp,
+  joinLobbyWithNickname,
   searchAndAddFirstResult,
   selectTab,
 } from './helpers/ui'
@@ -20,6 +21,7 @@ test.describe('Full flow', () => {
     const guestPage = await guestContext.newPage()
 
     await gotoApp(hostPage)
+    await hostPage.getByPlaceholder('Your name on the queue').fill('TestHost')
     await hostPage.getByRole('button', { name: 'Create lobby' }).click()
     await expect(hostPage).toHaveURL(/\/YTMQ\/host\/[0-9a-f-]{36}\/?$/, {
       timeout: 15_000,
@@ -33,12 +35,8 @@ test.describe('Full flow', () => {
     expect(code).toMatch(/^[A-Z0-9]{6}$/)
 
     await gotoApp(guestPage, 'join')
-    await guestPage.getByPlaceholder('ABC123').fill(code!)
-    await guestPage.getByRole('button', { name: 'Join' }).click()
+    await joinLobbyWithNickname(guestPage, code!, 'PartyGuest')
     await expect(guestPage).toHaveURL(new RegExp(`/YTMQ/room/${roomId}/?$`))
-
-    await selectTab(guestPage, 'Room')
-    await guestPage.getByPlaceholder('Your name on the queue').fill('PartyGuest')
 
     await searchAndAddFirstResult(guestPage, 'daft punk one more time')
     await searchAndAddFirstResult(guestPage, 'daft punk get lucky')
