@@ -11,6 +11,7 @@ import {
   createPlayedQueueCleanup,
   type SharedQueueRow,
 } from './playedQueueCleanup'
+import { parsePlaybackTimeLabel } from '../lib/playback'
 
 type BridgeParams = {
   roomId: string
@@ -347,12 +348,8 @@ function readNowPlaying(): NowPlayingPayload | null {
   if (!videoId && !title) return null
 
   const times = getPlayerTimes()
-  const currentTime =
-    times?.current ??
-    (() => {
-      const t = bar?.playerApi?.getCurrentTime?.()
-      return typeof t === 'number' && Number.isFinite(t) && t >= 0 ? t : 0
-    })()
+  const currentTime = times?.current ?? readPlayerCurrentTime(bar)
+  const duration = times?.duration ?? readPlayerDuration(bar) ?? undefined
 
   return {
     videoId,
@@ -360,7 +357,7 @@ function readNowPlaying(): NowPlayingPayload | null {
     artist,
     updatedAt: Date.now(),
     currentTime,
-    ...(times?.duration != null ? { duration: times.duration } : {}),
+    ...(duration != null ? { duration } : {}),
     state: readPlaybackState(bar),
   }
 }
@@ -475,21 +472,76 @@ function runPlaybackAction(action: PlaybackAction): boolean {
   }
 }
 
-function getPlayerTimes(): { current: number; duration: number } | null {
-  const bar = document.querySelector('ytmusic-player-bar') as PlayerBar | null
-  const api = bar?.playerApi
-  if (!api?.getCurrentTime || !api.getDuration) return null
-  const current = api.getCurrentTime()
-  const duration = api.getDuration()
-  if (
-    typeof current !== 'number' ||
-    typeof duration !== 'number' ||
-    !Number.isFinite(current) ||
-    !Number.isFinite(duration) ||
-    duration <= 0
-  ) {
-    return null
+function readPlayerTimeInfo(): { current: number; duration: number } | null {
+  const el =
+    (document.querySelector(
+      'ytmusic-player-bar .time-info',
+    ) as HTMLElement | null) ??
+    (document.querySelector('.time-info.ytmusic-player-bar') as HTMLElement | null)
+  const text = el?.innerText?.trim() ?? ''
+  if (!text.includes('/')) return null
+
+  const [positionLabel, durationLabel] = text.split('/').map((part) => part.trim())
+  const current = parsePlaybackTimeLabel(positionLabel ?? '')
+  const duration = parsePlaybackTimeLabel(durationLabel ?? '')
+  if (current == null || duration == null || duration <= 0) return null
+  return { current, duration }
+}
+
+function readPlayerCurrentTime(bar: PlayerBar | null): number {
+  const apiTime = bar?.playerApi?.getCurrentTime?.()
+  if (typeof apiTime === 'number' && Number.isFinite(apiTime) && apiTime >= 0) {
+    return apiTime
   }
+
+  const domTimes = readPlayerTimeInfo()
+  if (domTimes) return domTimes.current
+
+  const video = document.querySelector('video') as HTMLVideoElement | null
+  if (
+    video &&
+    Number.isFinite(video.currentTime) &&
+    video.currentTime >= 0
+  ) {
+    return video.currentTime
+  }
+
+  return 0
+}
+
+function readPlayerDuration(bar: PlayerBar | null): number | null {
+  const domTimes = readPlayerTimeInfo()
+  if (domTimes && domTimes.duration > 0) return domTimes.duration
+
+  const apiDuration = bar?.playerApi?.getDuration?.()
+  if (
+    typeof apiDuration === 'number' &&
+    Number.isFinite(apiDuration) &&
+    apiDuration > 0
+  ) {
+    return apiDuration
+  }
+
+  const video = document.querySelector('video') as HTMLVideoElement | null
+  if (
+    video &&
+    Number.isFinite(video.duration) &&
+    video.duration > 0 &&
+    Number.isFinite(video.currentTime) &&
+    video.duration >= video.currentTime
+  ) {
+    return video.duration
+  }
+
+  return null
+}
+
+function getPlayerTimes(): { current: number; duration: number } | null {
+  const bar = getPlayerBar()
+  const duration = readPlayerDuration(bar)
+  if (duration == null) return null
+
+  const current = readPlayerCurrentTime(bar)
   return { current, duration }
 }
 

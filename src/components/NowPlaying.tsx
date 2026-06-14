@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { defaultThumbnail } from '../lib/queue'
 import { useNowPlaying } from '../hooks/useNowPlaying'
+import { useImagePalette } from '../hooks/useImagePalette'
 import { sendPlaybackControl } from '../lib/bridgeChannel'
+import { paletteCssVars } from '../lib/imagePalette'
 import {
   formatPlaybackTime,
   type PlaybackAction,
@@ -47,6 +49,10 @@ export function NowPlaying({ roomId, compact = false }: NowPlayingProps) {
     nowPlaying,
     Boolean(nowPlaying && isPlaying && !stale),
   )
+  const thumb = nowPlaying ? defaultThumbnail(nowPlaying.videoId) : undefined
+  const { palette, ready: paletteReady } = useImagePalette(thumb)
+  const themeStyle = paletteCssVars(palette)
+  const live = isPlaying && !stale && Boolean(nowPlaying)
 
   if (!nowPlaying && !connected) {
     return (
@@ -70,30 +76,44 @@ export function NowPlaying({ roomId, compact = false }: NowPlayingProps) {
     )
   }
 
-  const thumb = defaultThumbnail(nowPlaying.videoId)
   const disabled = !connected || stale
 
   return (
     <section
-      className={`relative isolate overflow-hidden rounded-2xl border bg-zinc-900 shadow-lg ${
-        stale
-          ? 'border-zinc-800 opacity-90'
-          : 'border-violet-500/30 ring-1 ring-violet-500/10'
+      className={`ytmq-now-playing-card relative isolate overflow-hidden rounded-2xl border bg-zinc-900 shadow-lg ${
+        stale ? 'border-zinc-800 opacity-90' : 'is-live'
       }`}
+      style={{
+        ...themeStyle,
+        borderColor: stale ? undefined : 'var(--np-accent-border)',
+      }}
       aria-label="Now playing in YouTube Music"
     >
       <div
         aria-hidden
-        className="absolute inset-0 -z-10 scale-110 bg-cover bg-center blur-2xl saturate-150"
-        style={{ backgroundImage: `url(${thumb})` }}
+        className="absolute inset-0 -z-10 scale-110 bg-cover bg-center blur-2xl saturate-150 transition-opacity duration-700"
+        style={{
+          backgroundImage: `url(${thumb})`,
+          opacity: paletteReady ? 1 : 0.75,
+        }}
       />
       <div
         aria-hidden
-        className="absolute inset-0 -z-10 bg-gradient-to-r from-zinc-950/85 via-zinc-950/70 to-zinc-950/40"
+        className={`ytmq-now-ambient absolute -inset-6 -z-10 rounded-[inherit] transition-opacity duration-700 ${
+          live ? '' : 'opacity-60'
+        }`}
+        style={{
+          background: `radial-gradient(circle at 20% 50%, var(--np-accent-soft), transparent 58%), radial-gradient(circle at 85% 30%, color-mix(in srgb, var(--np-accent-light) 35%, transparent), transparent 52%)`,
+          opacity: paletteReady ? 1 : 0,
+        }}
       />
       <div
         aria-hidden
-        className="absolute inset-0 -z-10 bg-zinc-900/30 backdrop-blur-sm"
+        className="absolute inset-0 -z-10 bg-gradient-to-r from-zinc-950/88 via-zinc-950/72 to-zinc-950/45"
+      />
+      <div
+        aria-hidden
+        className="absolute inset-0 -z-10 bg-zinc-900/25 backdrop-blur-sm"
       />
 
       <div
@@ -104,13 +124,19 @@ export function NowPlaying({ roomId, compact = false }: NowPlayingProps) {
         <img
           src={thumb}
           alt=""
-          className={`shrink-0 rounded-xl object-cover shadow-md ring-1 ring-white/10 ${
-            compact ? 'h-14 w-14' : 'h-16 w-16'
-          }`}
+          crossOrigin="anonymous"
+          className={`ytmq-now-art shrink-0 rounded-xl object-cover ring-1 ring-white/10 transition-shadow duration-700 ${
+            live ? 'is-live' : ''
+          } ${compact ? 'h-14 w-14' : 'h-16 w-16'}`}
         />
 
         <div className="min-w-0 flex-1 pr-2">
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-violet-300/90">
+          <p
+            className={`text-[10px] font-semibold uppercase tracking-wider transition-colors duration-700 ${
+              live ? 'ytmq-now-label is-live' : ''
+            }`}
+            style={{ color: 'color-mix(in srgb, var(--np-accent-light) 88%, white)' }}
+          >
             Now playing
             {stale ? ' · paused?' : ''}
           </p>
@@ -125,7 +151,7 @@ export function NowPlaying({ roomId, compact = false }: NowPlayingProps) {
         </div>
 
         <div
-          className={`flex shrink-0 items-center gap-1 rounded-full border border-white/10 bg-black/40 px-1 py-1 backdrop-blur ${
+          className={`ytmq-now-controls flex shrink-0 items-center gap-1 rounded-full border px-1 py-1 backdrop-blur ${
             compact ? '' : 'gap-1.5 px-1.5'
           }`}
         >
@@ -164,6 +190,7 @@ export function NowPlaying({ roomId, compact = false }: NowPlayingProps) {
         position={position}
         duration={nowPlaying.duration}
         compact={compact}
+        live={live}
       />
     </section>
   )
@@ -178,17 +205,14 @@ function usePlaybackPosition(
   } | null,
   live: boolean,
 ) {
-  const [position, setPosition] = useState(0)
+  const [position, setPosition] = useState(() => nowPlaying?.currentTime ?? 0)
 
   useEffect(() => {
-    if (!nowPlaying) {
-      setPosition(0)
-      return
-    }
+    if (!nowPlaying || !live) return
 
     const compute = () => {
       const base = nowPlaying.currentTime ?? 0
-      const elapsed = live ? (Date.now() - nowPlaying.updatedAt) / 1000 : 0
+      const elapsed = (Date.now() - nowPlaying.updatedAt) / 1000
       let next = base + elapsed
       if (nowPlaying.duration != null && nowPlaying.duration > 0) {
         next = Math.min(next, nowPlaying.duration)
@@ -196,19 +220,23 @@ function usePlaybackPosition(
       setPosition(next)
     }
 
-    compute()
-    if (!live) return
-
+    const immediate = window.setTimeout(compute, 0)
     const id = window.setInterval(compute, 250)
-    return () => window.clearInterval(id)
+    return () => {
+      window.clearTimeout(immediate)
+      window.clearInterval(id)
+    }
   }, [
     nowPlaying?.videoId,
     nowPlaying?.currentTime,
     nowPlaying?.duration,
     nowPlaying?.updatedAt,
     live,
+    nowPlaying,
   ])
 
+  if (!nowPlaying) return 0
+  if (!live) return nowPlaying.currentTime ?? 0
   return position
 }
 
@@ -216,39 +244,49 @@ type PlaybackProgressProps = {
   position: number
   duration?: number
   compact?: boolean
+  live?: boolean
 }
 
 function PlaybackProgress({
   position,
   duration,
   compact = false,
+  live = false,
 }: PlaybackProgressProps) {
-  const percent =
-    duration != null && duration > 0
-      ? Math.min(100, Math.max(0, (position / duration) * 100))
-      : 0
   const hasDuration = duration != null && duration > 0
+  const percent = hasDuration
+    ? Math.min(100, Math.max(0, (position / duration) * 100))
+    : 0
+  const inset = compact ? 'px-3' : 'px-4'
 
   return (
     <div
-      className={`pointer-events-none select-none border-t border-white/5 ${
+      className={`pointer-events-none select-none border-t ${
         compact ? 'pb-2.5 pt-2' : 'pb-3 pt-2.5'
       }`}
-      aria-hidden
+      style={{ borderColor: 'color-mix(in srgb, var(--np-accent) 18%, transparent)' }}
+      role="progressbar"
+      aria-valuenow={Math.floor(position)}
+      aria-valuemin={0}
+      aria-valuemax={hasDuration ? Math.floor(duration) : undefined}
+      aria-label="Track progress"
     >
-      <div className="h-1 w-full overflow-hidden bg-white/10">
+      <div className={inset}>
+        <div className="ytmq-now-progress-track h-1.5 w-full overflow-hidden rounded-full">
+          <div
+            className={`ytmq-now-progress-fill relative h-full rounded-full transition-[width] duration-300 ease-linear ${
+              live ? 'is-live' : ''
+            }`}
+            style={{ width: `${percent}%` }}
+          />
+        </div>
         <div
-          className="h-full bg-violet-400/90 transition-[width] duration-300 ease-linear"
-          style={{ width: hasDuration ? `${percent}%` : '0%' }}
-        />
-      </div>
-      <div
-        className={`mt-1 flex justify-between text-[10px] tabular-nums text-zinc-400 ${
-          compact ? 'px-3' : 'px-4'
-        }`}
-      >
-        <span>{formatPlaybackTime(position)}</span>
-        <span>{hasDuration ? formatPlaybackTime(duration) : '--:--'}</span>
+          className="mt-1.5 flex justify-between text-[10px] tabular-nums"
+          style={{ color: 'color-mix(in srgb, var(--np-accent-light) 55%, #a1a1aa)' }}
+        >
+          <span>{formatPlaybackTime(position)}</span>
+          <span>{hasDuration ? formatPlaybackTime(duration) : '--:--'}</span>
+        </div>
       </div>
     </div>
   )
@@ -283,9 +321,9 @@ function ControlButton({
   const base =
     'inline-flex items-center justify-center rounded-full text-white transition active:scale-95 disabled:opacity-40 disabled:active:scale-100'
   const tone = primary
-    ? 'bg-violet-500 hover:bg-violet-400 shadow-md shadow-violet-500/30'
+    ? 'ytmq-now-control-primary'
     : 'bg-white/10 hover:bg-white/20'
-  const ring = active ? ' ring-2 ring-violet-300/70' : ''
+  const ring = active ? ' ytmq-now-control-active' : ''
   return (
     <button
       type="button"

@@ -20,6 +20,24 @@ export function formatPlaybackTime(seconds: number): string {
   return `${minutes}:${secs.toString().padStart(2, '0')}`
 }
 
+/** Parses m:ss or h:mm:ss labels from the YT Music player bar. */
+export function parsePlaybackTimeLabel(label: string): number | null {
+  const trimmed = label.trim()
+  if (!trimmed) return null
+
+  const parts = trimmed.split(':').map((part) => Number.parseInt(part, 10))
+  if (parts.some((part) => !Number.isFinite(part) || part < 0)) return null
+
+  if (parts.length === 2) {
+    return parts[0]! * 60 + parts[1]!
+  }
+  if (parts.length === 3) {
+    return parts[0]! * 3600 + parts[1]! * 60 + parts[2]!
+  }
+
+  return null
+}
+
 export function playbackChannelName(roomId: string) {
   return `ytmq-playback:${roomId}`
 }
