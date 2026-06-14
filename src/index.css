@@ -246,9 +246,14 @@ body {
   animation: ytmq-added-sheen 0.9s var(--ease-out-soft) 0.05s both;
 }
 
-/* Page transition wrapper */
+/* Page transition wrapper.
+   Uses `backwards` (not `both`) on purpose: keeping the final `translateY(0)`
+   around would leave an identity transform on this element, which makes it a
+   containing block for `position: fixed` descendants (e.g. the bottom nav) and
+   stops them sticking to the viewport while scrolling. `backwards` still avoids
+   the initial flash but releases the transform once the entry finishes. */
 .ytmq-page {
-  animation: ytmq-fade-up 0.45s var(--ease-out-soft) both;
+  animation: ytmq-fade-up 0.45s var(--ease-out-soft) backwards;
 }
 
 /* Tab content swap transition */

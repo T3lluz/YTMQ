@@ -8,13 +8,19 @@ import { SharePanel } from '../components/SharePanel'
 import { TabBar, type RoomTab } from '../components/TabBar'
 import { ToastStack } from '../components/ToastStack'
 import { ListenersBadge, ParticipantList } from '../components/ParticipantList'
+import { HostAdminPanel } from '../components/HostAdminPanel'
 import { useQueue } from '../hooks/useQueue'
 import { useToast } from '../hooks/useToast'
 import { useRoomSettings } from '../hooks/useRoomSettings'
 import { useRoomPresence } from '../hooks/useRoomPresence'
 import { getClientId } from '../lib/clientId'
 import { getNickname, setNickname } from '../lib/nickname'
-import { fetchRoom, verifyRoomPassword, type RoomInfo } from '../lib/room'
+import {
+  fetchRoom,
+  getHostToken,
+  verifyRoomPassword,
+  type RoomInfo,
+} from '../lib/room'
 
 function CenteredScreen({ children }: { children: React.ReactNode }) {
   return (
@@ -139,12 +145,15 @@ export function Room() {
     [roomId],
   )
 
+  const hostToken = roomId ? getHostToken(roomId) : null
+  const isHost = Boolean(hostToken)
+
   const settings = useRoomSettings(roomId ?? '', room ?? undefined)
 
   const { participants, onlineCount, status } = useRoomPresence(roomId ?? '', {
     clientId,
     nickname,
-    heartbeat: accessGranted && !roomError,
+    heartbeat: (accessGranted || isHost) && !roomError,
   })
 
   const { items, loading, error, busyId, addTrack, removeItem } = useQueue(
@@ -212,8 +221,8 @@ export function Room() {
 
   const activeRoomId = roomId
 
-  // Password gate (direct-link access).
-  if (settings.has_password && !accessGranted) {
+  // Password gate (direct-link access) — the host owns the room, so skip it.
+  if (settings.has_password && !accessGranted && !isHost) {
     return (
       <PasswordGate
         code={room.code}
@@ -251,7 +260,7 @@ export function Room() {
     )
   }
 
-  if (status === 'locked') {
+  if (status === 'locked' && !isHost) {
     return (
       <CenteredScreen>
         <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-500/15 text-2xl">
@@ -288,8 +297,13 @@ export function Room() {
       {needsNickname && <NicknamePrompt onSubmit={completeNickname} />}
 
       <div className="mb-3 flex items-center justify-between gap-2">
-        <span className="text-xs font-medium text-zinc-500">
+        <span className="flex items-center gap-2 text-xs font-medium text-zinc-500">
           Lobby <span className="font-mono text-zinc-300">{room.code}</span>
+          {isHost && (
+            <span className="rounded-full border border-violet-500/40 bg-violet-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-violet-200">
+              Host
+            </span>
+          )}
         </span>
         <ListenersBadge count={onlineCount} />
       </div>
@@ -298,7 +312,7 @@ export function Room() {
         <NowPlaying
           roomId={roomId}
           compact
-          canControl={settings.allow_guest_controls}
+          canControl={isHost || settings.allow_guest_controls}
         />
       </div>
 
@@ -326,7 +340,7 @@ export function Room() {
       {tab === 'queue' && (
         <section className="ytmq-tab-panel flex flex-1 flex-col gap-3">
           <h2 className="text-lg font-semibold">Queue</h2>
-          {!settings.allow_guest_remove && (
+          {!settings.allow_guest_remove && !isHost && (
             <p className="text-xs text-zinc-500">
               The host has disabled removing tracks.
             </p>
@@ -335,7 +349,7 @@ export function Room() {
             items={items}
             loading={loading}
             busyId={busyId}
-            editable={settings.allow_guest_remove}
+            editable={isHost || settings.allow_guest_remove}
             onRemove={(id) => {
               const target = items.find((item) => item.id === id)
               void removeItem(id)
@@ -364,18 +378,31 @@ export function Room() {
             />
           </label>
 
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">
-                In this room
-              </h3>
-              <span className="text-xs text-zinc-500">{onlineCount} online</span>
-            </div>
-            <ParticipantList
+          {isHost && hostToken ? (
+            <HostAdminPanel
+              roomId={roomId}
+              hostToken={hostToken}
+              settings={settings}
               participants={participants}
-              emptyHint="You're the first one here. Share the code below!"
+              onlineCount={onlineCount}
+              onToast={showToast}
             />
-          </div>
+          ) : (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">
+                  In this room
+                </h3>
+                <span className="text-xs text-zinc-500">
+                  {onlineCount} online
+                </span>
+              </div>
+              <ParticipantList
+                participants={participants}
+                emptyHint="You're the first one here. Share the code below!"
+              />
+            </div>
+          )}
 
           <SharePanel
             roomId={roomId}
