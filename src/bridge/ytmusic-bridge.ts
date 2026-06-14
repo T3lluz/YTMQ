@@ -7,6 +7,10 @@ import {
   tickNextSongToast,
   type NextSongInfo,
 } from './nextSongToast'
+import {
+  createPlayedQueueCleanup,
+  type SharedQueueRow,
+} from './playedQueueCleanup'
 
 type BridgeParams = {
   roomId: string
@@ -1111,31 +1115,48 @@ async function runBridge() {
 
   const playbackChannel = supabase.channel(`ytmq-playback:${roomId}`)
 
-  async function removePlayedFromSharedQueue(videoId: string) {
-    const { data, error } = await supabase
-      .from('queue_items')
-      .select('id, created_at, title')
-      .eq('room_id', roomId)
-      .eq('video_id', videoId)
-      .order('position', { ascending: true })
-      .limit(1)
-
-    if (error || !data?.[0]) return
-
-    const row = data[0] as { id: string; created_at: string; title?: string }
-    if (!isInPlaybackSession(row.created_at, playbackSince)) return
-
-    skipYtmRemoveIds.add(row.id)
-    syncedIds.delete(row.id)
-    const { error: deleteError } = await supabase
-      .from('queue_items')
-      .delete()
-      .eq('id', row.id)
-
-    if (!deleteError) {
-      log('Removed played track from shared queue', videoId, row.title)
-    }
-  }
+  const removePlayedFromSharedQueue = createPlayedQueueCleanup({
+    findByVideoId: async (videoId) => {
+      const { data, error } = await supabase
+        .from('queue_items')
+        .select('id, created_at, title, video_id, insert_mode')
+        .eq('room_id', roomId)
+        .eq('video_id', videoId)
+        .order('position', { ascending: true })
+        .limit(1)
+      if (error) return null
+      return (data?.[0] as SharedQueueRow | undefined) ?? null
+    },
+    findTopOfQueue: async () => {
+      const { data, error } = await supabase
+        .from('queue_items')
+        .select('id, created_at, title, video_id, insert_mode')
+        .eq('room_id', roomId)
+        .order('position', { ascending: true })
+        .limit(1)
+      if (error) return null
+      return (data?.[0] as SharedQueueRow | undefined) ?? null
+    },
+    deleteRow: async (row, reason) => {
+      skipYtmRemoveIds.add(row.id)
+      syncedIds.delete(row.id)
+      const { error } = await supabase
+        .from('queue_items')
+        .delete()
+        .eq('id', row.id)
+      if (error) {
+        // Roll back the skip flag so a later DELETE event (e.g. from a manual
+        // remove) still triggers the YT Music cleanup.
+        skipYtmRemoveIds.delete(row.id)
+        log('Shared queue delete failed', reason, row.id, error.message)
+        return false
+      }
+      log('Removed shared queue row', reason, row.video_id ?? row.id, row.title)
+      return true
+    },
+    isInPlaybackSession: (createdAt) =>
+      isInPlaybackSession(createdAt, playbackSince),
+  })
 
   function publishNowPlaying() {
     const current = readNowPlaying()
