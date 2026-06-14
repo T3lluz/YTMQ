@@ -1,5 +1,7 @@
 import { supabase } from './supabase'
 
+export type QueueInsertMode = 'play_next' | 'queue'
+
 export type QueueItem = {
   id: string
   room_id: string
@@ -10,6 +12,7 @@ export type QueueItem = {
   thumbnail_url: string
   added_by: string
   created_at: string
+  insert_mode: QueueInsertMode
 }
 
 export type AddTrackInput = {
@@ -18,6 +21,7 @@ export type AddTrackInput = {
   channel_title?: string
   thumbnail_url?: string
   added_by?: string
+  insert_mode?: QueueInsertMode
 }
 
 export async function fetchQueueItems(roomId: string): Promise<QueueItem[]> {
@@ -58,6 +62,7 @@ export async function addTrackToQueue(
       channel_title: track.channel_title ?? '',
       thumbnail_url: track.thumbnail_url ?? '',
       added_by: track.added_by ?? '',
+      insert_mode: track.insert_mode ?? 'play_next',
     })
     .select()
     .single()

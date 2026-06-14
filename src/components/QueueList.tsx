@@ -1,8 +1,43 @@
 import {
   defaultThumbnail,
   ytMusicWatchUrl,
+  type QueueInsertMode,
   type QueueItem,
 } from '../lib/queue'
+
+function InsertModeBadge({ mode }: { mode: QueueInsertMode }) {
+  const isPlayNext = mode === 'play_next'
+  const label = isPlayNext ? 'Play next' : 'Queue'
+  const classes = isPlayNext
+    ? 'border-violet-500/40 bg-violet-500/15 text-violet-200'
+    : 'border-zinc-600/70 bg-zinc-800/80 text-zinc-200'
+
+  return (
+    <span
+      className={`inline-flex shrink-0 items-center rounded-md border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide leading-none ${classes}`}
+      aria-label={`Added as ${label.toLowerCase()}`}
+    >
+      {label}
+    </span>
+  )
+}
+
+function MetaLine({
+  mode,
+  addedBy,
+}: {
+  mode: QueueInsertMode
+  addedBy?: string
+}) {
+  return (
+    <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-xs text-zinc-500">
+      <InsertModeBadge mode={mode} />
+      {addedBy && (
+        <span className="min-w-0 truncate">Added by {addedBy}</span>
+      )}
+    </div>
+  )
+}
 
 type QueueListProps = {
   items: QueueItem[]
@@ -58,11 +93,10 @@ export function QueueList({
               <p className="truncate text-sm text-zinc-400">
                 {item.channel_title || 'Unknown artist'}
               </p>
-              {item.added_by && (
-                <p className="truncate text-xs text-zinc-500">
-                  Added by {item.added_by}
-                </p>
-              )}
+              <MetaLine
+                mode={item.insert_mode ?? 'play_next'}
+                addedBy={item.added_by}
+              />
             </div>
             <div className="flex shrink-0 flex-col gap-1">
               {showYtMusicLink && (

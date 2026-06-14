@@ -100,10 +100,16 @@ export function Room() {
       {tab === 'search' && (
         <SearchTab
           nickname={nickname}
-          onAdd={async (track) => {
-            await addTrack(track)
+          onAdd={async (track, mode) => {
+            await addTrack(track, mode)
           }}
-          onAdded={(title) => showToast(`Added “${title}”`)}
+          onAdded={(title, mode) =>
+            showToast(
+              mode === 'queue'
+                ? `Added to queue: “${title}”`
+                : `Playing next: “${title}”`,
+            )
+          }
         />
       )}
 
