@@ -186,25 +186,28 @@ export async function fetchLyrics(
   // (lyrics already in LRCLIB's database) resolves in a single round-trip.
   // `/api/get` is intentionally avoided here because it can synchronously hit
   // slow external sources; it's used only as a last resort below.
-  const [cachedSettled, searchSettled] = await Promise.allSettled([
-    signatureParams
-      ? (getJson(`${LRCLIB_BASE}/get-cached?${signatureParams}`, signal) as Promise<
-          LrclibRecord | null
-        >)
-      : Promise.resolve<LrclibRecord | null>(null),
-    getJson(`${LRCLIB_BASE}/search?${searchParams}`, signal) as Promise<
-      LrclibRecord[] | null
-    >,
-  ])
+  const cachedPromise: Promise<LrclibRecord | null> = signatureParams
+    ? (getJson(`${LRCLIB_BASE}/get-cached?${signatureParams}`, signal).catch(
+        () => null,
+      ) as Promise<LrclibRecord | null>)
+    : Promise.resolve(null)
+  const searchPromise: Promise<LrclibRecord[] | null> = getJson(
+    `${LRCLIB_BASE}/search?${searchParams}`,
+    signal,
+  ).catch(() => null) as Promise<LrclibRecord[] | null>
 
+  // The exact-signature `get-cached` hit is the strongest possible match, so if
+  // it already carries time-synced lyrics, return it immediately instead of
+  // waiting on the parallel keyword search — shaving a round-trip in the common
+  // case where the track is already in LRCLIB.
+  const cached = await cachedPromise
+  if (signal?.aborted) throw new DOMException('Aborted', 'AbortError')
+  if (cached?.syncedLyrics) return toLyrics(cached)
+
+  const searchSettled = await searchPromise
   if (signal?.aborted) throw new DOMException('Aborted', 'AbortError')
 
-  const cached =
-    cachedSettled.status === 'fulfilled' ? cachedSettled.value : null
-  const searchResults =
-    searchSettled.status === 'fulfilled' && Array.isArray(searchSettled.value)
-      ? searchSettled.value
-      : []
+  const searchResults = Array.isArray(searchSettled) ? searchSettled : []
 
   const fast = pickBest(
     [...(cached ? [cached] : []), ...searchResults],

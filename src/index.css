@@ -688,3 +688,103 @@ body {
     transform: none;
   }
 }
+
+/* Fullscreen, edge-to-edge lyrics for the immersive desktop experience. */
+.ytmq-lyrics-fullscreen {
+  border-left: none;
+  border-right: none;
+  border-top: none;
+  box-shadow: none;
+  border-radius: 0;
+}
+
+/* ----------------------------------------------------------------------------
+   Lyrics "Up next" banner (fullscreen desktop)
+   ------------------------------------------------------------------------- */
+
+.ytmq-upnext {
+  backdrop-filter: blur(12px) saturate(150%);
+  -webkit-backdrop-filter: blur(12px) saturate(150%);
+  box-shadow:
+    0 18px 48px rgba(0, 0, 0, 0.5),
+    0 0 0 1px var(--np-accent-ring),
+    0 0 28px var(--np-accent-glow);
+  animation: ytmq-upnext-in 580ms cubic-bezier(0.22, 1.5, 0.36, 1) both;
+  will-change: transform, opacity;
+}
+
+.ytmq-upnext.is-leaving {
+  animation: ytmq-upnext-out 520ms cubic-bezier(0.5, -0.5, 0.7, 0.25) both;
+}
+
+.ytmq-upnext-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  background: var(--np-accent-light);
+  box-shadow: 0 0 8px var(--np-accent-light);
+  animation: ytmq-upnext-pulse 1.2s ease-in-out infinite;
+}
+
+.ytmq-upnext-bar {
+  background: linear-gradient(
+    90deg,
+    var(--np-accent),
+    var(--np-accent-light)
+  );
+  transition: transform 0.25s linear;
+}
+
+@keyframes ytmq-upnext-in {
+  0% {
+    opacity: 0;
+    transform: translateY(-150%) scale(0.92);
+  }
+  62% {
+    opacity: 1;
+    transform: translateY(10%) scale(1.015);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes ytmq-upnext-out {
+  0% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  22% {
+    transform: translateY(12%) scale(1.01);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-160%) scale(0.9);
+  }
+}
+
+@keyframes ytmq-upnext-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.55;
+    transform: scale(0.82);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ytmq-upnext {
+    animation: ytmq-fade-up 0.3s ease both;
+  }
+  .ytmq-upnext.is-leaving {
+    animation: none;
+    opacity: 0;
+  }
+  .ytmq-upnext-dot {
+    animation: none;
+  }
+}

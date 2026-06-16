@@ -21,6 +21,50 @@ type CacheEntry = { lyrics: Lyrics | null; error: boolean }
 // now-playing broadcast) doesn't re-fetch the same lyrics.
 const cache = new Map<string, CacheEntry>()
 
+// In-flight lookups keyed by videoId so a prefetch and the live view (or two
+// prefetches) never fire the same request twice.
+const inFlight = new Map<string, Promise<void>>()
+
+/**
+ * Resolve lyrics for a track into the shared cache. Used by both the live
+ * hook and {@link prefetchLyrics}; resolves once the cache holds an entry.
+ */
+function loadLyrics(track: LyricsTrack, signal?: AbortSignal): Promise<void> {
+  const { videoId } = track
+  if (!videoId || cache.has(videoId)) return Promise.resolve()
+
+  const existing = inFlight.get(videoId)
+  if (existing) return existing
+
+  const request = fetchLyrics(
+    { title: track.title, artist: track.artist, duration: track.duration },
+    signal,
+  )
+    .then((result) => {
+      cache.set(videoId, { lyrics: result, error: false })
+    })
+    .catch((err: unknown) => {
+      if (err instanceof DOMException && err.name === 'AbortError') return
+      cache.set(videoId, { lyrics: null, error: true })
+    })
+    .finally(() => {
+      inFlight.delete(videoId)
+    })
+
+  inFlight.set(videoId, request)
+  return request
+}
+
+/**
+ * Warm the lyrics cache for an upcoming track so it's already resolved by the
+ * time it becomes the now-playing song — making the lyrics appear instantly on
+ * track change instead of after a fresh network round-trip.
+ */
+export function prefetchLyrics(track: LyricsTrack | null): void {
+  if (!track?.videoId) return
+  void loadLyrics(track)
+}
+
 export function useLyrics(track: LyricsTrack | null): UseLyricsResult {
   const videoId = track?.videoId ?? ''
   // Bump to re-render once an async lookup resolves and updates the cache.
@@ -37,30 +81,21 @@ export function useLyrics(track: LyricsTrack | null): UseLyricsResult {
   useEffect(() => {
     if (!videoId || cache.has(videoId)) return
 
-    const controller = new AbortController()
+    let cancelled = false
     const current = trackRef.current
 
-    fetchLyrics(
-      {
-        title: current?.title ?? '',
-        artist: current?.artist ?? '',
-        duration: current?.duration,
-      },
-      controller.signal,
-    )
-      .then((result) => {
-        if (controller.signal.aborted) return
-        cache.set(videoId, { lyrics: result, error: false })
-        bump((n) => n + 1)
-      })
-      .catch((err: unknown) => {
-        if (controller.signal.aborted) return
-        if (err instanceof DOMException && err.name === 'AbortError') return
-        cache.set(videoId, { lyrics: null, error: true })
-        bump((n) => n + 1)
-      })
+    void loadLyrics({
+      videoId,
+      title: current?.title ?? '',
+      artist: current?.artist ?? '',
+      duration: current?.duration,
+    }).then(() => {
+      if (!cancelled) bump((n) => n + 1)
+    })
 
-    return () => controller.abort()
+    return () => {
+      cancelled = true
+    }
   }, [videoId])
 
   if (!videoId) return { lyrics: null, status: 'idle' }
