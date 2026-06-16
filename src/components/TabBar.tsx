@@ -1,4 +1,4 @@
-export type RoomTab = 'search' | 'queue' | 'room' | 'admin'
+export type RoomTab = 'search' | 'queue' | 'lyrics' | 'room' | 'admin'
 
 type TabBarProps = {
   active: RoomTab
@@ -41,6 +41,27 @@ function QueueIcon({ className }: { className?: string }) {
       <path d="M3 6h13M3 12h9M3 18h9" />
       <path d="M18 12v8" />
       <path d="M21.5 15.5 18 12l-3.5 3.5" />
+    </svg>
+  )
+}
+
+function LyricsIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden
+    >
+      <path d="M4 6h9" />
+      <path d="M4 12h6" />
+      <path d="M4 18h5" />
+      <circle cx="17" cy="15" r="3" />
+      <path d="M20 15V5l-3 1" />
     </svg>
   )
 }
@@ -92,10 +113,17 @@ type TabDef = {
 const baseTabs: TabDef[] = [
   { id: 'search', label: 'Search', Icon: SearchIcon },
   { id: 'queue', label: 'Queue', Icon: QueueIcon },
+  { id: 'lyrics', label: 'Lyrics', Icon: LyricsIcon },
   { id: 'room', label: 'Room', Icon: RoomIcon },
 ]
 
 const adminTab: TabDef = { id: 'admin', label: 'Admin', Icon: AdminIcon }
+
+const gridColsByCount: Record<number, string> = {
+  3: 'grid-cols-3',
+  4: 'grid-cols-4',
+  5: 'grid-cols-5',
+}
 
 export function TabBar({ active, onChange, queueCount, showAdmin }: TabBarProps) {
   const tabs = showAdmin ? [...baseTabs, adminTab] : baseTabs
@@ -103,7 +131,7 @@ export function TabBar({ active, onChange, queueCount, showAdmin }: TabBarProps)
     0,
     tabs.findIndex((tab) => tab.id === active),
   )
-  const gridColsClass = tabs.length === 4 ? 'grid-cols-4' : 'grid-cols-3'
+  const gridColsClass = gridColsByCount[tabs.length] ?? 'grid-cols-4'
 
   return (
     <nav
