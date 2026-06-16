@@ -295,8 +295,10 @@ export function Room() {
 
   return (
     <main
-      className={`mx-auto flex min-h-dvh w-full flex-col p-4 pb-[calc(6rem+env(safe-area-inset-bottom))] transition-[max-width] duration-300 ease-out ${
-        tab === 'lyrics' ? 'max-w-lg md:max-w-3xl lg:max-w-4xl' : 'max-w-lg'
+      className={`mx-auto flex w-full flex-col p-4 pb-[calc(6rem+env(safe-area-inset-bottom))] transition-[max-width] duration-300 ease-out ${
+        tab === 'lyrics'
+          ? 'h-dvh max-w-lg md:max-w-3xl lg:max-w-4xl'
+          : 'min-h-dvh max-w-lg'
       }`}
     >
       {needsNickname && <NicknamePrompt onSubmit={completeNickname} />}

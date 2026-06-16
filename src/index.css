@@ -616,6 +616,14 @@ body {
   height: 0;
 }
 
+/* Reserve half the lyrics viewport above the first line and below the last,
+   so any line (including the first/last) can sit at the vertical centre. */
+.ytmq-lyrics-spacer {
+  height: 50%;
+  min-height: 4rem;
+  flex: 0 0 auto;
+}
+
 .ytmq-lyric-line {
   margin: 0;
   padding: 0.28em 0.1em;
