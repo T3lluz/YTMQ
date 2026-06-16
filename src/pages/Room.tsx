@@ -11,6 +11,7 @@ import { ToastStack } from '../components/ToastStack'
 import { ListenersBadge, ParticipantList } from '../components/ParticipantList'
 import { HostAdminPanel } from '../components/HostAdminPanel'
 import { useQueue } from '../hooks/useQueue'
+import { useIsDesktop } from '../hooks/useMediaQuery'
 import { useToast } from '../hooks/useToast'
 import { useRoomSettings } from '../hooks/useRoomSettings'
 import { useRoomPresence } from '../hooks/useRoomPresence'
@@ -140,6 +141,8 @@ export function Room() {
     roomId ? !getNickname(roomId) : false,
   )
   const { toasts, showToast, dismiss } = useToast()
+  const isDesktop = useIsDesktop()
+  const lyricsFullscreen = tab === 'lyrics' && isDesktop
 
   const clientId = useMemo(
     () => (roomId ? getClientId(roomId) : ''),
@@ -295,10 +298,8 @@ export function Room() {
 
   return (
     <main
-      className={`mx-auto flex w-full flex-col p-4 pb-[calc(6rem+env(safe-area-inset-bottom))] transition-[max-width] duration-300 ease-out ${
-        tab === 'lyrics'
-          ? 'h-dvh max-w-lg md:max-w-3xl lg:max-w-4xl'
-          : 'min-h-dvh max-w-lg'
+      className={`mx-auto flex w-full max-w-lg flex-col p-4 pb-[calc(6rem+env(safe-area-inset-bottom))] ${
+        tab === 'lyrics' && !lyricsFullscreen ? 'h-dvh' : 'min-h-dvh'
       }`}
     >
       {needsNickname && <NicknamePrompt onSubmit={completeNickname} />}
@@ -371,7 +372,13 @@ export function Room() {
         </section>
       )}
 
-      {tab === 'lyrics' && <LyricsView roomId={roomId} />}
+      {tab === 'lyrics' && (
+        <LyricsView
+          roomId={roomId}
+          fullscreen={lyricsFullscreen}
+          queueItems={items}
+        />
+      )}
 
       {tab === 'room' && (
         <section className="ytmq-tab-panel flex flex-1 flex-col gap-4">

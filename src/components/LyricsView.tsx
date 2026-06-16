@@ -1,18 +1,27 @@
-import { useLayoutEffect, useRef, type CSSProperties } from 'react'
-import { hqThumbnail } from '../lib/queue'
+import { useEffect, useLayoutEffect, useMemo, useRef, type CSSProperties } from 'react'
+import { hqThumbnail, type QueueItem } from '../lib/queue'
 import { useNowPlaying } from '../hooks/useNowPlaying'
 import { usePlaybackPosition } from '../hooks/usePlaybackPosition'
 import { useImagePalette } from '../hooks/useImagePalette'
-import { useLyrics, type LyricsStatus } from '../hooks/useLyrics'
+import { useLyrics, prefetchLyrics, type LyricsStatus } from '../hooks/useLyrics'
 import { activeLineIndex, type LyricLine, type Lyrics } from '../lib/lyrics'
 import { paletteCssVars } from '../lib/imagePalette'
+import { LyricsUpNext, type UpNextTrack } from './LyricsUpNext'
 
 type LyricsViewProps = {
   roomId: string
+  /** Render edge-to-edge over the whole viewport (desktop immersion). */
+  fullscreen?: boolean
+  /** Shared queue, used to preview + prefetch the upcoming track. */
+  queueItems?: QueueItem[]
 }
 
 /** Connected wrapper: pulls live now-playing + lyrics data for the room. */
-export function LyricsView({ roomId }: LyricsViewProps) {
+export function LyricsView({
+  roomId,
+  fullscreen = false,
+  queueItems = [],
+}: LyricsViewProps) {
   const { nowPlaying, connected, stale } = useNowPlaying(roomId)
   const isPlaying = nowPlaying?.state === 'playing'
   const live = Boolean(isPlaying && !stale && nowPlaying)
@@ -32,6 +41,35 @@ export function LyricsView({ roomId }: LyricsViewProps) {
       : null,
   )
 
+  // The first queued track that isn't the one already playing is "up next".
+  const upNext = useMemo<UpNextTrack | null>(() => {
+    const currentId = nowPlaying?.videoId
+    const next = queueItems.find((item) => item.video_id !== currentId)
+    if (!next) return null
+    return {
+      videoId: next.video_id,
+      title: next.title,
+      artist: next.channel_title ?? '',
+      thumbnailUrl: next.thumbnail_url || hqThumbnail(next.video_id),
+    }
+  }, [queueItems, nowPlaying?.videoId])
+
+  // Warm the lyrics cache for the upcoming track so it renders instantly the
+  // moment it becomes the now-playing song.
+  useEffect(() => {
+    if (!upNext) return
+    prefetchLyrics({
+      videoId: upNext.videoId,
+      title: upNext.title,
+      artist: upNext.artist,
+    })
+  }, [upNext])
+
+  const remaining =
+    nowPlaying?.duration != null && nowPlaying.duration > 0
+      ? nowPlaying.duration - position
+      : Number.POSITIVE_INFINITY
+
   return (
     <LyricsScreen
       hasTrack={Boolean(nowPlaying)}
@@ -47,6 +85,9 @@ export function LyricsView({ roomId }: LyricsViewProps) {
       duration={nowPlaying?.duration}
       status={status}
       lyrics={lyrics}
+      fullscreen={fullscreen}
+      upNext={upNext}
+      remaining={remaining}
     />
   )
 }
@@ -65,6 +106,9 @@ export type LyricsScreenProps = {
   duration?: number
   status: LyricsStatus
   lyrics: Lyrics | null
+  fullscreen?: boolean
+  upNext?: UpNextTrack | null
+  remaining?: number
 }
 
 /** Pure presentation — easy to render with mock data for visual testing. */
@@ -82,6 +126,9 @@ export function LyricsScreen({
   duration,
   status,
   lyrics,
+  fullscreen = false,
+  upNext = null,
+  remaining = Number.POSITIVE_INFINITY,
 }: LyricsScreenProps) {
   if (!hasTrack) {
     return (
@@ -102,10 +149,20 @@ export function LyricsScreen({
 
   return (
     <section
-      className="ytmq-lyrics ytmq-tab-panel relative isolate flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border"
+      className={`ytmq-lyrics ytmq-tab-panel relative isolate flex min-h-0 flex-1 flex-col overflow-hidden border ${
+        fullscreen
+          ? 'ytmq-lyrics-fullscreen fixed inset-0 z-40 rounded-none bg-zinc-950'
+          : 'rounded-2xl'
+      }`}
       style={{ ...themeStyle, borderColor: 'var(--np-accent-border)' }}
       aria-label={`Lyrics for ${title}`}
     >
+      <LyricsUpNext
+        track={upNext}
+        remaining={remaining}
+        live={live}
+        enabled={fullscreen}
+      />
       {/* Abstract, blurry, palette-coloured moving background. */}
       <div
         aria-hidden
@@ -134,7 +191,13 @@ export function LyricsScreen({
         className="absolute inset-0 -z-[5] bg-zinc-950/10 backdrop-blur-md"
       />
 
-      <div className="relative flex min-h-0 flex-1 flex-col gap-4 p-4 sm:flex-row sm:gap-5 sm:p-5 md:gap-7 md:p-6">
+      <div
+        className={`relative flex min-h-0 flex-1 flex-col gap-4 p-4 sm:flex-row sm:gap-5 sm:p-5 md:gap-7 md:p-6 ${
+          fullscreen
+            ? 'pt-[calc(env(safe-area-inset-top)+1rem)] pb-[calc(5rem+env(safe-area-inset-bottom))] lg:px-12'
+            : ''
+        }`}
+      >
         <ArtPanel
           art={art}
           title={title}
