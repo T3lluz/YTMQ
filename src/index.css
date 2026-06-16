@@ -261,6 +261,65 @@ body {
   animation: ytmq-fade-up 0.32s var(--ease-out-soft) both;
 }
 
+/* ----------------------------------------------------------------------------
+   Tab bar icon entrance animations
+   Each plays once when the user switches to that tab.
+   --------------------------------------------------------------------------- */
+
+@keyframes ytmq-tab-spin-y {
+  from { transform: perspective(80px) rotateY(0deg); }
+  to   { transform: perspective(80px) rotateY(360deg); }
+}
+
+@keyframes ytmq-tab-bounce {
+  0%   { transform: translateY(0); }
+  35%  { transform: translateY(-6px); }
+  58%  { transform: translateY(-2px); }
+  78%  { transform: translateY(-4px); }
+  100% { transform: translateY(0); }
+}
+
+@keyframes ytmq-tab-wiggle {
+  0%   { transform: rotate(0deg); }
+  20%  { transform: rotate(-14deg); }
+  50%  { transform: rotate(12deg); }
+  75%  { transform: rotate(-7deg); }
+  100% { transform: rotate(0deg); }
+}
+
+@keyframes ytmq-tab-pop {
+  0%   { transform: scale(1); }
+  38%  { transform: scale(1.24); }
+  62%  { transform: scale(0.91); }
+  84%  { transform: scale(1.07); }
+  100% { transform: scale(1); }
+}
+
+@keyframes ytmq-tab-shake {
+  0%   { transform: rotate(0deg) scale(1); }
+  18%  { transform: rotate(-9deg) scale(1.12); }
+  42%  { transform: rotate(9deg) scale(1.09); }
+  64%  { transform: rotate(-5deg) scale(1.04); }
+  82%  { transform: rotate(4deg) scale(1.02); }
+  100% { transform: rotate(0deg) scale(1); }
+}
+
+.ytmq-tab-icon-anim-search {
+  animation: ytmq-tab-spin-y 0.42s var(--ease-out-soft) both;
+}
+.ytmq-tab-icon-anim-queue {
+  animation: ytmq-tab-bounce 0.48s var(--ease-spring) both;
+}
+.ytmq-tab-icon-anim-lyrics {
+  animation: ytmq-tab-wiggle 0.5s var(--ease-spring) both;
+}
+.ytmq-tab-icon-anim-room {
+  animation: ytmq-tab-pop 0.48s var(--ease-spring) both;
+}
+.ytmq-tab-icon-anim-admin {
+  animation: ytmq-tab-shake 0.52s var(--ease-spring) both;
+}
+
 /* Spinner */
 .ytmq-spinner {
   display: inline-block;

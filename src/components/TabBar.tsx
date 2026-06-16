@@ -1,3 +1,5 @@
+import { useState } from 'react'
+
 export type RoomTab = 'search' | 'queue' | 'lyrics' | 'room' | 'admin'
 
 type TabBarProps = {
@@ -133,6 +135,15 @@ export function TabBar({ active, onChange, queueCount, showAdmin }: TabBarProps)
   )
   const gridColsClass = gridColsByCount[tabs.length] ?? 'grid-cols-4'
 
+  // Each tab gets a counter; incrementing it remounts the animation wrapper,
+  // which restarts the CSS entrance animation for that icon.
+  const [activationKeys, setActivationKeys] = useState<Record<string, number>>({})
+
+  const handleChange = (id: RoomTab) => {
+    setActivationKeys((prev) => ({ ...prev, [id]: (prev[id] ?? 0) + 1 }))
+    onChange(id)
+  }
+
   return (
     <nav
       className="fixed inset-x-0 bottom-0 z-50 border-t border-white/10 bg-zinc-950/65 pb-[env(safe-area-inset-bottom)] shadow-[0_-8px_30px_rgba(0,0,0,0.35)] backdrop-blur-2xl backdrop-saturate-150"
@@ -151,22 +162,29 @@ export function TabBar({ active, onChange, queueCount, showAdmin }: TabBarProps)
         {tabs.map((tab) => {
           const isActive = active === tab.id
           const { Icon } = tab
+          const animKey = activationKeys[tab.id] ?? 0
           return (
             <button
               key={tab.id}
               type="button"
-              onClick={() => onChange(tab.id)}
+              onClick={() => handleChange(tab.id)}
               className={`group flex min-h-14 flex-col items-center justify-center gap-1 px-2 text-xs font-medium transition-colors ${
                 isActive ? 'text-violet-400' : 'text-zinc-500 hover:text-zinc-300'
               }`}
               aria-current={isActive ? 'page' : undefined}
             >
               <span className="relative">
-                <Icon
-                  className={`h-5 w-5 transition-transform duration-300 ease-out ${
-                    isActive ? '-translate-y-0.5 scale-110' : 'group-active:scale-90'
-                  }`}
-                />
+                {/* Remount this span on each activation to replay the CSS animation */}
+                <span
+                  key={animKey}
+                  className={`inline-block${animKey > 0 ? ` ytmq-tab-icon-anim-${tab.id}` : ''}`}
+                >
+                  <Icon
+                    className={`h-5 w-5 transition-transform duration-300 ease-out ${
+                      isActive ? '-translate-y-0.5 scale-110' : 'group-active:scale-90'
+                    }`}
+                  />
+                </span>
                 {tab.id === 'queue' && queueCount > 0 && (
                   <span
                     key={queueCount}
