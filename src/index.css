@@ -586,6 +586,12 @@ body {
   min-height: 22rem;
 }
 
+/* Size lyric text against the lyrics column width (not the viewport) so it
+   reads well both in the narrow mobile column and the wider desktop panel. */
+.ytmq-lyrics-pane {
+  container-type: inline-size;
+}
+
 /* Fade the lyrics in/out at the top and bottom edges so the active line sits
    in a clean reading band in the middle of the column. */
 .ytmq-lyrics-scroll {
@@ -613,9 +619,9 @@ body {
 .ytmq-lyric-line {
   margin: 0;
   padding: 0.28em 0.1em;
-  font-size: clamp(1.05rem, 1rem + 1.1vw, 1.65rem);
+  font-size: 1.2rem;
   font-weight: 700;
-  line-height: 1.25;
+  line-height: 1.28;
   letter-spacing: -0.01em;
   transform-origin: left center;
   transition:
@@ -624,6 +630,32 @@ body {
     transform 0.45s var(--ease-out-soft),
     text-shadow 0.45s ease,
     filter 0.45s ease;
+}
+
+@container (min-width: 340px) {
+  .ytmq-lyric-line {
+    font-size: 1.35rem;
+  }
+}
+@container (min-width: 460px) {
+  .ytmq-lyric-line {
+    font-size: 1.6rem;
+  }
+}
+@container (min-width: 600px) {
+  .ytmq-lyric-line {
+    font-size: 1.9rem;
+    line-height: 1.22;
+  }
+}
+
+.ytmq-lyrics-plain {
+  font-size: 1rem;
+}
+@container (min-width: 460px) {
+  .ytmq-lyrics-plain {
+    font-size: 1.05rem;
+  }
 }
 
 .ytmq-lyric-line.is-upcoming {
