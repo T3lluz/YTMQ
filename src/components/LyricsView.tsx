@@ -292,12 +292,15 @@ function SyncedLyrics({ lines, position, dim }: SyncedLyricsProps) {
   return (
     <div
       ref={scrollRef}
-      className={`ytmq-lyrics-scroll h-full overflow-y-auto px-1 py-[38%] sm:py-[42%] ${
+      className={`ytmq-lyrics-scroll h-full overflow-y-auto px-1 ${
         dim ? 'opacity-70' : ''
       }`}
       role="list"
       aria-label="Synced lyrics"
     >
+      {/* Half-viewport spacers let the first and last lines scroll to the
+          vertical centre, so the active line is always centred. */}
+      <div aria-hidden className="ytmq-lyrics-spacer" />
       {lines.map((line, index) => {
         const state =
           index === activeIndex
@@ -318,6 +321,7 @@ function SyncedLyrics({ lines, position, dim }: SyncedLyricsProps) {
           </p>
         )
       })}
+      <div aria-hidden className="ytmq-lyrics-spacer" />
     </div>
   )
 }
