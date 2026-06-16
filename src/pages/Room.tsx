@@ -294,27 +294,35 @@ export function Room() {
   }
 
   return (
-    <main className="mx-auto flex min-h-dvh max-w-lg flex-col p-4 pb-[calc(6rem+env(safe-area-inset-bottom))]">
+    <main
+      className={`mx-auto flex w-full flex-col p-4 pb-[calc(6rem+env(safe-area-inset-bottom))] transition-[max-width] duration-300 ease-out ${
+        tab === 'lyrics'
+          ? 'h-dvh max-w-lg md:max-w-3xl lg:max-w-4xl'
+          : 'min-h-dvh max-w-lg'
+      }`}
+    >
       {needsNickname && <NicknamePrompt onSubmit={completeNickname} />}
 
-      <div className="mb-3 flex items-center justify-between gap-2">
-        <span className="flex items-center gap-2 text-xs font-medium text-zinc-500">
-          Lobby <span className="font-mono text-zinc-300">{room.code}</span>
-          {isHost && (
-            <span className="rounded-full border border-violet-500/40 bg-violet-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-violet-200">
-              Host
-            </span>
-          )}
-        </span>
-        <ListenersBadge count={onlineCount} />
-      </div>
+      <div className="mx-auto flex w-full max-w-lg flex-col">
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <span className="flex items-center gap-2 text-xs font-medium text-zinc-500">
+            Lobby <span className="font-mono text-zinc-300">{room.code}</span>
+            {isHost && (
+              <span className="rounded-full border border-violet-500/40 bg-violet-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-violet-200">
+                Host
+              </span>
+            )}
+          </span>
+          <ListenersBadge count={onlineCount} />
+        </div>
 
-      <div className="mb-4">
-        <NowPlaying
-          roomId={roomId}
-          compact
-          canControl={isHost || settings.allow_guest_controls}
-        />
+        <div className="mb-4">
+          <NowPlaying
+            roomId={roomId}
+            compact
+            canControl={isHost || settings.allow_guest_controls}
+          />
+        </div>
       </div>
 
       {tab === 'search' && (

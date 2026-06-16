@@ -1,25 +1,25 @@
-import { useLayoutEffect, useRef } from 'react'
+import { useLayoutEffect, useRef, type CSSProperties } from 'react'
 import { hqThumbnail } from '../lib/queue'
 import { useNowPlaying } from '../hooks/useNowPlaying'
 import { usePlaybackPosition } from '../hooks/usePlaybackPosition'
 import { useImagePalette } from '../hooks/useImagePalette'
-import { useLyrics } from '../hooks/useLyrics'
-import { activeLineIndex, type LyricLine } from '../lib/lyrics'
+import { useLyrics, type LyricsStatus } from '../hooks/useLyrics'
+import { activeLineIndex, type LyricLine, type Lyrics } from '../lib/lyrics'
 import { paletteCssVars } from '../lib/imagePalette'
 
 type LyricsViewProps = {
   roomId: string
 }
 
+/** Connected wrapper: pulls live now-playing + lyrics data for the room. */
 export function LyricsView({ roomId }: LyricsViewProps) {
   const { nowPlaying, connected, stale } = useNowPlaying(roomId)
   const isPlaying = nowPlaying?.state === 'playing'
-  const live = isPlaying && !stale && Boolean(nowPlaying)
+  const live = Boolean(isPlaying && !stale && nowPlaying)
   const position = usePlaybackPosition(nowPlaying ?? null, live)
 
   const art = nowPlaying ? hqThumbnail(nowPlaying.videoId) : undefined
   const { palette, ready: paletteReady } = useImagePalette(art)
-  const themeStyle = paletteCssVars(palette)
 
   const { lyrics, status } = useLyrics(
     nowPlaying
@@ -32,9 +32,60 @@ export function LyricsView({ roomId }: LyricsViewProps) {
       : null,
   )
 
-  if (!nowPlaying) {
+  return (
+    <LyricsScreen
+      hasTrack={Boolean(nowPlaying)}
+      connected={connected}
+      title={nowPlaying?.title ?? ''}
+      artist={nowPlaying?.artist ?? ''}
+      art={art}
+      themeStyle={paletteCssVars(palette)}
+      paletteReady={paletteReady}
+      live={live}
+      stale={stale}
+      position={position}
+      duration={nowPlaying?.duration}
+      status={status}
+      lyrics={lyrics}
+    />
+  )
+}
+
+export type LyricsScreenProps = {
+  hasTrack: boolean
+  connected: boolean
+  title: string
+  artist: string
+  art?: string
+  themeStyle: CSSProperties
+  paletteReady: boolean
+  live: boolean
+  stale: boolean
+  position: number
+  duration?: number
+  status: LyricsStatus
+  lyrics: Lyrics | null
+}
+
+/** Pure presentation — easy to render with mock data for visual testing. */
+export function LyricsScreen({
+  hasTrack,
+  connected,
+  title,
+  artist,
+  art,
+  themeStyle,
+  paletteReady,
+  live,
+  stale,
+  position,
+  duration,
+  status,
+  lyrics,
+}: LyricsScreenProps) {
+  if (!hasTrack) {
     return (
-      <section className="ytmq-tab-panel flex flex-1 flex-col">
+      <section className="ytmq-tab-panel flex min-h-[18rem] flex-1 flex-col">
         <h2 className="sr-only">Lyrics</h2>
         <div className="flex flex-1 flex-col items-center justify-center gap-3 rounded-2xl border border-zinc-800 bg-zinc-900/40 p-8 text-center">
           <LyricsGlyph className="h-10 w-10 text-zinc-600" />
@@ -53,7 +104,7 @@ export function LyricsView({ roomId }: LyricsViewProps) {
     <section
       className="ytmq-lyrics ytmq-tab-panel relative isolate flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border"
       style={{ ...themeStyle, borderColor: 'var(--np-accent-border)' }}
-      aria-label={`Lyrics for ${nowPlaying.title}`}
+      aria-label={`Lyrics for ${title}`}
     >
       {/* Abstract, blurry, palette-coloured moving background. */}
       <div
@@ -83,14 +134,14 @@ export function LyricsView({ roomId }: LyricsViewProps) {
         className="absolute inset-0 -z-[5] bg-zinc-950/10 backdrop-blur-md"
       />
 
-      <div className="relative flex min-h-0 flex-1 flex-col gap-4 p-4 sm:flex-row sm:gap-5 sm:p-5">
+      <div className="relative flex min-h-0 flex-1 flex-col gap-4 p-4 sm:flex-row sm:gap-5 sm:p-5 md:gap-7 md:p-6">
         <ArtPanel
           art={art}
-          title={nowPlaying.title}
-          artist={nowPlaying.artist}
+          title={title}
+          artist={artist}
           position={position}
-          duration={nowPlaying.duration}
-          live={Boolean(live)}
+          duration={duration}
+          live={live}
         />
         <div className="ytmq-lyrics-pane relative min-h-0 flex-1">
           <LyricsBody
@@ -121,26 +172,26 @@ function ArtPanel({ art, title, artist, position, duration, live }: ArtPanelProp
     : 0
 
   return (
-    <div className="flex shrink-0 flex-col items-center gap-3 sm:w-40 sm:items-start md:w-52">
-      <div className="ytmq-lyrics-art-wrap relative">
+    <div className="flex shrink-0 flex-row items-center gap-3 sm:w-40 sm:flex-col sm:items-start md:w-52 lg:w-64">
+      <div className="ytmq-lyrics-art-wrap relative shrink-0 sm:w-full">
         <img
           src={art}
           alt=""
           crossOrigin="anonymous"
-          className={`ytmq-now-art aspect-square w-28 rounded-2xl object-cover shadow-2xl ring-1 ring-white/15 sm:w-full ${
+          className={`ytmq-now-art aspect-square h-16 w-16 rounded-xl object-cover shadow-2xl ring-1 ring-white/15 sm:h-auto sm:w-full sm:rounded-2xl ${
             live ? 'is-live' : ''
           }`}
         />
       </div>
-      <div className="min-w-0 text-center sm:text-left">
+      <div className="min-w-0 flex-1 sm:flex-none sm:max-w-full">
         <p
-          className="flex items-center justify-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider sm:justify-start"
+          className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider"
           style={{ color: 'color-mix(in srgb, var(--np-accent-light) 88%, white)' }}
         >
           {live && <Equalizer />}
           {live ? 'Now playing' : 'Paused'}
         </p>
-        <p className="truncate text-sm font-semibold text-white drop-shadow sm:text-base">
+        <p className="truncate text-sm font-semibold text-white drop-shadow sm:text-base md:text-lg">
           {title}
         </p>
         {artist && (
@@ -162,8 +213,8 @@ function ArtPanel({ art, title, artist, position, duration, live }: ArtPanelProp
 }
 
 type LyricsBodyProps = {
-  status: ReturnType<typeof useLyrics>['status']
-  lyrics: ReturnType<typeof useLyrics>['lyrics']
+  status: LyricsStatus
+  lyrics: Lyrics | null
   position: number
   stale: boolean
 }
@@ -231,8 +282,7 @@ function SyncedLyrics({ lines, position, dim }: SyncedLyricsProps) {
     if (!scroll || !el) return
 
     const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    const target =
-      el.offsetTop - scroll.clientHeight / 2 + el.clientHeight / 2
+    const target = el.offsetTop - scroll.clientHeight / 2 + el.clientHeight / 2
     scroll.scrollTo({
       top: Math.max(0, target),
       behavior: reduce ? 'auto' : 'smooth',
@@ -242,12 +292,15 @@ function SyncedLyrics({ lines, position, dim }: SyncedLyricsProps) {
   return (
     <div
       ref={scrollRef}
-      className={`ytmq-lyrics-scroll h-full overflow-y-auto px-1 py-[35%] sm:py-[40%] ${
+      className={`ytmq-lyrics-scroll h-full overflow-y-auto px-1 ${
         dim ? 'opacity-70' : ''
       }`}
       role="list"
       aria-label="Synced lyrics"
     >
+      {/* Half-viewport spacers let the first and last lines scroll to the
+          vertical centre, so the active line is always centred. */}
+      <div aria-hidden className="ytmq-lyrics-spacer" />
       {lines.map((line, index) => {
         const state =
           index === activeIndex
@@ -268,6 +321,7 @@ function SyncedLyrics({ lines, position, dim }: SyncedLyricsProps) {
           </p>
         )
       })}
+      <div aria-hidden className="ytmq-lyrics-spacer" />
     </div>
   )
 }
@@ -278,7 +332,7 @@ function PlainLyrics({ text }: { text: string }) {
       <p className="mb-3 text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
         Live sync unavailable for this track
       </p>
-      <pre className="whitespace-pre-wrap font-sans text-base leading-relaxed text-zinc-200">
+      <pre className="ytmq-lyrics-plain whitespace-pre-wrap font-sans leading-relaxed text-zinc-200">
         {text}
       </pre>
     </div>
