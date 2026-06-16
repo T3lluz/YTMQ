@@ -9,9 +9,16 @@ import { supabase } from '../lib/supabase'
 
 const STALE_MS = 15_000
 
+// Remember the most recent track per room so a freshly-mounted consumer (e.g.
+// switching to the Lyrics tab) can render the current song immediately instead
+// of waiting up to ~2s for the next broadcast from the bridge.
+const lastNowPlaying = new Map<string, NowPlaying>()
+
 export function useNowPlaying(roomId: string) {
-  const [nowPlaying, setNowPlaying] = useState<NowPlaying | null>(null)
-  const [connected, setConnected] = useState(false)
+  const [nowPlaying, setNowPlaying] = useState<NowPlaying | null>(
+    () => lastNowPlaying.get(roomId) ?? null,
+  )
+  const [connected, setConnected] = useState(() => lastNowPlaying.has(roomId))
   const [now, setNow] = useState(() => Date.now())
 
   useEffect(() => {
@@ -33,7 +40,7 @@ export function useNowPlaying(roomId: string) {
           title: p.title,
           artist: p.artist ?? '',
         })
-        setNowPlaying({
+        const next: NowPlaying = {
           videoId: p.videoId,
           title: p.title,
           artist: p.artist ?? '',
@@ -49,7 +56,9 @@ export function useNowPlaying(roomId: string) {
               ? p.duration
               : undefined,
           state: p.state,
-        })
+        }
+        lastNowPlaying.set(roomId, next)
+        setNowPlaying(next)
         setConnected(true)
       })
       .subscribe()
