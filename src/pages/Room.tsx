@@ -377,6 +377,7 @@ export function Room() {
           roomId={roomId}
           fullscreen={lyricsFullscreen}
           queueItems={items}
+          canControl={isHost || settings.allow_guest_controls}
         />
       )}
 

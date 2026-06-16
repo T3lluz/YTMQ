@@ -698,6 +698,25 @@ body {
   border-radius: 0;
 }
 
+/* Bigger, more generously spaced lyrics for the immersive desktop layout. */
+.ytmq-lyrics-fullscreen .ytmq-lyric-line {
+  font-size: clamp(1.6rem, 2.3vw, 2.6rem);
+  line-height: 1.24;
+  padding: 0.34em 0.1em;
+}
+
+.ytmq-lyrics-fullscreen .ytmq-lyric-line.is-upcoming {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.ytmq-lyrics-fullscreen .ytmq-lyric-line.is-sung {
+  color: rgba(255, 255, 255, 0.34);
+}
+
+.ytmq-lyrics-fullscreen .ytmq-lyric-line.is-active {
+  transform: scale(1.02);
+}
+
 /* ----------------------------------------------------------------------------
    Lyrics "Up next" banner (fullscreen desktop)
    ------------------------------------------------------------------------- */

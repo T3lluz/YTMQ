@@ -1,4 +1,12 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, type CSSProperties } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+} from 'react'
 import { hqThumbnail, type QueueItem } from '../lib/queue'
 import { useNowPlaying } from '../hooks/useNowPlaying'
 import { usePlaybackPosition } from '../hooks/usePlaybackPosition'
@@ -6,6 +14,8 @@ import { useImagePalette } from '../hooks/useImagePalette'
 import { useLyrics, prefetchLyrics, type LyricsStatus } from '../hooks/useLyrics'
 import { activeLineIndex, type LyricLine, type Lyrics } from '../lib/lyrics'
 import { paletteCssVars } from '../lib/imagePalette'
+import { sendPlaybackControl } from '../lib/bridgeChannel'
+import { formatPlaybackTime, type PlaybackAction } from '../lib/playback'
 import { LyricsUpNext, type UpNextTrack } from './LyricsUpNext'
 
 type LyricsViewProps = {
@@ -14,6 +24,8 @@ type LyricsViewProps = {
   fullscreen?: boolean
   /** Shared queue, used to preview + prefetch the upcoming track. */
   queueItems?: QueueItem[]
+  /** Whether the viewer may drive playback from the lyrics screen. */
+  canControl?: boolean
 }
 
 /** Connected wrapper: pulls live now-playing + lyrics data for the room. */
@@ -21,11 +33,34 @@ export function LyricsView({
   roomId,
   fullscreen = false,
   queueItems = [],
+  canControl = false,
 }: LyricsViewProps) {
   const { nowPlaying, connected, stale } = useNowPlaying(roomId)
   const isPlaying = nowPlaying?.state === 'playing'
   const live = Boolean(isPlaying && !stale && nowPlaying)
   const position = usePlaybackPosition(nowPlaying ?? null, live)
+
+  const [pendingAction, setPendingAction] = useState<PlaybackAction | null>(null)
+  const pendingTimer = useRef<number | null>(null)
+  useEffect(
+    () => () => {
+      if (pendingTimer.current !== null) window.clearTimeout(pendingTimer.current)
+    },
+    [],
+  )
+  const onControl = useCallback(
+    (action: PlaybackAction) => {
+      if (!roomId) return
+      sendPlaybackControl(roomId, action)
+      setPendingAction(action)
+      if (pendingTimer.current !== null) window.clearTimeout(pendingTimer.current)
+      pendingTimer.current = window.setTimeout(
+        () => setPendingAction(null),
+        700,
+      )
+    },
+    [roomId],
+  )
 
   const art = nowPlaying ? hqThumbnail(nowPlaying.videoId) : undefined
   const { palette, ready: paletteReady } = useImagePalette(art)
@@ -88,6 +123,10 @@ export function LyricsView({
       fullscreen={fullscreen}
       upNext={upNext}
       remaining={remaining}
+      isPlaying={isPlaying}
+      controlsEnabled={canControl && connected && !stale}
+      pendingAction={pendingAction}
+      onControl={onControl}
     />
   )
 }
@@ -109,6 +148,10 @@ export type LyricsScreenProps = {
   fullscreen?: boolean
   upNext?: UpNextTrack | null
   remaining?: number
+  isPlaying?: boolean
+  controlsEnabled?: boolean
+  pendingAction?: PlaybackAction | null
+  onControl?: (action: PlaybackAction) => void
 }
 
 /** Pure presentation — easy to render with mock data for visual testing. */
@@ -129,6 +172,10 @@ export function LyricsScreen({
   fullscreen = false,
   upNext = null,
   remaining = Number.POSITIVE_INFINITY,
+  isPlaying = false,
+  controlsEnabled = false,
+  pendingAction = null,
+  onControl,
 }: LyricsScreenProps) {
   if (!hasTrack) {
     return (
@@ -192,11 +239,11 @@ export function LyricsScreen({
       />
 
       <div
-        className={`relative flex min-h-0 flex-1 flex-col gap-4 p-4 sm:flex-row sm:gap-5 sm:p-5 md:gap-7 md:p-6 ${
+        className={
           fullscreen
-            ? 'pt-[calc(env(safe-area-inset-top)+1rem)] pb-[calc(5rem+env(safe-area-inset-bottom))] lg:px-12'
-            : ''
-        }`}
+            ? 'relative flex min-h-0 flex-1 flex-col items-center justify-center gap-7 px-6 pt-[calc(env(safe-area-inset-top)+1.5rem)] pb-[calc(5.5rem+env(safe-area-inset-bottom))] sm:flex-row sm:items-center sm:gap-10 sm:px-8 lg:gap-16 lg:px-16 xl:px-24'
+            : 'relative flex min-h-0 flex-1 flex-col gap-4 p-4 sm:flex-row sm:gap-5 sm:p-5 md:gap-7 md:p-6'
+        }
       >
         <ArtPanel
           art={art}
@@ -205,8 +252,17 @@ export function LyricsScreen({
           position={position}
           duration={duration}
           live={live}
+          fullscreen={fullscreen}
+          isPlaying={isPlaying}
+          controlsEnabled={controlsEnabled}
+          pendingAction={pendingAction}
+          onControl={onControl}
         />
-        <div className="ytmq-lyrics-pane relative min-h-0 flex-1">
+        <div
+          className={`ytmq-lyrics-pane relative min-h-0 flex-1 ${
+            fullscreen ? 'w-full self-stretch' : ''
+          }`}
+        >
           <LyricsBody
             status={status}
             lyrics={lyrics}
@@ -226,13 +282,111 @@ type ArtPanelProps = {
   position: number
   duration?: number
   live: boolean
+  fullscreen?: boolean
+  isPlaying?: boolean
+  controlsEnabled?: boolean
+  pendingAction?: PlaybackAction | null
+  onControl?: (action: PlaybackAction) => void
 }
 
-function ArtPanel({ art, title, artist, position, duration, live }: ArtPanelProps) {
+function ArtPanel({
+  art,
+  title,
+  artist,
+  position,
+  duration,
+  live,
+  fullscreen = false,
+  isPlaying = false,
+  controlsEnabled = false,
+  pendingAction = null,
+  onControl,
+}: ArtPanelProps) {
   const hasDuration = duration != null && duration > 0
   const percent = hasDuration
     ? Math.min(100, Math.max(0, (position / duration) * 100))
     : 0
+
+  if (fullscreen) {
+    return (
+      <div className="flex w-full shrink-0 flex-col items-center gap-5 sm:w-60 md:w-72 lg:w-80 xl:w-[22rem]">
+        <div className="ytmq-lyrics-art-wrap relative w-44 sm:w-full">
+          <img
+            src={art}
+            alt=""
+            crossOrigin="anonymous"
+            className={`ytmq-now-art aspect-square w-full rounded-2xl object-cover shadow-2xl ring-1 ring-white/15 ${
+              live ? 'is-live' : ''
+            }`}
+          />
+        </div>
+
+        <div className="w-full min-w-0 text-center sm:text-left">
+          <p
+            className="flex items-center justify-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider sm:justify-start"
+            style={{ color: 'color-mix(in srgb, var(--np-accent-light) 88%, white)' }}
+          >
+            {live && <Equalizer />}
+            {live ? 'Now playing' : 'Paused'}
+          </p>
+          <p className="truncate text-2xl font-bold text-white drop-shadow lg:text-3xl">
+            {title}
+          </p>
+          {artist && (
+            <p className="truncate text-base text-zinc-300 lg:text-lg">{artist}</p>
+          )}
+        </div>
+
+        <div className="w-full">
+          <div className="ytmq-now-progress-track h-1.5 w-full overflow-hidden rounded-full">
+            <div
+              className={`ytmq-now-progress-fill h-full rounded-full transition-[width] duration-300 ease-linear ${
+                live && percent > 1 && percent < 99 ? 'is-live' : ''
+              }`}
+              style={{ width: `${percent}%` }}
+            />
+          </div>
+          <div
+            className="mt-1.5 flex justify-between text-xs tabular-nums"
+            style={{ color: 'color-mix(in srgb, var(--np-accent-light) 60%, #a1a1aa)' }}
+          >
+            <span>{formatPlaybackTime(position)}</span>
+            <span>{hasDuration ? formatPlaybackTime(duration) : '--:--'}</span>
+          </div>
+        </div>
+
+        {onControl && (
+          <div className="flex items-center gap-4">
+            <TransportButton
+              label="Previous"
+              disabled={!controlsEnabled}
+              active={pendingAction === 'prev'}
+              onClick={() => onControl('prev')}
+            >
+              <PrevIcon />
+            </TransportButton>
+            <TransportButton
+              label={isPlaying ? 'Pause' : 'Play'}
+              primary
+              disabled={!controlsEnabled}
+              active={pendingAction === 'play' || pendingAction === 'pause'}
+              onClick={() => onControl(isPlaying ? 'pause' : 'play')}
+            >
+              {isPlaying ? <PauseIcon /> : <PlayIcon />}
+            </TransportButton>
+            <TransportButton
+              label="Next"
+              disabled={!controlsEnabled}
+              active={pendingAction === 'next'}
+              onClick={() => onControl('next')}
+            >
+              <NextIcon />
+            </TransportButton>
+          </div>
+        )}
+      </div>
+    )
+  }
 
   return (
     <div className="flex shrink-0 flex-row items-center gap-3 sm:w-40 sm:flex-col sm:items-start md:w-52 lg:w-64">
@@ -435,6 +589,74 @@ function Equalizer() {
       <span className="ytmq-eq-bar" />
       <span className="ytmq-eq-bar" />
     </span>
+  )
+}
+
+type TransportButtonProps = {
+  label: string
+  onClick: () => void
+  disabled?: boolean
+  active?: boolean
+  primary?: boolean
+  children: React.ReactNode
+}
+
+function TransportButton({
+  label,
+  onClick,
+  disabled,
+  active,
+  primary,
+  children,
+}: TransportButtonProps) {
+  const size = primary ? 'h-14 w-14' : 'h-11 w-11'
+  const tone = primary
+    ? 'ytmq-now-control-primary'
+    : 'bg-white/10 hover:bg-white/20'
+  const ring = active ? ' ytmq-now-control-active' : ''
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      onClick={onClick}
+      disabled={disabled}
+      className={`inline-flex items-center justify-center rounded-full text-white transition active:scale-95 disabled:opacity-40 disabled:active:scale-100 ${tone} ${size}${ring}`}
+    >
+      {children}
+    </button>
+  )
+}
+
+function PrevIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden className="h-5 w-5">
+      <path d="M7 6h2v12H7zM10 12l9-6v12z" />
+    </svg>
+  )
+}
+
+function NextIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden className="h-5 w-5">
+      <path d="M15 6h2v12h-2zM5 6v12l9-6z" />
+    </svg>
+  )
+}
+
+function PlayIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden className="h-6 w-6">
+      <path d="M8 5v14l11-7z" />
+    </svg>
+  )
+}
+
+function PauseIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden className="h-6 w-6">
+      <path d="M6 5h4v14H6zM14 5h4v14h-4z" />
+    </svg>
   )
 }
 
