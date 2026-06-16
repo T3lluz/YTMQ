@@ -120,3 +120,8 @@ export function ytMusicWatchUrl(videoId: string) {
 export function defaultThumbnail(videoId: string) {
   return `https://i.ytimg.com/vi/${videoId}/default.jpg`
 }
+
+/** Larger 480×360 album art for immersive views (lyrics, etc.). */
+export function hqThumbnail(videoId: string) {
+  return `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`
+}
