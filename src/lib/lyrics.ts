@@ -127,17 +127,19 @@ function splitArtistTitle(title: string): { artist?: string; title: string } {
 }
 
 async function getJson(url: string, signal?: AbortSignal): Promise<unknown> {
-  const res = await fetch(url, {
-    signal,
-    headers: {
-      Accept: 'application/json',
-      // LRCLIB explicitly allows this header cross-origin; identifies the app.
-      'Lrclib-Client': 'YTMQ (https://github.com/T3lluz/YTMQ)',
-    },
-  })
+  // Only the `Accept` header is sent (a CORS-safelisted header) so requests
+  // stay "simple" and skip the OPTIONS preflight round-trip — every saved
+  // round-trip makes lyrics show up faster.
+  const res = await fetch(url, { signal, headers: { Accept: 'application/json' } })
   if (res.status === 404) return null
   if (!res.ok) throw new Error(`LRCLIB request failed (${res.status})`)
   return res.json()
+}
+
+function hasContent(record: LrclibRecord | null): record is LrclibRecord {
+  return Boolean(
+    record && (record.syncedLyrics || record.plainLyrics || record.instrumental),
+  )
 }
 
 function scoreRecord(record: LrclibRecord, duration?: number): number {
@@ -167,57 +169,83 @@ export async function fetchLyrics(
 
   if (!title) return null
 
-  // 1) Precise signature lookup (requires album + duration to be most useful).
-  if (artist && query.duration && query.duration > 0) {
-    const params = new URLSearchParams({
-      artist_name: artist,
-      track_name: title,
-      album_name: query.album?.trim() || title,
-      duration: String(Math.round(query.duration)),
-    })
-    try {
-      const hit = (await getJson(`${LRCLIB_BASE}/get?${params}`, signal)) as
-        | LrclibRecord
-        | null
-      if (hit && (hit.syncedLyrics || hit.plainLyrics || hit.instrumental)) {
-        return toLyrics(hit)
-      }
-    } catch (err) {
-      if (isAbort(err)) throw err
-      // Network/CORS hiccup — fall through to search.
-    }
-  }
+  const hasSignature = Boolean(artist && query.duration && query.duration > 0)
+  const signatureParams = hasSignature
+    ? new URLSearchParams({
+        artist_name: artist,
+        track_name: title,
+        album_name: query.album?.trim() || title,
+        duration: String(Math.round(query.duration!)),
+      })
+    : null
 
-  // 2) Keyword search; pick the best-scoring record.
   const searchParams = new URLSearchParams({ track_name: title })
   if (artist) searchParams.set('artist_name', artist)
 
-  const results = (await getJson(
-    `${LRCLIB_BASE}/search?${searchParams}`,
-    signal,
-  )) as LrclibRecord[] | null
+  // Fire the two fast, internal-DB-only lookups in parallel so the common case
+  // (lyrics already in LRCLIB's database) resolves in a single round-trip.
+  // `/api/get` is intentionally avoided here because it can synchronously hit
+  // slow external sources; it's used only as a last resort below.
+  const [cachedSettled, searchSettled] = await Promise.allSettled([
+    signatureParams
+      ? (getJson(`${LRCLIB_BASE}/get-cached?${signatureParams}`, signal) as Promise<
+          LrclibRecord | null
+        >)
+      : Promise.resolve<LrclibRecord | null>(null),
+    getJson(`${LRCLIB_BASE}/search?${searchParams}`, signal) as Promise<
+      LrclibRecord[] | null
+    >,
+  ])
 
-  if (!Array.isArray(results) || results.length === 0) {
-    // Retry with a looser, single-field query when the narrow one is empty.
-    if (artist) {
-      const loose = (await getJson(
-        `${LRCLIB_BASE}/search?${new URLSearchParams({
-          q: `${title} ${artist}`,
-        })}`,
+  if (signal?.aborted) throw new DOMException('Aborted', 'AbortError')
+
+  const cached =
+    cachedSettled.status === 'fulfilled' ? cachedSettled.value : null
+  const searchResults =
+    searchSettled.status === 'fulfilled' && Array.isArray(searchSettled.value)
+      ? searchSettled.value
+      : []
+
+  const fast = pickBest(
+    [...(cached ? [cached] : []), ...searchResults],
+    query.duration,
+  )
+  if (fast) return toLyrics(fast)
+
+  // Last resort: the slower signature lookup that may pull from external
+  // sources, then a loose keyword search.
+  if (signatureParams) {
+    try {
+      const ext = (await getJson(
+        `${LRCLIB_BASE}/get?${signatureParams}`,
         signal,
-      )) as LrclibRecord[] | null
-      if (Array.isArray(loose) && loose.length > 0) {
-        return toLyrics(pickBest(loose, query.duration))
-      }
+      )) as LrclibRecord | null
+      if (hasContent(ext)) return toLyrics(ext)
+    } catch (err) {
+      if (isAbort(err)) throw err
     }
-    return null
   }
 
-  return toLyrics(pickBest(results, query.duration))
+  if (artist) {
+    const loose = (await getJson(
+      `${LRCLIB_BASE}/search?${new URLSearchParams({ q: `${title} ${artist}` })}`,
+      signal,
+    )) as LrclibRecord[] | null
+    const looseBest = pickBest(Array.isArray(loose) ? loose : [], query.duration)
+    if (looseBest) return toLyrics(looseBest)
+  }
+
+  return null
 }
 
-function pickBest(records: LrclibRecord[], duration?: number): LrclibRecord {
-  return records.reduce((best, current) =>
+/** Highest-scoring record that actually carries lyrics, or null if none do. */
+function pickBest(
+  records: LrclibRecord[],
+  duration?: number,
+): LrclibRecord | null {
+  const withContent = records.filter(hasContent)
+  if (withContent.length === 0) return null
+  return withContent.reduce((best, current) =>
     scoreRecord(current, duration) > scoreRecord(best, duration) ? current : best,
   )
 }
