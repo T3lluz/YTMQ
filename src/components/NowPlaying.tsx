@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { defaultThumbnail } from '../lib/queue'
 import { useNowPlaying } from '../hooks/useNowPlaying'
+import { usePlaybackPosition } from '../hooks/usePlaybackPosition'
 import { useImagePalette } from '../hooks/useImagePalette'
 import { sendPlaybackControl } from '../lib/bridgeChannel'
 import { paletteCssVars } from '../lib/imagePalette'
@@ -214,50 +215,6 @@ function Equalizer() {
       <span className="ytmq-eq-bar" />
     </span>
   )
-}
-
-function usePlaybackPosition(
-  nowPlaying: {
-    currentTime?: number
-    duration?: number
-    updatedAt: number
-    videoId: string
-  } | null,
-  live: boolean,
-) {
-  const [position, setPosition] = useState(() => nowPlaying?.currentTime ?? 0)
-
-  useEffect(() => {
-    if (!nowPlaying || !live) return
-
-    const compute = () => {
-      const base = nowPlaying.currentTime ?? 0
-      const elapsed = (Date.now() - nowPlaying.updatedAt) / 1000
-      let next = base + elapsed
-      if (nowPlaying.duration != null && nowPlaying.duration > 0) {
-        next = Math.min(next, nowPlaying.duration)
-      }
-      setPosition(next)
-    }
-
-    const immediate = window.setTimeout(compute, 0)
-    const id = window.setInterval(compute, 250)
-    return () => {
-      window.clearTimeout(immediate)
-      window.clearInterval(id)
-    }
-  }, [
-    nowPlaying?.videoId,
-    nowPlaying?.currentTime,
-    nowPlaying?.duration,
-    nowPlaying?.updatedAt,
-    live,
-    nowPlaying,
-  ])
-
-  if (!nowPlaying) return 0
-  if (!live) return nowPlaying.currentTime ?? 0
-  return position
 }
 
 type PlaybackProgressProps = {
