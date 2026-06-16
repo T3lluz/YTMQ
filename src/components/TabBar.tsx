@@ -23,8 +23,7 @@ function SearchIcon({ className }: { className?: string }) {
       aria-hidden
     >
       <circle cx="11" cy="11" r="7" />
-      {/* handle — swings from the lens-end pivot on activation */}
-      <path className="ytmq-icon-search-handle" d="m21 21-4.3-4.3" />
+      <path d="m21 21-4.3-4.3" />
     </svg>
   )
 }
@@ -42,7 +41,6 @@ function QueueIcon({ className }: { className?: string }) {
       aria-hidden
     >
       <path d="M3 6h13M3 12h9M3 18h9" />
-      {/* arrow — only this group bounces on activation */}
       <g className="ytmq-icon-queue-arrow">
         <path d="M18 12v8" />
         <path d="M21.5 15.5 18 12l-3.5 3.5" />
@@ -66,7 +64,6 @@ function LyricsIcon({ className }: { className?: string }) {
       <path d="M4 6h9" />
       <path d="M4 12h6" />
       <path d="M4 18h5" />
-      {/* note (head + stem) — only this group sways on activation */}
       <g className="ytmq-icon-lyrics-note">
         <circle cx="17" cy="15" r="3" />
         <path d="M20 15V5l-3 1" />
@@ -89,7 +86,6 @@ function RoomIcon({ className }: { className?: string }) {
     >
       <circle cx="9" cy="8" r="3.2" />
       <path d="M3.5 19a5.5 5.5 0 0 1 11 0" />
-      {/* secondary person — peeks in from the right on activation */}
       <g className="ytmq-icon-room-peeker">
         <path d="M16 6.2a3 3 0 0 1 0 5.6" />
         <path d="M17.5 19a5.5 5.5 0 0 0-2.7-4.7" />
@@ -111,8 +107,9 @@ function AdminIcon({ className }: { className?: string }) {
       aria-hidden
     >
       <path d="M12 3 4.5 6v5c0 4.4 3.1 7.6 7.5 9 4.4-1.4 7.5-4.6 7.5-9V6L12 3Z" />
-      {/* checkmark — pops in from scale(0) on activation */}
-      <path className="ytmq-icon-admin-check" d="m9 11.5 2 2 4-4" />
+      <path className="ytmq-icon-admin-check" pathLength={1} d="m9 11.5 2 2 4-4" />
+      <path className="ytmq-icon-admin-ex-1" pathLength={1} d="M9 9.5 15 13.5" />
+      <path className="ytmq-icon-admin-ex-2" pathLength={1} d="M15 9.5 9 13.5" />
     </svg>
   )
 }
