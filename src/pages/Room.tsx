@@ -4,6 +4,7 @@ import { NicknamePrompt } from '../components/NicknamePrompt'
 import { SearchTab } from '../components/SearchTab'
 import { QueueList } from '../components/QueueList'
 import { NowPlaying } from '../components/NowPlaying'
+import { LyricsView } from '../components/LyricsView'
 import { SharePanel } from '../components/SharePanel'
 import { TabBar, type RoomTab } from '../components/TabBar'
 import { ToastStack } from '../components/ToastStack'
@@ -361,6 +362,8 @@ export function Room() {
           />
         </section>
       )}
+
+      {tab === 'lyrics' && <LyricsView roomId={roomId} />}
 
       {tab === 'room' && (
         <section className="ytmq-tab-panel flex flex-1 flex-col gap-4">

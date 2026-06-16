@@ -573,3 +573,78 @@ body {
 .ytmq-now-control-active {
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--np-accent-light) 55%, white);
 }
+
+/* ----------------------------------------------------------------------------
+   Lyrics view
+   ------------------------------------------------------------------------- */
+
+.ytmq-lyrics {
+  transition:
+    border-color 0.7s ease,
+    box-shadow 0.7s ease;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+  min-height: 22rem;
+}
+
+/* Fade the lyrics in/out at the top and bottom edges so the active line sits
+   in a clean reading band in the middle of the column. */
+.ytmq-lyrics-scroll {
+  scrollbar-width: none;
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0%,
+    #000 16%,
+    #000 84%,
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0%,
+    #000 16%,
+    #000 84%,
+    transparent 100%
+  );
+}
+.ytmq-lyrics-scroll::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+.ytmq-lyric-line {
+  margin: 0;
+  padding: 0.28em 0.1em;
+  font-size: clamp(1.05rem, 1rem + 1.1vw, 1.65rem);
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+  transform-origin: left center;
+  transition:
+    color 0.45s ease,
+    opacity 0.45s ease,
+    transform 0.45s var(--ease-out-soft),
+    text-shadow 0.45s ease,
+    filter 0.45s ease;
+}
+
+.ytmq-lyric-line.is-upcoming {
+  color: rgba(255, 255, 255, 0.42);
+  filter: blur(0.25px);
+}
+
+.ytmq-lyric-line.is-sung {
+  color: rgba(255, 255, 255, 0.3);
+}
+
+.ytmq-lyric-line.is-active {
+  color: #fff;
+  transform: scale(1.04);
+  text-shadow:
+    0 1px 14px var(--np-accent-glow-strong),
+    0 1px 2px rgba(0, 0, 0, 0.45);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ytmq-lyric-line.is-active {
+    transform: none;
+  }
+}
