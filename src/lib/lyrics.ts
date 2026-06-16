@@ -215,30 +215,78 @@ export async function fetchLyrics(
   )
   if (fast) return toLyrics(fast)
 
-  // Last resort: the slower signature lookup that may pull from external
-  // sources, then a loose keyword search.
-  if (signatureParams) {
-    try {
-      const ext = (await getJson(
-        `${LRCLIB_BASE}/get?${signatureParams}`,
-        signal,
-      )) as LrclibRecord | null
-      if (hasContent(ext)) return toLyrics(ext)
-    } catch (err) {
-      if (isAbort(err)) throw err
-    }
-  }
+  // Fallbacks. The loose keyword search hits LRCLIB's internal DB and is fast,
+  // while `/api/get` can synchronously scrape slow external sources — so run
+  // them concurrently and return whichever resolves with lyrics first. This
+  // keeps the common "loose search finds it" path from waiting behind the slow
+  // signature lookup (the previous, sequential ordering was the main cause of
+  // the long waits on tracks that needed a fallback).
+  const fallbacks: Promise<Lyrics | null>[] = []
 
   if (artist) {
-    const loose = (await getJson(
-      `${LRCLIB_BASE}/search?${new URLSearchParams({ q: `${title} ${artist}` })}`,
-      signal,
-    )) as LrclibRecord[] | null
-    const looseBest = pickBest(Array.isArray(loose) ? loose : [], query.duration)
-    if (looseBest) return toLyrics(looseBest)
+    fallbacks.push(
+      (
+        getJson(
+          `${LRCLIB_BASE}/search?${new URLSearchParams({ q: `${title} ${artist}` })}`,
+          signal,
+        ) as Promise<LrclibRecord[] | null>
+      )
+        .then((loose) => {
+          const best = pickBest(Array.isArray(loose) ? loose : [], query.duration)
+          return best ? toLyrics(best) : null
+        })
+        .catch(() => null),
+    )
   }
 
-  return null
+  if (signatureParams) {
+    fallbacks.push(
+      (
+        getJson(`${LRCLIB_BASE}/get?${signatureParams}`, signal) as Promise<
+          LrclibRecord | null
+        >
+      )
+        .then((ext) => (hasContent(ext) ? toLyrics(ext) : null))
+        .catch(() => null),
+    )
+  }
+
+  const fallbackResult = await firstWithLyrics(fallbacks)
+  if (signal?.aborted) throw new DOMException('Aborted', 'AbortError')
+  return fallbackResult
+}
+
+/**
+ * Resolve with the first promise that yields non-null lyrics, or null once
+ * every promise has resolved without any. Lets a fast lookup win without
+ * waiting on a slower one running in parallel.
+ */
+function firstWithLyrics(
+  promises: Promise<Lyrics | null>[],
+): Promise<Lyrics | null> {
+  if (promises.length === 0) return Promise.resolve(null)
+  return new Promise((resolve) => {
+    let remaining = promises.length
+    let settled = false
+    for (const promise of promises) {
+      promise
+        .then((value) => {
+          if (settled) return
+          if (value) {
+            settled = true
+            resolve(value)
+            return
+          }
+          remaining -= 1
+          if (remaining === 0) resolve(null)
+        })
+        .catch(() => {
+          if (settled) return
+          remaining -= 1
+          if (remaining === 0) resolve(null)
+        })
+    }
+  })
 }
 
 /** Highest-scoring record that actually carries lyrics, or null if none do. */
@@ -251,10 +299,6 @@ function pickBest(
   return withContent.reduce((best, current) =>
     scoreRecord(current, duration) > scoreRecord(best, duration) ? current : best,
   )
-}
-
-function isAbort(err: unknown): boolean {
-  return err instanceof DOMException && err.name === 'AbortError'
 }
 
 /**
