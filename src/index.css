@@ -262,24 +262,20 @@ body {
 }
 
 /* ----------------------------------------------------------------------------
-   Tab bar icon entrance animations — part-only micro-interactions
-   The wrapper span (.ytmq-tab-icon-anim-{id}) carries no animation itself;
-   it acts purely as a CSS scope that remounts via React key, restarting the
-   one-shot animation on only the targeted SVG sub-element.
-   All animated paths/groups must have transform-box: fill-box so transform-
-   origin is relative to the element's own bounding box, not the SVG canvas.
+   Tab bar icon entrance animations
+   The wrapper span (.ytmq-tab-icon-anim-{id}) remounts via React key on each
+   tap, restarting the one-shot CSS animation on the targeted sub-element.
+   SVG sub-elements use transform-box: fill-box so transform-origin is
+   relative to the element's own bounding box, not the SVG viewport.
    --------------------------------------------------------------------------- */
 
-/* Search — handle swings from its lens-end pivot */
-@keyframes ytmq-search-handle-swing {
-  0%   { transform: rotate(0deg); }
-  32%  { transform: rotate(-20deg); }
-  62%  { transform: rotate(9deg); }
-  84%  { transform: rotate(-4deg); }
-  100% { transform: rotate(0deg); }
+/* Search — whole icon flips on vertical axis */
+@keyframes ytmq-tab-spin-y {
+  from { transform: perspective(80px) rotateY(0deg); }
+  to   { transform: perspective(80px) rotateY(360deg); }
 }
 
-/* Queue — arrow group bounces straight up */
+/* Queue — only the arrow group bounces up */
 @keyframes ytmq-queue-arrow-bounce {
   0%   { transform: translateY(0); }
   32%  { transform: translateY(-3px); }
@@ -288,7 +284,7 @@ body {
   100% { transform: translateY(0); }
 }
 
-/* Lyrics — note sways from its stem base */
+/* Lyrics — only the note group sways */
 @keyframes ytmq-lyrics-note-sway {
   0%   { transform: rotate(0deg); }
   28%  { transform: rotate(-14deg); }
@@ -297,50 +293,78 @@ body {
   100% { transform: rotate(0deg); }
 }
 
-/* Room — secondary person slides in from behind (right side) */
+/* Room — secondary person peeks right (out from behind), then springs back */
 @keyframes ytmq-room-peek {
-  0%   { transform: translateX(3px); }
-  48%  { transform: translateX(-1.5px); }
-  74%  { transform: translateX(-0.5px); }
+  0%   { transform: translateX(0); }
+  35%  { transform: translateX(4px); }
+  58%  { transform: translateX(1px); }
+  78%  { transform: translateX(3.5px); }
   100% { transform: translateX(0); }
 }
 
-/* Admin — checkmark pops in from nothing */
-@keyframes ytmq-admin-check-pop {
-  0%   { transform: scale(0); }
-  52%  { transform: scale(1.28); }
-  78%  { transform: scale(0.88); }
-  100% { transform: scale(1); }
+/* Admin — checkmark erases, X draws in, X erases, checkmark redraws.
+   pathLength="1" on each path normalises dasharray/dashoffset to [0,1]. */
+@keyframes ytmq-admin-check-out-in {
+  0%   { stroke-dashoffset: 0; }
+  22%  { stroke-dashoffset: 1; }
+  75%  { stroke-dashoffset: 1; }
+  100% { stroke-dashoffset: 0; }
+}
+@keyframes ytmq-admin-x-in-out {
+  0%   { stroke-dashoffset: 1; }
+  18%  { stroke-dashoffset: 1; }
+  38%  { stroke-dashoffset: 0; }
+  68%  { stroke-dashoffset: 0; }
+  88%  { stroke-dashoffset: 1; }
+  100% { stroke-dashoffset: 1; }
 }
 
-.ytmq-tab-icon-anim-search .ytmq-icon-search-handle {
-  transform-box: fill-box;
-  transform-origin: 0% 0%; /* lens end — top-left of handle's bounding box */
-  animation: ytmq-search-handle-swing 0.44s var(--ease-spring) both;
+/* Search: animate the whole wrapper span */
+.ytmq-tab-icon-anim-search {
+  animation: ytmq-tab-spin-y 0.7s var(--ease-out-soft) both;
 }
 
+/* Queue: only arrow sub-group */
 .ytmq-tab-icon-anim-queue .ytmq-icon-queue-arrow {
   transform-box: fill-box;
   transform-origin: center;
   animation: ytmq-queue-arrow-bounce 0.48s var(--ease-spring) both;
 }
 
+/* Lyrics: only note sub-group */
 .ytmq-tab-icon-anim-lyrics .ytmq-icon-lyrics-note {
   transform-box: fill-box;
-  transform-origin: 50% 90%; /* bottom of note head — natural sway pivot */
+  transform-origin: 50% 90%;
   animation: ytmq-lyrics-note-sway 0.52s var(--ease-spring) both;
 }
 
+/* Room: only secondary-person sub-group */
 .ytmq-tab-icon-anim-room .ytmq-icon-room-peeker {
   transform-box: fill-box;
   transform-origin: center;
-  animation: ytmq-room-peek 0.48s var(--ease-spring) both;
+  animation: ytmq-room-peek 0.75s var(--ease-spring) both;
 }
 
+/* Admin: base stroke-dash state (hidden X lines, visible checkmark) */
+.ytmq-icon-admin-check {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 0;
+}
+.ytmq-icon-admin-ex-1,
+.ytmq-icon-admin-ex-2 {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+}
+
+/* Admin: animated morph sequences */
 .ytmq-tab-icon-anim-admin .ytmq-icon-admin-check {
-  transform-box: fill-box;
-  transform-origin: center;
-  animation: ytmq-admin-check-pop 0.42s var(--ease-spring) both;
+  animation: ytmq-admin-check-out-in 1.2s ease both;
+}
+.ytmq-tab-icon-anim-admin .ytmq-icon-admin-ex-1 {
+  animation: ytmq-admin-x-in-out 1.2s ease both;
+}
+.ytmq-tab-icon-anim-admin .ytmq-icon-admin-ex-2 {
+  animation: ytmq-admin-x-in-out 1.2s ease 0.06s both;
 }
 
 /* Spinner */
