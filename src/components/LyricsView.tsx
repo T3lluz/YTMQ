@@ -149,10 +149,10 @@ export function LyricsScreen({
 
   return (
     <section
-      className={`ytmq-lyrics ytmq-tab-panel relative isolate flex min-h-0 flex-1 flex-col overflow-hidden border ${
+      className={`ytmq-lyrics ytmq-tab-panel isolate flex min-h-0 flex-1 flex-col overflow-hidden border ${
         fullscreen
           ? 'ytmq-lyrics-fullscreen fixed inset-0 z-40 rounded-none bg-zinc-950'
-          : 'rounded-2xl'
+          : 'relative rounded-2xl'
       }`}
       style={{ ...themeStyle, borderColor: 'var(--np-accent-border)' }}
       aria-label={`Lyrics for ${title}`}
