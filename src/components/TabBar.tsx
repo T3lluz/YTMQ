@@ -23,7 +23,8 @@ function SearchIcon({ className }: { className?: string }) {
       aria-hidden
     >
       <circle cx="11" cy="11" r="7" />
-      <path d="m21 21-4.3-4.3" />
+      {/* handle — swings from the lens-end pivot on activation */}
+      <path className="ytmq-icon-search-handle" d="m21 21-4.3-4.3" />
     </svg>
   )
 }
@@ -41,8 +42,11 @@ function QueueIcon({ className }: { className?: string }) {
       aria-hidden
     >
       <path d="M3 6h13M3 12h9M3 18h9" />
-      <path d="M18 12v8" />
-      <path d="M21.5 15.5 18 12l-3.5 3.5" />
+      {/* arrow — only this group bounces on activation */}
+      <g className="ytmq-icon-queue-arrow">
+        <path d="M18 12v8" />
+        <path d="M21.5 15.5 18 12l-3.5 3.5" />
+      </g>
     </svg>
   )
 }
@@ -62,8 +66,11 @@ function LyricsIcon({ className }: { className?: string }) {
       <path d="M4 6h9" />
       <path d="M4 12h6" />
       <path d="M4 18h5" />
-      <circle cx="17" cy="15" r="3" />
-      <path d="M20 15V5l-3 1" />
+      {/* note (head + stem) — only this group sways on activation */}
+      <g className="ytmq-icon-lyrics-note">
+        <circle cx="17" cy="15" r="3" />
+        <path d="M20 15V5l-3 1" />
+      </g>
     </svg>
   )
 }
@@ -82,8 +89,11 @@ function RoomIcon({ className }: { className?: string }) {
     >
       <circle cx="9" cy="8" r="3.2" />
       <path d="M3.5 19a5.5 5.5 0 0 1 11 0" />
-      <path d="M16 6.2a3 3 0 0 1 0 5.6" />
-      <path d="M17.5 19a5.5 5.5 0 0 0-2.7-4.7" />
+      {/* secondary person — peeks in from the right on activation */}
+      <g className="ytmq-icon-room-peeker">
+        <path d="M16 6.2a3 3 0 0 1 0 5.6" />
+        <path d="M17.5 19a5.5 5.5 0 0 0-2.7-4.7" />
+      </g>
     </svg>
   )
 }
@@ -101,7 +111,8 @@ function AdminIcon({ className }: { className?: string }) {
       aria-hidden
     >
       <path d="M12 3 4.5 6v5c0 4.4 3.1 7.6 7.5 9 4.4-1.4 7.5-4.6 7.5-9V6L12 3Z" />
-      <path d="m9 11.5 2 2 4-4" />
+      {/* checkmark — pops in from scale(0) on activation */}
+      <path className="ytmq-icon-admin-check" d="m9 11.5 2 2 4-4" />
     </svg>
   )
 }
@@ -179,11 +190,7 @@ export function TabBar({ active, onChange, queueCount, showAdmin }: TabBarProps)
                   key={animKey}
                   className={`inline-block${animKey > 0 ? ` ytmq-tab-icon-anim-${tab.id}` : ''}`}
                 >
-                  <Icon
-                    className={`h-5 w-5 transition-transform duration-300 ease-out ${
-                      isActive ? '-translate-y-0.5 scale-110' : 'group-active:scale-90'
-                    }`}
-                  />
+                  <Icon className="h-5 w-5 transition-transform duration-100 group-active:scale-90" />
                 </span>
                 {tab.id === 'queue' && queueCount > 0 && (
                   <span
