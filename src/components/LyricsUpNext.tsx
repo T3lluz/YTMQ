@@ -21,7 +21,7 @@ type LyricsUpNextProps = {
 // Appear in the final stretch of the song, then bounce away just before the
 // next track takes over — mirroring the bridge's on-page "Up next" banner.
 const SHOW_WITHIN_S = 15
-const LEAVE_BEFORE_S = 1.4
+const LEAVE_BEFORE_S = 0.6
 const LEAVE_DURATION_MS = 520
 
 type RenderState = {
@@ -115,6 +115,14 @@ export function LyricsUpNext({
             src={shown.thumbnailUrl}
             alt=""
             referrerPolicy="no-referrer"
+            onError={(event) => {
+              const img = event.currentTarget
+              if (img.dataset.fallback === '1') return
+              if (img.src.includes('/maxresdefault.jpg')) {
+                img.dataset.fallback = '1'
+                img.src = img.src.replace('/maxresdefault.jpg', '/mqdefault.jpg')
+              }
+            }}
             className="h-12 w-12 shrink-0 rounded-lg object-cover shadow-lg ring-1 ring-white/15"
           />
         ) : (

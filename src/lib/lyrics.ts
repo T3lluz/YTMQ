@@ -126,14 +126,49 @@ function splitArtistTitle(title: string): { artist?: string; title: string } {
   return { title: title.trim() }
 }
 
-async function getJson(url: string, signal?: AbortSignal): Promise<unknown> {
-  // Only the `Accept` header is sent (a CORS-safelisted header) so requests
-  // stay "simple" and skip the OPTIONS preflight round-trip — every saved
-  // round-trip makes lyrics show up faster.
-  const res = await fetch(url, { signal, headers: { Accept: 'application/json' } })
-  if (res.status === 404) return null
-  if (!res.ok) throw new Error(`LRCLIB request failed (${res.status})`)
-  return res.json()
+// Internal-DB lookups (`/search`, `/get-cached`) are quick, so cap them tight.
+// `/api/get` can synchronously scrape slow external sources, so it gets a
+// larger — but still bounded — budget to keep a single track from stalling the
+// UI the way an uncapped request used to (~20s).
+const DB_TIMEOUT_MS = 6000
+const SCRAPE_TIMEOUT_MS = 8000
+
+async function getJson(
+  url: string,
+  signal: AbortSignal | undefined,
+  timeoutMs: number,
+): Promise<unknown> {
+  // Race the request against a local timeout so a slow/hung endpoint can't
+  // block lyrics from appearing. The caller's `signal` still cancels too.
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  const onAbort = () => controller.abort()
+  if (signal) {
+    if (signal.aborted) controller.abort()
+    else signal.addEventListener('abort', onAbort, { once: true })
+  }
+
+  try {
+    // Only the `Accept` header is sent (a CORS-safelisted header) so requests
+    // stay "simple" and skip the OPTIONS preflight round-trip — every saved
+    // round-trip makes lyrics show up faster.
+    const res = await fetch(url, {
+      signal: controller.signal,
+      headers: { Accept: 'application/json' },
+    })
+    if (res.status === 404) return null
+    if (!res.ok) throw new Error(`LRCLIB request failed (${res.status})`)
+    return await res.json()
+  } finally {
+    clearTimeout(timer)
+    signal?.removeEventListener('abort', onAbort)
+  }
+}
+
+function asRecords(value: unknown): LrclibRecord[] {
+  if (Array.isArray(value)) return value as LrclibRecord[]
+  if (value && typeof value === 'object') return [value as LrclibRecord]
+  return []
 }
 
 function hasContent(record: LrclibRecord | null): record is LrclibRecord {
@@ -155,9 +190,14 @@ function scoreRecord(record: LrclibRecord, duration?: number): number {
 }
 
 /**
- * Fetch the best available lyrics for a track. Tries the precise signature
- * endpoint first (fast when duration is known), then falls back to a keyword
- * search, preferring records that carry synced lyrics.
+ * Fetch the best available lyrics for a track.
+ *
+ * Speed strategy: every fast internal-DB lookup (`/get-cached` + two `/search`
+ * variants) is fired at once and we return the instant any of them yields
+ * time-synced lyrics — so the common case (track already in LRCLIB) resolves in
+ * a single round-trip. Only when the DB has nothing at all do we fall back to
+ * the slow `/api/get` scraper, and that request is now time-boxed so it can no
+ * longer stall the UI for ~20s.
  */
 export async function fetchLyrics(
   query: LyricsQuery,
@@ -169,6 +209,10 @@ export async function fetchLyrics(
 
   if (!title) return null
 
+  const checkAbort = () => {
+    if (signal?.aborted) throw new DOMException('Aborted', 'AbortError')
+  }
+
   const hasSignature = Boolean(artist && query.duration && query.duration > 0)
   const signatureParams = hasSignature
     ? new URLSearchParams({
@@ -179,111 +223,97 @@ export async function fetchLyrics(
       })
     : null
 
-  const searchParams = new URLSearchParams({ track_name: title })
-  if (artist) searchParams.set('artist_name', artist)
+  const exactParams = new URLSearchParams({ track_name: title })
+  if (artist) exactParams.set('artist_name', artist)
+  const looseParams = new URLSearchParams({
+    q: artist ? `${title} ${artist}` : title,
+  })
 
-  // Fire the two fast, internal-DB-only lookups in parallel so the common case
-  // (lyrics already in LRCLIB's database) resolves in a single round-trip.
-  // `/api/get` is intentionally avoided here because it can synchronously hit
-  // slow external sources; it's used only as a last resort below.
-  const cachedPromise: Promise<LrclibRecord | null> = signatureParams
-    ? (getJson(`${LRCLIB_BASE}/get-cached?${signatureParams}`, signal).catch(
-        () => null,
-      ) as Promise<LrclibRecord | null>)
-    : Promise.resolve(null)
-  const searchPromise: Promise<LrclibRecord[] | null> = getJson(
-    `${LRCLIB_BASE}/search?${searchParams}`,
-    signal,
-  ).catch(() => null) as Promise<LrclibRecord[] | null>
-
-  // The exact-signature `get-cached` hit is the strongest possible match, so if
-  // it already carries time-synced lyrics, return it immediately instead of
-  // waiting on the parallel keyword search — shaving a round-trip in the common
-  // case where the track is already in LRCLIB.
-  const cached = await cachedPromise
-  if (signal?.aborted) throw new DOMException('Aborted', 'AbortError')
-  if (cached?.syncedLyrics) return toLyrics(cached)
-
-  const searchSettled = await searchPromise
-  if (signal?.aborted) throw new DOMException('Aborted', 'AbortError')
-
-  const searchResults = Array.isArray(searchSettled) ? searchSettled : []
-
-  const fast = pickBest(
-    [...(cached ? [cached] : []), ...searchResults],
-    query.duration,
-  )
-  if (fast) return toLyrics(fast)
-
-  // Fallbacks. The loose keyword search hits LRCLIB's internal DB and is fast,
-  // while `/api/get` can synchronously scrape slow external sources — so run
-  // them concurrently and return whichever resolves with lyrics first. This
-  // keeps the common "loose search finds it" path from waiting behind the slow
-  // signature lookup (the previous, sequential ordering was the main cause of
-  // the long waits on tracks that needed a fallback).
-  const fallbacks: Promise<Lyrics | null>[] = []
-
-  if (artist) {
-    fallbacks.push(
-      (
-        getJson(
-          `${LRCLIB_BASE}/search?${new URLSearchParams({ q: `${title} ${artist}` })}`,
-          signal,
-        ) as Promise<LrclibRecord[] | null>
-      )
-        .then((loose) => {
-          const best = pickBest(Array.isArray(loose) ? loose : [], query.duration)
-          return best ? toLyrics(best) : null
-        })
-        .catch(() => null),
-    )
-  }
-
+  // Tier 1 — internal-DB lookups, all fired together. None of these trigger
+  // LRCLIB's slow external scrape, so they come back quickly.
+  const dbTasks: Promise<LrclibRecord[]>[] = [
+    (getJson(`${LRCLIB_BASE}/search?${exactParams}`, signal, DB_TIMEOUT_MS)
+      .then(asRecords)
+      .catch(() => [])) as Promise<LrclibRecord[]>,
+    (getJson(`${LRCLIB_BASE}/search?${looseParams}`, signal, DB_TIMEOUT_MS)
+      .then(asRecords)
+      .catch(() => [])) as Promise<LrclibRecord[]>,
+  ]
   if (signatureParams) {
-    fallbacks.push(
-      (
-        getJson(`${LRCLIB_BASE}/get?${signatureParams}`, signal) as Promise<
-          LrclibRecord | null
-        >
-      )
-        .then((ext) => (hasContent(ext) ? toLyrics(ext) : null))
-        .catch(() => null),
+    dbTasks.unshift(
+      getJson(`${LRCLIB_BASE}/get-cached?${signatureParams}`, signal, DB_TIMEOUT_MS)
+        .then(asRecords)
+        .catch(() => []),
     )
   }
 
-  const fallbackResult = await firstWithLyrics(fallbacks)
-  if (signal?.aborted) throw new DOMException('Aborted', 'AbortError')
-  return fallbackResult
+  // Return the moment any DB lookup yields time-synced lyrics — the best UX and
+  // typically a single round-trip.
+  const synced = await firstSyncedRecord(dbTasks, query.duration)
+  checkAbort()
+  if (synced) return toLyrics(synced)
+
+  // No synced match: settle the remaining DB lookups and take the best plain /
+  // instrumental record they found.
+  const dbBest = pickBest((await Promise.all(dbTasks)).flat(), query.duration)
+  checkAbort()
+  if (dbBest) return toLyrics(dbBest)
+
+  // Nothing in the DB at all — fall back to the scraper, but time-boxed so a
+  // slow external source can no longer hang the UI.
+  if (signatureParams) {
+    const scraped = (await getJson(
+      `${LRCLIB_BASE}/get?${signatureParams}`,
+      signal,
+      SCRAPE_TIMEOUT_MS,
+    ).catch(() => null)) as LrclibRecord | null
+    checkAbort()
+    if (hasContent(scraped)) return toLyrics(scraped)
+  }
+
+  return null
 }
 
 /**
- * Resolve with the first promise that yields non-null lyrics, or null once
- * every promise has resolved without any. Lets a fast lookup win without
- * waiting on a slower one running in parallel.
+ * Resolve with the highest-scoring record that carries time-synced lyrics as
+ * soon as any task produces one, or null once every task has settled without a
+ * synced match. Lets a fast lookup win without waiting on slower ones.
  */
-function firstWithLyrics(
-  promises: Promise<Lyrics | null>[],
-): Promise<Lyrics | null> {
-  if (promises.length === 0) return Promise.resolve(null)
+function firstSyncedRecord(
+  tasks: Promise<LrclibRecord[]>[],
+  duration?: number,
+): Promise<LrclibRecord | null> {
+  if (tasks.length === 0) return Promise.resolve(null)
   return new Promise((resolve) => {
-    let remaining = promises.length
+    let remaining = tasks.length
     let settled = false
-    for (const promise of promises) {
-      promise
-        .then((value) => {
+    const done = (value: LrclibRecord | null) => {
+      if (settled) return
+      settled = true
+      resolve(value)
+    }
+    for (const task of tasks) {
+      task
+        .then((records) => {
           if (settled) return
-          if (value) {
-            settled = true
-            resolve(value)
+          const synced = records.filter((r) => r.syncedLyrics && hasContent(r))
+          if (synced.length > 0) {
+            done(
+              synced.reduce((best, current) =>
+                scoreRecord(current, duration) > scoreRecord(best, duration)
+                  ? current
+                  : best,
+              ),
+            )
             return
           }
           remaining -= 1
-          if (remaining === 0) resolve(null)
+          if (remaining === 0) done(null)
         })
         .catch(() => {
           if (settled) return
           remaining -= 1
-          if (remaining === 0) resolve(null)
+          if (remaining === 0) done(null)
         })
     }
   })

@@ -631,7 +631,9 @@ body {
   font-weight: 700;
   line-height: 1.28;
   letter-spacing: -0.01em;
-  transform-origin: left center;
+  text-align: center;
+  text-wrap: balance;
+  transform-origin: center center;
   transition:
     color 0.45s ease,
     opacity 0.45s ease,

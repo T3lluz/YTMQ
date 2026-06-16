@@ -40,6 +40,12 @@ type NowPlayingPayload = {
   currentTime: number
   duration?: number
   state: PlaybackState
+  nextUp?: {
+    videoId: string
+    title: string
+    artist: string
+    thumbnailUrl: string
+  }
 }
 
 type PlaybackAction = 'next' | 'prev' | 'play' | 'pause' | 'toggle'
@@ -1239,6 +1245,22 @@ async function runBridge() {
   function publishNowPlaying() {
     const current = readNowPlaying()
     if (!current?.videoId) return
+
+    // Attach YT Music's own next-up track so the lyrics "Up next" banner works
+    // even when the app's shared queue is empty.
+    try {
+      const next = getNextSongInfo()
+      if (next && (next.videoId || next.title)) {
+        current.nextUp = {
+          videoId: next.videoId,
+          title: next.title,
+          artist: next.artist,
+          thumbnailUrl: next.thumbnailUrl,
+        }
+      }
+    } catch (err) {
+      log('Next-up lookup failed', err)
+    }
 
     const key = `${current.videoId}|${current.title}|${current.artist}`
     if (key !== lastPlaybackKey) {

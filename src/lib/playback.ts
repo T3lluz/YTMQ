@@ -1,5 +1,13 @@
 export type PlaybackState = 'playing' | 'paused' | 'unknown'
 
+/** The track YouTube Music will play after the current one. */
+export type NowPlayingNextUp = {
+  videoId: string
+  title: string
+  artist: string
+  thumbnailUrl: string
+}
+
 export type NowPlaying = {
   videoId: string
   title: string
@@ -10,6 +18,12 @@ export type NowPlaying = {
   /** Total track length in seconds, when known. */
   duration?: number
   state?: PlaybackState
+  /**
+   * YouTube Music's own next-up track, read from its live queue by the bridge.
+   * Lets the lyrics "Up next" banner work even when the app's shared queue is
+   * empty (e.g. playing an album/radio directly in YT Music).
+   */
+  nextUp?: NowPlayingNextUp
 }
 
 /** Formats seconds as m:ss for playback UI. */

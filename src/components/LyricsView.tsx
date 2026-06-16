@@ -76,9 +76,24 @@ export function LyricsView({
       : null,
   )
 
-  // The first queued track that isn't the one already playing is "up next".
+  // "Up next" mirrors the YT Music on-page banner: prefer YT Music's own live
+  // queue (broadcast by the bridge as `nextUp`) so it works even when the app's
+  // shared queue is empty, and fall back to the shared queue otherwise.
+  const ytmNextUp = nowPlaying?.nextUp
   const upNext = useMemo<UpNextTrack | null>(() => {
     const currentId = nowPlaying?.videoId
+
+    if (ytmNextUp && (ytmNextUp.title || ytmNextUp.videoId) && ytmNextUp.videoId !== currentId) {
+      return {
+        videoId: ytmNextUp.videoId,
+        title: ytmNextUp.title,
+        artist: ytmNextUp.artist,
+        thumbnailUrl:
+          ytmNextUp.thumbnailUrl ||
+          (ytmNextUp.videoId ? hqThumbnail(ytmNextUp.videoId) : ''),
+      }
+    }
+
     const next = queueItems.find((item) => item.video_id !== currentId)
     if (!next) return null
     return {
@@ -87,7 +102,7 @@ export function LyricsView({
       artist: next.channel_title ?? '',
       thumbnailUrl: next.thumbnail_url || hqThumbnail(next.video_id),
     }
-  }, [queueItems, nowPlaying?.videoId])
+  }, [queueItems, nowPlaying?.videoId, ytmNextUp])
 
   // Warm the lyrics cache for the upcoming track so it renders instantly the
   // moment it becomes the now-playing song.
@@ -129,6 +144,20 @@ export function LyricsView({
       onControl={onControl}
     />
   )
+}
+
+/**
+ * `maxresdefault` isn't generated for every video; swap to the always-present
+ * 16:9 `mqdefault` once on error so the art still crops cleanly (no black bars)
+ * instead of showing a broken image.
+ */
+function handleArtError(event: React.SyntheticEvent<HTMLImageElement>) {
+  const img = event.currentTarget
+  if (img.dataset.fallback === '1') return
+  if (img.src.includes('/maxresdefault.jpg')) {
+    img.dataset.fallback = '1'
+    img.src = img.src.replace('/maxresdefault.jpg', '/mqdefault.jpg')
+  }
 }
 
 export type LyricsScreenProps = {
@@ -177,6 +206,8 @@ export function LyricsScreen({
   pendingAction = null,
   onControl,
 }: LyricsScreenProps) {
+  const sectionRef = useRef<HTMLElement | null>(null)
+
   if (!hasTrack) {
     return (
       <section className="ytmq-tab-panel flex min-h-[18rem] flex-1 flex-col">
@@ -196,6 +227,7 @@ export function LyricsScreen({
 
   return (
     <section
+      ref={sectionRef}
       className={`ytmq-lyrics ytmq-tab-panel isolate flex min-h-0 flex-1 flex-col overflow-hidden border ${
         fullscreen
           ? 'ytmq-lyrics-fullscreen fixed inset-0 z-40 rounded-none bg-zinc-950'
@@ -204,12 +236,8 @@ export function LyricsScreen({
       style={{ ...themeStyle, borderColor: 'var(--np-accent-border)' }}
       aria-label={`Lyrics for ${title}`}
     >
-      <LyricsUpNext
-        track={upNext}
-        remaining={remaining}
-        live={live}
-        enabled={fullscreen}
-      />
+      <LyricsUpNext track={upNext} remaining={remaining} live={live} enabled />
+      {fullscreen && <FullscreenButton targetRef={sectionRef} />}
       {/* Abstract, blurry, palette-coloured moving background. */}
       <div
         aria-hidden
@@ -238,39 +266,62 @@ export function LyricsScreen({
         className="absolute inset-0 -z-[5] bg-zinc-950/10 backdrop-blur-md"
       />
 
-      <div
-        className={
-          fullscreen
-            ? 'relative flex min-h-0 flex-1 flex-col items-center justify-center gap-7 px-6 pt-[calc(env(safe-area-inset-top)+1.5rem)] pb-[calc(5.5rem+env(safe-area-inset-bottom))] sm:flex-row sm:items-center sm:gap-10 sm:px-8 lg:gap-16 lg:px-16 xl:px-24'
-            : 'relative flex min-h-0 flex-1 flex-col gap-4 p-4 sm:flex-row sm:gap-5 sm:p-5 md:gap-7 md:p-6'
-        }
-      >
-        <ArtPanel
-          art={art}
-          title={title}
-          artist={artist}
-          position={position}
-          duration={duration}
-          live={live}
-          fullscreen={fullscreen}
-          isPlaying={isPlaying}
-          controlsEnabled={controlsEnabled}
-          pendingAction={pendingAction}
-          onControl={onControl}
-        />
-        <div
-          className={`ytmq-lyrics-pane relative min-h-0 flex-1 ${
-            fullscreen ? 'w-full self-stretch' : ''
-          }`}
-        >
-          <LyricsBody
-            status={status}
-            lyrics={lyrics}
-            position={position}
-            stale={stale}
-          />
+      {fullscreen ? (
+        // Two equal halves: the art + controls are centred in the left half of
+        // the screen, the lyrics centred in the right half. On narrow screens
+        // they stack instead.
+        <div className="relative flex min-h-0 flex-1 flex-col items-center justify-center gap-7 px-6 pt-[calc(env(safe-area-inset-top)+1.5rem)] pb-[calc(5.5rem+env(safe-area-inset-bottom))] sm:grid sm:grid-cols-2 sm:items-center sm:gap-0 sm:px-0 sm:pt-[calc(env(safe-area-inset-top)+1rem)]">
+          <div className="flex w-full min-h-0 items-center justify-center px-4 sm:px-8 lg:px-12 xl:px-16">
+            <ArtPanel
+              art={art}
+              title={title}
+              artist={artist}
+              position={position}
+              duration={duration}
+              live={live}
+              fullscreen={fullscreen}
+              isPlaying={isPlaying}
+              controlsEnabled={controlsEnabled}
+              pendingAction={pendingAction}
+              onControl={onControl}
+            />
+          </div>
+          <div className="flex w-full min-h-0 items-stretch justify-center px-2 sm:px-8 lg:px-12 xl:px-16">
+            <div className="ytmq-lyrics-pane relative min-h-0 w-full max-w-2xl self-stretch">
+              <LyricsBody
+                status={status}
+                lyrics={lyrics}
+                position={position}
+                stale={stale}
+              />
+            </div>
+          </div>
         </div>
-      </div>
+      ) : (
+        <div className="relative flex min-h-0 flex-1 flex-col gap-4 p-4 sm:flex-row sm:gap-5 sm:p-5 md:gap-7 md:p-6">
+          <ArtPanel
+            art={art}
+            title={title}
+            artist={artist}
+            position={position}
+            duration={duration}
+            live={live}
+            fullscreen={fullscreen}
+            isPlaying={isPlaying}
+            controlsEnabled={controlsEnabled}
+            pendingAction={pendingAction}
+            onControl={onControl}
+          />
+          <div className="ytmq-lyrics-pane relative min-h-0 flex-1">
+            <LyricsBody
+              status={status}
+              lyrics={lyrics}
+              position={position}
+              stale={stale}
+            />
+          </div>
+        </div>
+      )}
     </section>
   )
 }
@@ -315,15 +366,16 @@ function ArtPanel({
             src={art}
             alt=""
             crossOrigin="anonymous"
+            onError={handleArtError}
             className={`ytmq-now-art aspect-square w-full rounded-2xl object-cover shadow-2xl ring-1 ring-white/15 ${
               live ? 'is-live' : ''
             }`}
           />
         </div>
 
-        <div className="w-full min-w-0 text-center sm:text-left">
+        <div className="w-full min-w-0 text-center">
           <p
-            className="flex items-center justify-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider sm:justify-start"
+            className="flex items-center justify-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider"
             style={{ color: 'color-mix(in srgb, var(--np-accent-light) 88%, white)' }}
           >
             {live && <Equalizer />}
@@ -395,6 +447,7 @@ function ArtPanel({
           src={art}
           alt=""
           crossOrigin="anonymous"
+          onError={handleArtError}
           className={`ytmq-now-art aspect-square h-16 w-16 rounded-xl object-cover shadow-2xl ring-1 ring-white/15 sm:h-auto sm:w-full sm:rounded-2xl ${
             live ? 'is-live' : ''
           }`}
@@ -426,6 +479,95 @@ function ArtPanel({
         </div>
       )}
     </div>
+  )
+}
+
+/**
+ * Desktop-only toggle that drops the immersive lyrics section into (and out of)
+ * native browser fullscreen. Collapsed to just an icon; on hover the pill grows
+ * leftward to reveal its label, keeping the icon pinned to the right edge so it
+ * never shifts.
+ */
+function FullscreenButton({
+  targetRef,
+}: {
+  targetRef: React.RefObject<HTMLElement | null>
+}) {
+  const [active, setActive] = useState(
+    () => typeof document !== 'undefined' && Boolean(document.fullscreenElement),
+  )
+
+  useEffect(() => {
+    const onChange = () => setActive(Boolean(document.fullscreenElement))
+    document.addEventListener('fullscreenchange', onChange)
+    return () => document.removeEventListener('fullscreenchange', onChange)
+  }, [])
+
+  const toggle = useCallback(() => {
+    if (typeof document === 'undefined') return
+    if (!document.fullscreenElement) {
+      void targetRef.current?.requestFullscreen?.().catch(() => {})
+    } else {
+      void document.exitFullscreen?.().catch(() => {})
+    }
+  }, [targetRef])
+
+  const label = active ? 'Minimize' : 'Fullscreen'
+
+  return (
+    <button
+      type="button"
+      onClick={toggle}
+      aria-label={label}
+      title={label}
+      className="group absolute right-4 top-[calc(env(safe-area-inset-top)+1rem)] z-30 flex items-center rounded-full border bg-black/35 px-2.5 py-2 text-white shadow-lg backdrop-blur transition-colors hover:bg-black/60"
+      style={{ borderColor: 'var(--np-accent-border)' }}
+    >
+      <span className="max-w-0 overflow-hidden whitespace-nowrap text-sm font-semibold opacity-0 transition-all duration-300 ease-out group-hover:mr-2 group-hover:max-w-[7rem] group-hover:opacity-100">
+        {label}
+      </span>
+      {active ? <MinimizeIcon /> : <FullscreenIcon />}
+    </button>
+  )
+}
+
+function FullscreenIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+      className="h-5 w-5 shrink-0"
+    >
+      <path d="M8 3H5a2 2 0 0 0-2 2v3" />
+      <path d="M16 3h3a2 2 0 0 1 2 2v3" />
+      <path d="M8 21H5a2 2 0 0 1-2-2v-3" />
+      <path d="M16 21h3a2 2 0 0 0 2-2v-3" />
+    </svg>
+  )
+}
+
+function MinimizeIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+      className="h-5 w-5 shrink-0"
+    >
+      <path d="M8 3v3a2 2 0 0 1-2 2H3" />
+      <path d="M16 3v3a2 2 0 0 0 2 2h3" />
+      <path d="M8 21v-3a2 2 0 0 0-2-2H3" />
+      <path d="M16 21v-3a2 2 0 0 1 2-2h3" />
+    </svg>
   )
 }
 

@@ -117,11 +117,28 @@ export function ytMusicWatchUrl(videoId: string) {
   return `https://music.youtube.com/watch?v=${videoId}`
 }
 
+// YouTube's `default`/`hqdefault`/`sddefault` thumbnails are 4:3 frames that
+// pad square album art with black (top/bottom) AND grey (sides) bars baked into
+// the pixels — `object-fit: cover` can't crop those out. The 16:9 variants
+// (`mqdefault`, `hq720`, `maxresdefault`) have NO black bars, so a square
+// `object-cover` crop trims only the grey side padding and lands on a clean
+// square cover.
+
+/** Small, always-available 16:9 thumbnail — good for list rows / fallbacks. */
 export function defaultThumbnail(videoId: string) {
-  return `https://i.ytimg.com/vi/${videoId}/default.jpg`
+  return `https://i.ytimg.com/vi/${videoId}/mqdefault.jpg`
 }
 
-/** Larger 480×360 album art for immersive views (lyrics, etc.). */
+/** High-res album art for immersive views (lyrics, now playing). */
 export function hqThumbnail(videoId: string) {
-  return `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`
+  return `https://i.ytimg.com/vi/${videoId}/maxresdefault.jpg`
+}
+
+/**
+ * Fallback art for when {@link hqThumbnail}'s `maxresdefault` 404s (it isn't
+ * generated for every video). `mqdefault` is 16:9 and always exists, so it
+ * still crops cleanly to a square with no black bars.
+ */
+export function fallbackThumbnail(videoId: string) {
+  return `https://i.ytimg.com/vi/${videoId}/mqdefault.jpg`
 }

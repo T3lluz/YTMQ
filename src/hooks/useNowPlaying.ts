@@ -56,6 +56,15 @@ export function useNowPlaying(roomId: string) {
               ? p.duration
               : undefined,
           state: p.state,
+          nextUp:
+            p.nextUp && typeof p.nextUp === 'object' && p.nextUp.videoId
+              ? {
+                  videoId: p.nextUp.videoId,
+                  title: p.nextUp.title ?? '',
+                  artist: p.nextUp.artist ?? '',
+                  thumbnailUrl: p.nextUp.thumbnailUrl ?? '',
+                }
+              : undefined,
         }
         lastNowPlaying.set(roomId, next)
         setNowPlaying(next)
