@@ -256,6 +256,11 @@ export function LyricsScreen({
         <div className="ytmq-now-light ytmq-now-light-c" />
         <div className="ytmq-now-light ytmq-now-light-d" />
         <div className="ytmq-now-light ytmq-now-light-e" />
+        <div className="ytmq-now-light ytmq-now-light-f" />
+        <div className="ytmq-now-light ytmq-now-light-g" />
+        <div className="ytmq-now-light ytmq-now-light-h" />
+        <div className="ytmq-now-light ytmq-now-light-i" />
+        <div className="ytmq-now-light ytmq-now-light-j" />
       </div>
       <div
         aria-hidden
