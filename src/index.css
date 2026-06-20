@@ -995,6 +995,62 @@ body {
 }
 
 /* ----------------------------------------------------------------------------
+   Lyrics "no lyrics found" / instrumental — procedural music visualizer
+   ------------------------------------------------------------------------- */
+
+.ytmq-lyrics-viz {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: min(420px, 80%);
+  height: clamp(120px, 24vh, 220px);
+  padding: 0 4px;
+  --ytmq-viz-color: color-mix(in srgb, var(--np-accent-light) 86%, white);
+  --ytmq-viz-color-soft: color-mix(in srgb, var(--np-accent) 70%, transparent);
+}
+
+.ytmq-lyrics-fullscreen .ytmq-lyrics-viz {
+  width: min(560px, 70%);
+  height: clamp(160px, 32vh, 320px);
+  gap: 8px;
+}
+
+.ytmq-lyrics-viz-bar {
+  flex: 1 1 0;
+  min-width: 4px;
+  max-width: 14px;
+  height: calc(var(--ytmq-viz-h, 0.12) * 100%);
+  min-height: 8px;
+  border-radius: 9999px;
+  background: linear-gradient(
+    180deg,
+    var(--ytmq-viz-color) 0%,
+    var(--ytmq-viz-color-soft) 100%
+  );
+  box-shadow:
+    0 0 14px var(--np-accent-glow),
+    0 0 4px var(--np-accent-glow-strong);
+  /* No transition while live — heights are written every animation frame, so a
+     CSS transition would smear the beat. We re-enable one only for the paused
+     settle below. */
+  will-change: height;
+}
+
+.ytmq-lyrics-viz:not(.is-live) .ytmq-lyrics-viz-bar {
+  transition: height 600ms cubic-bezier(0.22, 0.61, 0.36, 1);
+  opacity: 0.55;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ytmq-lyrics-viz-bar {
+    transition: none;
+    height: 22%;
+    opacity: 0.7;
+  }
+}
+
+/* ----------------------------------------------------------------------------
    Lyrics "Up next" banner (fullscreen desktop)
    ------------------------------------------------------------------------- */
 
