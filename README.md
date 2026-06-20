@@ -20,7 +20,15 @@ Shared queue for **YouTube Music**: guests use this web app to search and manage
    ```bash
    supabase secrets set YOUTUBE_API_KEY=your_google_api_key --project-ref owpmwxoqpzwbsrrcmvpz
    ```
-4. Deploy edge function `search` (included in repo under `supabase/functions/search/`).
+4. Deploy edge functions:
+   - `search` (under `supabase/functions/search/`) — YouTube Music search proxy.
+   - `lyrics` (under `supabase/functions/lyrics/`) — multi-source lyrics aggregator (LRCLIB + NetEase Cloud Music + KuGou). Needed for synced lyrics on tracks LRCLIB doesn’t cover. No secrets required.
+
+   ```bash
+   supabase functions deploy lyrics --project-ref owpmwxoqpzwbsrrcmvpz
+   ```
+
+   If you don’t deploy `lyrics`, the app still works — it just falls back to LRCLIB-only coverage like before.
 
 ## GitHub Pages deploy
 
