@@ -319,6 +319,7 @@ export function LyricsScreen({
                 lyrics={lyrics}
                 position={position}
                 stale={stale}
+                live={live}
               />
             </div>
           </div>
@@ -344,6 +345,7 @@ export function LyricsScreen({
               lyrics={lyrics}
               position={position}
               stale={stale}
+              live={live}
             />
           </div>
         </div>
@@ -602,9 +604,10 @@ type LyricsBodyProps = {
   lyrics: Lyrics | null
   position: number
   stale: boolean
+  live: boolean
 }
 
-function LyricsBody({ status, lyrics, position, stale }: LyricsBodyProps) {
+function LyricsBody({ status, lyrics, position, stale, live }: LyricsBodyProps) {
   if (status === 'loading') return <LyricsSkeleton />
 
   if (status === 'error') {
@@ -617,21 +620,11 @@ function LyricsBody({ status, lyrics, position, stale }: LyricsBodyProps) {
   }
 
   if (lyrics?.instrumental) {
-    return (
-      <LyricsMessage
-        title="Instrumental"
-        detail="This track has no lyrics to follow — enjoy the music."
-      />
-    )
+    return <LyricsVisualizer live={live} title="Instrumental" />
   }
 
   if (status === 'notfound' || !lyrics) {
-    return (
-      <LyricsMessage
-        title="No lyrics found"
-        detail="We couldn’t find matching lyrics for this track yet."
-      />
-    )
+    return <LyricsVisualizer live={live} title="No lyrics found" />
   }
 
   if (lyrics.synced.length > 0) {
@@ -642,12 +635,7 @@ function LyricsBody({ status, lyrics, position, stale }: LyricsBodyProps) {
     return <PlainLyrics text={lyrics.plain} />
   }
 
-  return (
-    <LyricsMessage
-      title="No lyrics found"
-      detail="We couldn’t find matching lyrics for this track yet."
-    />
-  )
+  return <LyricsVisualizer live={live} title="No lyrics found" />
 }
 
 type SyncedLyricsProps = {
@@ -745,6 +733,111 @@ function LyricsMessage({ title, detail }: { title: string; detail: string }) {
       <LyricsGlyph className="mb-1 h-8 w-8 text-white/40" />
       <p className="text-base font-semibold text-white drop-shadow">{title}</p>
       <p className="max-w-xs text-sm text-zinc-300">{detail}</p>
+    </div>
+  )
+}
+
+const VIZ_BAR_COUNT = 27
+
+/**
+ * Procedural music-style visualizer used when there are no lyrics to follow.
+ *
+ * We don't have access to the actual audio analyser (the audio plays inside
+ * YT Music in a separate process), so each bar is driven by a layered mix of
+ * sine waves at low/mid/high rates plus a synthetic kick on a fixed tempo.
+ * The result reads as "moving with music" without claiming to be a true
+ * spectrum. When playback isn't live, the bars smoothly settle to a small
+ * resting size so the screen stays calm.
+ */
+function LyricsVisualizer({ live, title }: { live: boolean; title: string }) {
+  const barRefs = useRef<(HTMLDivElement | null)[]>([])
+  const liveRef = useRef(live)
+  useEffect(() => {
+    liveRef.current = live
+  }, [live])
+
+  useEffect(() => {
+    let frame = 0
+    const start = performance.now()
+    const reduce =
+      typeof window !== 'undefined' &&
+      window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    // Stable per-bar phase offsets so each bar dances on its own beat.
+    const seeds = Array.from({ length: VIZ_BAR_COUNT }, (_, i) => i * 1.37 + 0.21)
+    let energy = 0
+    // ~110 BPM kick — close to the average pop/rock tempo.
+    const tempoHz = 110 / 60
+
+    const tick = (now: number) => {
+      const t = (now - start) / 1000
+
+      // Smoothly track playback: ramp energy up while live, down when paused.
+      const target = liveRef.current ? 1 : 0
+      energy += (target - energy) * 0.05
+
+      // Synthetic kick: phase wraps every beat, exponential decay = thump.
+      const beatPhase = (t * tempoHz) % 1
+      const kick = Math.exp(-beatPhase * 5.5)
+      // Snare on the off-beat, softer and with a quicker decay.
+      const offPhase = ((t * tempoHz + 0.5) % 1)
+      const snare = Math.exp(-offPhase * 8) * 0.6
+
+      const center = (VIZ_BAR_COUNT - 1) / 2
+      for (let i = 0; i < VIZ_BAR_COUNT; i++) {
+        const node = barRefs.current[i]
+        if (!node) continue
+        const seed = seeds[i]
+        // Bars near the centre = bass (low), edges = treble (high), mirrored.
+        const dist = Math.abs(i - center) / center
+        const bassWeight = 1 - dist
+        const trebleWeight = dist
+
+        const slow = Math.sin(t * 1.7 + seed) * 0.5 + 0.5
+        const mid = Math.sin(t * 4.3 + seed * 1.7) * 0.5 + 0.5
+        const fast = Math.sin(t * 9.1 + seed * 0.6) * 0.5 + 0.5
+
+        const ambient =
+          0.32 * slow * (0.55 + 0.45 * bassWeight) +
+          0.26 * mid +
+          0.18 * fast * (0.4 + 0.6 * trebleWeight)
+        const percussive =
+          kick * (0.55 * bassWeight + 0.1) +
+          snare * (0.35 * trebleWeight + 0.05)
+
+        const raw = (ambient + percussive) * energy
+        const h = Math.max(0.06, Math.min(1, raw + 0.06))
+        node.style.setProperty('--ytmq-viz-h', h.toFixed(3))
+      }
+
+      if (reduce && energy < 0.01) {
+        // With reduced motion we still tick once to settle the resting state,
+        // but skip continuous animation.
+        return
+      }
+      frame = requestAnimationFrame(tick)
+    }
+    frame = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(frame)
+  }, [])
+
+  return (
+    <div className="flex h-full flex-col items-center justify-center gap-5 px-4 text-center">
+      <div
+        className={`ytmq-lyrics-viz ${live ? 'is-live' : ''}`}
+        role="img"
+        aria-label="Music visualizer"
+      >
+        {Array.from({ length: VIZ_BAR_COUNT }, (_, i) => (
+          <div
+            key={i}
+            ref={(node) => {
+              barRefs.current[i] = node
+            }}
+            className="ytmq-lyrics-viz-bar"
+          />
+        ))}
+      </div>
+      <p className="text-sm font-medium text-white/70 drop-shadow">{title}</p>
     </div>
   )
 }

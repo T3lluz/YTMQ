@@ -1,6 +1,22 @@
-// Synced lyrics powered by LRCLIB (https://lrclib.net) — a free, open,
-// no-API-key lyrics database that returns time-stamped (LRC) lyrics so the
-// UI can follow the song live.
+// Synced lyrics aggregator.
+//
+// Two data paths run in parallel for the best of both worlds:
+//
+// 1. **LRCLIB direct**  — the browser hits https://lrclib.net/api straight
+//    away. It's the fastest path when LRCLIB has the song, and it works
+//    independently of any backend deploy state.
+// 2. **Supabase `lyrics` edge function** — proxies extra providers that don't
+//    ship CORS headers (NetEase Cloud Music, KuGou Music). These cover huge
+//    swathes of music LRCLIB doesn't (K-pop, J-pop, indie, remixes, Mandarin
+//    pop, plus a lot of Western tracks). They're the same upstream sources
+//    that unofficial Spotify lyrics tools use to ship synced lyrics for
+//    practically every Spotify song.
+//
+// The first track to yield time-synced lyrics wins; if no source had a synced
+// match we settle for the best plain/instrumental result. The whole API
+// surface stays the same as before, so callers don't change.
+
+import { isSupabaseConfigured, supabase } from './supabase'
 
 const LRCLIB_BASE = 'https://lrclib.net/api'
 
@@ -18,7 +34,11 @@ export type Lyrics = {
   instrumental: boolean
   trackName: string
   artistName: string
+  /** Provider that supplied the matched lyrics. */
+  source: LyricsSource
 }
+
+export type LyricsSource = 'lrclib' | 'netease' | 'kugou'
 
 type LrclibRecord = {
   id: number
@@ -29,6 +49,16 @@ type LrclibRecord = {
   instrumental: boolean
   plainLyrics: string | null
   syncedLyrics: string | null
+}
+
+type AggregatedRecord = {
+  source: LyricsSource
+  syncedLrc: string | null
+  plain: string | null
+  instrumental: boolean
+  trackName: string
+  artistName: string
+  duration: number | null
 }
 
 export type LyricsQuery = {
@@ -74,14 +104,27 @@ export function parseLrc(lrc: string): LyricLine[] {
   return lines
 }
 
-function toLyrics(record: LrclibRecord): Lyrics {
-  const synced = record.syncedLyrics ? parseLrc(record.syncedLyrics) : []
+function recordToAggregated(record: LrclibRecord): AggregatedRecord {
   return {
-    synced,
+    source: 'lrclib',
+    syncedLrc: record.syncedLyrics?.trim() || null,
     plain: record.plainLyrics?.trim() || null,
     instrumental: Boolean(record.instrumental),
     trackName: record.trackName,
     artistName: record.artistName,
+    duration: record.duration ?? null,
+  }
+}
+
+function aggregatedToLyrics(record: AggregatedRecord): Lyrics {
+  const synced = record.syncedLrc ? parseLrc(record.syncedLrc) : []
+  return {
+    synced,
+    plain: record.plain,
+    instrumental: record.instrumental,
+    trackName: record.trackName,
+    artistName: record.artistName,
+    source: record.source,
   }
 }
 
@@ -126,12 +169,15 @@ function splitArtistTitle(title: string): { artist?: string; title: string } {
   return { title: title.trim() }
 }
 
-// Internal-DB lookups (`/search`, `/get-cached`) are quick, so cap them tight.
-// `/api/get` can synchronously scrape slow external sources, so it gets a
-// larger — but still bounded — budget to keep a single track from stalling the
-// UI the way an uncapped request used to (~20s).
-const DB_TIMEOUT_MS = 6000
-const SCRAPE_TIMEOUT_MS = 8000
+// LRCLIB's `/search` endpoint regularly takes 6–8 s under normal load, so the
+// DB timeout must be generous enough to let those responses land. The previous
+// 6 s limit caused every search request to be aborted just before the data
+// arrived, silently producing "no lyrics found" for songs that do have lyrics.
+// `/api/get` can synchronously scrape slow external sources and gets an even
+// larger — but still bounded — budget.
+const DB_TIMEOUT_MS = 10_000
+const SCRAPE_TIMEOUT_MS = 12_000
+const EDGE_TIMEOUT_MS = 14_000
 
 async function getJson(
   url: string,
@@ -171,16 +217,16 @@ function asRecords(value: unknown): LrclibRecord[] {
   return []
 }
 
-function hasContent(record: LrclibRecord | null): record is LrclibRecord {
+function hasContent(record: AggregatedRecord | null): record is AggregatedRecord {
   return Boolean(
-    record && (record.syncedLyrics || record.plainLyrics || record.instrumental),
+    record && (record.syncedLrc || record.plain || record.instrumental),
   )
 }
 
-function scoreRecord(record: LrclibRecord, duration?: number): number {
+function scoreAggregated(record: AggregatedRecord, duration?: number): number {
   let score = 0
-  if (record.syncedLyrics) score += 100
-  else if (record.plainLyrics) score += 20
+  if (record.syncedLrc) score += 100
+  else if (record.plain) score += 20
   if (record.instrumental) score += 5
   if (duration != null && record.duration != null) {
     const diff = Math.abs(record.duration - duration)
@@ -189,17 +235,72 @@ function scoreRecord(record: LrclibRecord, duration?: number): number {
   return score
 }
 
+type EdgeLyricsResponse = {
+  lyrics?: AggregatedRecord | null
+  error?: string
+}
+
 /**
- * Fetch the best available lyrics for a track.
+ * Call the Supabase `lyrics` edge function that aggregates NetEase + KuGou
+ * + (as a safety net) server-side LRCLIB. Returns `null` if Supabase isn't
+ * configured, the function isn't deployed, or the call fails — callers should
+ * always treat this as a best-effort enhancement on top of the direct LRCLIB
+ * path.
+ */
+async function fetchFromEdge(
+  query: LyricsQuery,
+  signal?: AbortSignal,
+): Promise<AggregatedRecord | null> {
+  if (!isSupabaseConfigured) return null
+
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), EDGE_TIMEOUT_MS)
+  const onAbort = () => controller.abort()
+  if (signal) {
+    if (signal.aborted) controller.abort()
+    else signal.addEventListener('abort', onAbort, { once: true })
+  }
+
+  try {
+    const { data, error } = await supabase.functions.invoke<EdgeLyricsResponse>(
+      'lyrics',
+      {
+        body: {
+          title: query.title,
+          artist: query.artist,
+          album: query.album,
+          duration: query.duration,
+        },
+      },
+    )
+    if (error) return null
+    const lyrics = data?.lyrics
+    if (!lyrics) return null
+    if (!hasContent(lyrics)) return null
+    return lyrics
+  } catch {
+    return null
+  } finally {
+    clearTimeout(timer)
+    signal?.removeEventListener('abort', onAbort)
+  }
+}
+
+/**
+ * Fetch the best available lyrics for a track. Direct LRCLIB lookups and the
+ * Supabase aggregator (NetEase + KuGou + server-side LRCLIB) run in parallel;
+ * the first source to return time-synced lyrics wins, otherwise we settle for
+ * the highest-scoring plain/instrumental match.
  *
  * Speed strategy:
  * 1. All fast internal-DB lookups (`/get-cached` + two `/search` variants) fire
- *    simultaneously and resolve the moment any of them yields time-synced lyrics
- *    — the common case resolves in a single round-trip.
- * 2. The slow `/api/get` scraper is also fired immediately in parallel (not
- *    sequentially after the DB), but cancelled the instant the DB finds
- *    anything useful. This cuts the worst-case fallback from ~14 s (DB timeout
- *    + scrape timeout) down to ~8 s (just the scrape, already in-flight).
+ *    simultaneously alongside the Supabase aggregator and resolve the moment
+ *    any of them yields time-synced lyrics — the common case still resolves
+ *    in a single round-trip.
+ * 2. The slow `/api/get` scraper is also fired immediately in parallel, but
+ *    cancelled the instant something better lands. This means the worst-case
+ *    fallback is just the slowest single provider rather than the sum of all
+ *    of them.
  */
 export async function fetchLyrics(
   query: LyricsQuery,
@@ -211,10 +312,19 @@ export async function fetchLyrics(
 
   if (!title) return null
 
+  const normalised: LyricsQuery = {
+    title,
+    artist,
+    album: query.album,
+    duration: query.duration,
+  }
+
   const checkAbort = () => {
     if (signal?.aborted) throw new DOMException('Aborted', 'AbortError')
   }
 
+  // Full "signature" params (artist + title + duration) are used for the
+  // exact-match cache endpoint and enable the best disambiguation on /get.
   const hasSignature = Boolean(artist && query.duration && query.duration > 0)
   const signatureParams = hasSignature
     ? new URLSearchParams({
@@ -227,6 +337,15 @@ export async function fetchLyrics(
       })
     : null
 
+  // When duration is unknown we can still call /api/get with just artist +
+  // title. The match is less precise but far better than silently returning
+  // "no lyrics found" for a song that's clearly in the LRCLIB database.
+  const scraperParams: URLSearchParams | null = signatureParams
+    ? signatureParams
+    : artist
+      ? new URLSearchParams({ artist_name: artist, track_name: title })
+      : null
+
   const exactParams = new URLSearchParams({ track_name: title })
   if (artist) exactParams.set('artist_name', artist)
   const looseParams = new URLSearchParams({
@@ -235,69 +354,72 @@ export async function fetchLyrics(
 
   // Kick the slow external scraper off immediately so it runs in parallel with
   // the fast DB lookups. A dedicated AbortController lets us cancel it the
-  // moment the DB finds something useful, so we never block on both.
+  // moment something else finds the lyrics, so we never block on it.
   let scraperController: AbortController | null = null
-  let scraperPromise: Promise<LrclibRecord | null> | null = null
-  if (signatureParams) {
+  let scraperPromise: Promise<AggregatedRecord | null> | null = null
+  if (scraperParams) {
     scraperController = new AbortController()
-    // Forward outer cancellation into the scraper's own controller.
     const onParentAbort = () => scraperController!.abort()
     if (signal) {
       if (signal.aborted) scraperController.abort()
       else signal.addEventListener('abort', onParentAbort, { once: true })
     }
     scraperPromise = getJson(
-      `${LRCLIB_BASE}/get?${signatureParams}`,
+      `${LRCLIB_BASE}/get?${scraperParams}`,
       scraperController.signal,
       SCRAPE_TIMEOUT_MS,
     )
-      .then((data) => data as LrclibRecord | null)
+      .then((data) =>
+        data ? recordToAggregated(data as LrclibRecord) : null,
+      )
       .catch(() => null)
       .finally(() => signal?.removeEventListener('abort', onParentAbort))
   }
 
-  // Tier 1 — internal-DB lookups, all fired together. None of these trigger
-  // LRCLIB's slow external scrape, so they come back quickly.
-  const dbTasks: Promise<LrclibRecord[]>[] = [
+  // Tier 1 — internal-DB lookups + edge aggregator, all fired together.
+  const tasks: Promise<AggregatedRecord[]>[] = [
     (getJson(`${LRCLIB_BASE}/search?${exactParams}`, signal, DB_TIMEOUT_MS)
-      .then(asRecords)
-      .catch(() => [])) as Promise<LrclibRecord[]>,
+      .then((data) => asRecords(data).map(recordToAggregated))
+      .catch(() => [])) as Promise<AggregatedRecord[]>,
     (getJson(`${LRCLIB_BASE}/search?${looseParams}`, signal, DB_TIMEOUT_MS)
-      .then(asRecords)
-      .catch(() => [])) as Promise<LrclibRecord[]>,
+      .then((data) => asRecords(data).map(recordToAggregated))
+      .catch(() => [])) as Promise<AggregatedRecord[]>,
+    fetchFromEdge(normalised, signal)
+      .then((rec) => (rec ? [rec] : []))
+      .catch(() => []),
   ]
   if (signatureParams) {
-    dbTasks.unshift(
+    tasks.unshift(
       getJson(`${LRCLIB_BASE}/get-cached?${signatureParams}`, signal, DB_TIMEOUT_MS)
-        .then(asRecords)
+        .then((data) => asRecords(data).map(recordToAggregated))
         .catch(() => []),
     )
   }
 
-  // Return the moment any DB lookup yields time-synced lyrics — the best UX and
-  // typically a single round-trip.
-  const synced = await firstSyncedRecord(dbTasks, query.duration)
+  // Return the moment any source yields time-synced lyrics.
+  const synced = await firstSyncedRecord(tasks, query.duration)
   checkAbort()
   if (synced) {
     scraperController?.abort()
-    return toLyrics(synced)
+    return aggregatedToLyrics(synced)
   }
 
-  // No synced match: settle the remaining DB lookups and take the best plain /
-  // instrumental record they found.
-  const dbBest = pickBest((await Promise.all(dbTasks)).flat(), query.duration)
+  // No synced match yet: settle the remaining sources and take the best
+  // plain / instrumental record they found between them.
+  const settled = (await Promise.all(tasks)).flat()
   checkAbort()
-  if (dbBest) {
+  const best = pickBest(settled, query.duration)
+  if (best) {
     scraperController?.abort()
-    return toLyrics(dbBest)
+    return aggregatedToLyrics(best)
   }
 
-  // Nothing in the DB at all — await the scraper (already in-flight, may already
+  // Nothing yet — await the LRCLIB scraper (already in-flight, may already
   // have a result by the time we get here).
   if (scraperPromise) {
     const scraped = await scraperPromise
     checkAbort()
-    if (hasContent(scraped)) return toLyrics(scraped)
+    if (hasContent(scraped)) return aggregatedToLyrics(scraped)
   }
 
   return null
@@ -309,14 +431,14 @@ export async function fetchLyrics(
  * synced match. Lets a fast lookup win without waiting on slower ones.
  */
 function firstSyncedRecord(
-  tasks: Promise<LrclibRecord[]>[],
+  tasks: Promise<AggregatedRecord[]>[],
   duration?: number,
-): Promise<LrclibRecord | null> {
+): Promise<AggregatedRecord | null> {
   if (tasks.length === 0) return Promise.resolve(null)
   return new Promise((resolve) => {
     let remaining = tasks.length
     let settled = false
-    const done = (value: LrclibRecord | null) => {
+    const done = (value: AggregatedRecord | null) => {
       if (settled) return
       settled = true
       resolve(value)
@@ -325,11 +447,12 @@ function firstSyncedRecord(
       task
         .then((records) => {
           if (settled) return
-          const synced = records.filter((r) => r.syncedLyrics && hasContent(r))
+          const synced = records.filter((r) => r.syncedLrc && hasContent(r))
           if (synced.length > 0) {
             done(
               synced.reduce((best, current) =>
-                scoreRecord(current, duration) > scoreRecord(best, duration)
+                scoreAggregated(current, duration) >
+                scoreAggregated(best, duration)
                   ? current
                   : best,
               ),
@@ -350,13 +473,15 @@ function firstSyncedRecord(
 
 /** Highest-scoring record that actually carries lyrics, or null if none do. */
 function pickBest(
-  records: LrclibRecord[],
+  records: AggregatedRecord[],
   duration?: number,
-): LrclibRecord | null {
+): AggregatedRecord | null {
   const withContent = records.filter(hasContent)
   if (withContent.length === 0) return null
   return withContent.reduce((best, current) =>
-    scoreRecord(current, duration) > scoreRecord(best, duration) ? current : best,
+    scoreAggregated(current, duration) > scoreAggregated(best, duration)
+      ? current
+      : best,
   )
 }
 
