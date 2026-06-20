@@ -208,6 +208,31 @@ export function LyricsScreen({
 }: LyricsScreenProps) {
   const sectionRef = useRef<HTMLElement | null>(null)
 
+  // F key — toggle native browser fullscreen while on the lyrics page.
+  // Ignored when focus is inside a text field.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key.toLowerCase() !== 'f') return
+      const target = e.target as HTMLElement | null
+      if (
+        target?.tagName === 'INPUT' ||
+        target?.tagName === 'TEXTAREA' ||
+        target?.isContentEditable
+      )
+        return
+      e.preventDefault()
+      if (!document.fullscreenElement) {
+        void (sectionRef.current ?? document.documentElement)
+          .requestFullscreen?.()
+          .catch(() => {})
+      } else {
+        void document.exitFullscreen?.().catch(() => {})
+      }
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [])
+
   if (!hasTrack) {
     return (
       <section className="ytmq-tab-panel flex min-h-[18rem] flex-1 flex-col">

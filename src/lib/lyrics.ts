@@ -192,12 +192,14 @@ function scoreRecord(record: LrclibRecord, duration?: number): number {
 /**
  * Fetch the best available lyrics for a track.
  *
- * Speed strategy: every fast internal-DB lookup (`/get-cached` + two `/search`
- * variants) is fired at once and we return the instant any of them yields
- * time-synced lyrics — so the common case (track already in LRCLIB) resolves in
- * a single round-trip. Only when the DB has nothing at all do we fall back to
- * the slow `/api/get` scraper, and that request is now time-boxed so it can no
- * longer stall the UI for ~20s.
+ * Speed strategy:
+ * 1. All fast internal-DB lookups (`/get-cached` + two `/search` variants) fire
+ *    simultaneously and resolve the moment any of them yields time-synced lyrics
+ *    — the common case resolves in a single round-trip.
+ * 2. The slow `/api/get` scraper is also fired immediately in parallel (not
+ *    sequentially after the DB), but cancelled the instant the DB finds
+ *    anything useful. This cuts the worst-case fallback from ~14 s (DB timeout
+ *    + scrape timeout) down to ~8 s (just the scrape, already in-flight).
  */
 export async function fetchLyrics(
   query: LyricsQuery,
@@ -218,7 +220,9 @@ export async function fetchLyrics(
     ? new URLSearchParams({
         artist_name: artist,
         track_name: title,
-        album_name: query.album?.trim() || title,
+        // Empty string is a better fallback than the track title so we don't
+        // accidentally poison the exact-match cache with the wrong album key.
+        album_name: query.album?.trim() ?? '',
         duration: String(Math.round(query.duration!)),
       })
     : null
@@ -228,6 +232,29 @@ export async function fetchLyrics(
   const looseParams = new URLSearchParams({
     q: artist ? `${title} ${artist}` : title,
   })
+
+  // Kick the slow external scraper off immediately so it runs in parallel with
+  // the fast DB lookups. A dedicated AbortController lets us cancel it the
+  // moment the DB finds something useful, so we never block on both.
+  let scraperController: AbortController | null = null
+  let scraperPromise: Promise<LrclibRecord | null> | null = null
+  if (signatureParams) {
+    scraperController = new AbortController()
+    // Forward outer cancellation into the scraper's own controller.
+    const onParentAbort = () => scraperController!.abort()
+    if (signal) {
+      if (signal.aborted) scraperController.abort()
+      else signal.addEventListener('abort', onParentAbort, { once: true })
+    }
+    scraperPromise = getJson(
+      `${LRCLIB_BASE}/get?${signatureParams}`,
+      scraperController.signal,
+      SCRAPE_TIMEOUT_MS,
+    )
+      .then((data) => data as LrclibRecord | null)
+      .catch(() => null)
+      .finally(() => signal?.removeEventListener('abort', onParentAbort))
+  }
 
   // Tier 1 — internal-DB lookups, all fired together. None of these trigger
   // LRCLIB's slow external scrape, so they come back quickly.
@@ -251,22 +278,24 @@ export async function fetchLyrics(
   // typically a single round-trip.
   const synced = await firstSyncedRecord(dbTasks, query.duration)
   checkAbort()
-  if (synced) return toLyrics(synced)
+  if (synced) {
+    scraperController?.abort()
+    return toLyrics(synced)
+  }
 
   // No synced match: settle the remaining DB lookups and take the best plain /
   // instrumental record they found.
   const dbBest = pickBest((await Promise.all(dbTasks)).flat(), query.duration)
   checkAbort()
-  if (dbBest) return toLyrics(dbBest)
+  if (dbBest) {
+    scraperController?.abort()
+    return toLyrics(dbBest)
+  }
 
-  // Nothing in the DB at all — fall back to the scraper, but time-boxed so a
-  // slow external source can no longer hang the UI.
-  if (signatureParams) {
-    const scraped = (await getJson(
-      `${LRCLIB_BASE}/get?${signatureParams}`,
-      signal,
-      SCRAPE_TIMEOUT_MS,
-    ).catch(() => null)) as LrclibRecord | null
+  // Nothing in the DB at all — await the scraper (already in-flight, may already
+  // have a result by the time we get here).
+  if (scraperPromise) {
+    const scraped = await scraperPromise
     checkAbort()
     if (hasContent(scraped)) return toLyrics(scraped)
   }
