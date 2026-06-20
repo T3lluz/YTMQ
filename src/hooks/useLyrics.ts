@@ -25,6 +25,34 @@ const cache = new Map<string, CacheEntry>()
 // prefetches) never fire the same request twice.
 const inFlight = new Map<string, Promise<void>>()
 
+// --- sessionStorage helpers -----------------------------------------------
+// Lyrics are persisted per-session so page reloads and hard tab switches
+// resolve instantly from storage instead of going to the network.
+// Only successful lookups are persisted; errors are intentionally excluded
+// so they're retried fresh on the next load.
+
+const SS_PREFIX = 'ytmq:lrc:'
+
+function ssLoad(videoId: string): CacheEntry | null {
+  try {
+    const raw = sessionStorage.getItem(SS_PREFIX + videoId)
+    return raw ? (JSON.parse(raw) as CacheEntry) : null
+  } catch {
+    return null
+  }
+}
+
+function ssSave(videoId: string, lyrics: Lyrics | null): void {
+  try {
+    sessionStorage.setItem(
+      SS_PREFIX + videoId,
+      JSON.stringify({ lyrics, error: false }),
+    )
+  } catch {
+    // Silently ignore QuotaExceededError or private-browsing restrictions.
+  }
+}
+
 /**
  * Resolve lyrics for a track into the shared cache. Used by both the live
  * hook and {@link prefetchLyrics}; resolves once the cache holds an entry.
@@ -32,6 +60,13 @@ const inFlight = new Map<string, Promise<void>>()
 function loadLyrics(track: LyricsTrack, signal?: AbortSignal): Promise<void> {
   const { videoId } = track
   if (!videoId || cache.has(videoId)) return Promise.resolve()
+
+  // Serve from sessionStorage before hitting the network.
+  const persisted = ssLoad(videoId)
+  if (persisted) {
+    cache.set(videoId, persisted)
+    return Promise.resolve()
+  }
 
   const existing = inFlight.get(videoId)
   if (existing) return existing
@@ -42,10 +77,12 @@ function loadLyrics(track: LyricsTrack, signal?: AbortSignal): Promise<void> {
   )
     .then((result) => {
       cache.set(videoId, { lyrics: result, error: false })
+      ssSave(videoId, result)
     })
     .catch((err: unknown) => {
       if (err instanceof DOMException && err.name === 'AbortError') return
       cache.set(videoId, { lyrics: null, error: true })
+      // Errors are not persisted so they're retried next load.
     })
     .finally(() => {
       inFlight.delete(videoId)
