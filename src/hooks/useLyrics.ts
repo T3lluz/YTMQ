@@ -31,7 +31,9 @@ const inFlight = new Map<string, Promise<void>>()
 // Only successful lookups are persisted; errors are intentionally excluded
 // so they're retried fresh on the next load.
 
-const SS_PREFIX = 'ytmq:lrc:'
+// Bump the prefix whenever the persisted shape changes so stale entries from
+// older builds (e.g. without a `source` field) don't get read back blindly.
+const SS_PREFIX = 'ytmq:lrc:v2:'
 
 function ssLoad(videoId: string): CacheEntry | null {
   try {

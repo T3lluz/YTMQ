@@ -41,6 +41,7 @@ YouTube Music **shared queue**: host plays in **YT Music app**; **guests** use t
 |-------|---------|
 | DB + Realtime | Supabase (free) |
 | Search proxy | Supabase Edge Function `search` |
+| Lyrics proxy | Supabase Edge Function `lyrics` (LRCLIB + NetEase + KuGou) |
 | Frontend | Vite + React + TS + Tailwind |
 | Hosting | GitHub Pages (`base: '/YTMQ/'`) |
 | QR | `qrcode` (client) |
@@ -153,11 +154,18 @@ Do not commit secrets. Done when Part 8 passes on GitHub Pages.
 flowchart LR
   G[Guest Web App] --> SB[(Supabase DB)]
   G --> RT[Realtime]
+  G --> LRC[LRCLIB direct]
   H[Host Tab] --> SB
   H --> YTM[YT Music App manual open]
   EF[Edge Function search] --> YTAPI[YouTube Data API]
+  LY[Edge Function lyrics] --> LRC
+  LY --> NE[NetEase Cloud Music]
+  LY --> KG[KuGou Music]
   G --> EF
+  G --> LY
 ```
+
+**Lyrics sourcing.** The browser hits LRCLIB directly for the fastest happy path. In parallel it invokes the `lyrics` edge function, which aggregates LRCLIB + NetEase Cloud Music + KuGou Music server-side (the same upstream sources used by unofficial Spotify lyrics tools like syrics / spotify-lyrics-api) since those don't ship CORS headers. The first source to return time-synced lyrics wins; falling back to plain/instrumental matches when nothing has synced. If the `lyrics` function isn't deployed the app keeps working with LRCLIB-only coverage.
 
 **Original vision:** Shared queue via link/QR; host uses YT Music app only; guests add/remove/reorder; search with title, artist, cover, featured artists; artist pages; small listen stats if API allows; simple intuitive UI; free to host (GitHub Pages + free backend).
 
