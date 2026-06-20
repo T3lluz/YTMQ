@@ -126,12 +126,14 @@ function splitArtistTitle(title: string): { artist?: string; title: string } {
   return { title: title.trim() }
 }
 
-// Internal-DB lookups (`/search`, `/get-cached`) are quick, so cap them tight.
-// `/api/get` can synchronously scrape slow external sources, so it gets a
-// larger — but still bounded — budget to keep a single track from stalling the
-// UI the way an uncapped request used to (~20s).
-const DB_TIMEOUT_MS = 6000
-const SCRAPE_TIMEOUT_MS = 8000
+// LRCLIB's `/search` endpoint regularly takes 6–8 s under normal load, so the
+// DB timeout must be generous enough to let those responses land. The previous
+// 6 s limit caused every search request to be aborted just before the data
+// arrived, silently producing "no lyrics found" for songs that do have lyrics.
+// `/api/get` can synchronously scrape slow external sources and gets an even
+// larger — but still bounded — budget.
+const DB_TIMEOUT_MS = 10_000
+const SCRAPE_TIMEOUT_MS = 12_000
 
 async function getJson(
   url: string,
@@ -215,6 +217,8 @@ export async function fetchLyrics(
     if (signal?.aborted) throw new DOMException('Aborted', 'AbortError')
   }
 
+  // Full "signature" params (artist + title + duration) are used for the
+  // exact-match cache endpoint and enable the best disambiguation on /get.
   const hasSignature = Boolean(artist && query.duration && query.duration > 0)
   const signatureParams = hasSignature
     ? new URLSearchParams({
@@ -227,6 +231,15 @@ export async function fetchLyrics(
       })
     : null
 
+  // When duration is unknown we can still call /api/get with just artist +
+  // title. The match is less precise but far better than silently returning
+  // "no lyrics found" for a song that's clearly in the LRCLIB database.
+  const scraperParams: URLSearchParams | null = signatureParams
+    ? signatureParams
+    : artist
+      ? new URLSearchParams({ artist_name: artist, track_name: title })
+      : null
+
   const exactParams = new URLSearchParams({ track_name: title })
   if (artist) exactParams.set('artist_name', artist)
   const looseParams = new URLSearchParams({
@@ -238,7 +251,7 @@ export async function fetchLyrics(
   // moment the DB finds something useful, so we never block on both.
   let scraperController: AbortController | null = null
   let scraperPromise: Promise<LrclibRecord | null> | null = null
-  if (signatureParams) {
+  if (scraperParams) {
     scraperController = new AbortController()
     // Forward outer cancellation into the scraper's own controller.
     const onParentAbort = () => scraperController!.abort()
@@ -247,7 +260,7 @@ export async function fetchLyrics(
       else signal.addEventListener('abort', onParentAbort, { once: true })
     }
     scraperPromise = getJson(
-      `${LRCLIB_BASE}/get?${signatureParams}`,
+      `${LRCLIB_BASE}/get?${scraperParams}`,
       scraperController.signal,
       SCRAPE_TIMEOUT_MS,
     )
