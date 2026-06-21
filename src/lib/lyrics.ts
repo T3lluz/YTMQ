@@ -154,6 +154,10 @@ export function cleanTitle(title: string): string {
 /** Normalise an artist string ("Artist - Topic", "A, B & C" → "A"). */
 export function cleanArtist(artist: string): string {
   let out = artist.replace(/\s*-\s*topic\s*$/i, '')
+  // YT Music's player byline is "Artist • Album • Year" (U+2022 / middot
+  // bullets). Keep only the leading artist segment so we don't send the album
+  // and year to LRCLIB as part of the artist name (which always 404s).
+  out = out.split(/\s*[•·]\s*/)[0] ?? out
   // First credited artist only — improves DB matching.
   out = out.split(/\s*(?:,|&|feat\.?|ft\.?|featuring|x|×)\s+/i)[0] ?? out
   return out.replace(/\s{2,}/g, ' ').trim()
