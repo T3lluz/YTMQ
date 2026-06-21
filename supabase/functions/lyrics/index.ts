@@ -234,6 +234,24 @@ Deno.serve(async (req) => {
     }
 
     const best = await aggregate(query, sources)
+    // Lightweight observability: log the exact query + outcome so failed
+    // lookups can be diagnosed from `supabase functions logs lyrics`.
+    console.log(
+      JSON.stringify({
+        title: query.title,
+        artist: query.artist,
+        album: query.album ?? null,
+        duration: query.duration ?? null,
+        result: best
+          ? {
+              source: best.source,
+              synced: Boolean(best.syncedLrc),
+              plain: Boolean(best.plain),
+              instrumental: best.instrumental,
+            }
+          : null,
+      }),
+    )
     return jsonResponse({ lyrics: best ? serialize(best) : null })
   } catch (err) {
     const message = err instanceof Error ? err.message : 'lyrics lookup failed'

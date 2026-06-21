@@ -36,6 +36,11 @@ function isFresh(entry: CacheEntry): boolean {
 // prefetches) never fire the same request twice.
 const inFlight = new Map<string, Promise<void>>()
 
+// Tracks that the live hook is still actively retrying. While a videoId is in
+// here we keep reporting "loading" (instead of "not found") so a track that
+// hasn't resolved yet doesn't flash the empty/visualizer state between attempts.
+const retrying = new Set<string>()
+
 // --- sessionStorage helpers -----------------------------------------------
 // Lyrics are persisted per-session so page reloads and hard tab switches
 // resolve instantly from storage instead of going to the network.
@@ -73,13 +78,22 @@ function ssSave(videoId: string, lyrics: Lyrics): void {
 /**
  * Resolve lyrics for a track into the shared cache. Used by both the live
  * hook and {@link prefetchLyrics}; resolves once the cache holds an entry.
+ *
+ * Pass `force` to bypass a cached *negative* result (used by the live hook's
+ * retry loop). A cached *positive* result is always reused — once we have
+ * lyrics for a track there's never a reason to look them up again.
  */
-function loadLyrics(track: LyricsTrack, signal?: AbortSignal): Promise<void> {
+function loadLyrics(
+  track: LyricsTrack,
+  signal?: AbortSignal,
+  force = false,
+): Promise<void> {
   const { videoId } = track
   if (!videoId) return Promise.resolve()
 
   const cached = cache.get(videoId)
-  if (cached && isFresh(cached)) return Promise.resolve()
+  if (cached?.lyrics) return Promise.resolve()
+  if (!force && cached && isFresh(cached)) return Promise.resolve()
 
   // Serve from sessionStorage before hitting the network (positives only).
   const persisted = ssLoad(videoId)
@@ -139,32 +153,66 @@ export function useLyrics(track: LyricsTrack | null): UseLyricsResult {
 
   useEffect(() => {
     if (!videoId) return
-    const entry = cache.get(videoId)
-    if (entry && isFresh(entry)) return
+    // Already have lyrics cached for this track — nothing to do.
+    if (cache.get(videoId)?.lyrics) return
 
     let cancelled = false
-    const current = trackRef.current
+    let timer: number | undefined
+    let attempt = 0
 
-    void loadLyrics({
-      videoId,
-      title: current?.title ?? '',
-      artist: current?.artist ?? '',
-      duration: current?.duration,
-    }).then(() => {
-      if (!cancelled) bump((n) => n + 1)
-    })
+    // Keep trying until lyrics actually resolve. Provider coverage and latency
+    // are flaky (LRCLIB can be slow, the edge can cold-start), so a single
+    // miss must NOT leave the current song without lyrics for its whole
+    // duration. We back off between attempts and give up only after a generous
+    // number of tries — by which point the track genuinely has no lyrics.
+    const RETRY_DELAYS_MS = [2_000, 4_000, 8_000, 15_000, 30_000]
+
+    retrying.add(videoId)
+
+    const attemptLoad = () => {
+      const current = trackRef.current
+      void loadLyrics(
+        {
+          videoId,
+          title: current?.title ?? '',
+          artist: current?.artist ?? '',
+          duration: current?.duration,
+        },
+        undefined,
+        // Force a real refetch on every retry so a cached negative from the
+        // previous attempt doesn't short-circuit us.
+        attempt > 0,
+      ).then(() => {
+        if (cancelled) return
+        const resolved = Boolean(cache.get(videoId)?.lyrics)
+        if (resolved || attempt >= RETRY_DELAYS_MS.length) {
+          retrying.delete(videoId)
+          bump((n) => n + 1)
+          return
+        }
+        const delay = RETRY_DELAYS_MS[attempt]!
+        attempt += 1
+        bump((n) => n + 1)
+        timer = window.setTimeout(attemptLoad, delay)
+      })
+    }
+
+    attemptLoad()
 
     return () => {
       cancelled = true
+      retrying.delete(videoId)
+      if (timer !== undefined) window.clearTimeout(timer)
     }
   }, [videoId])
 
   if (!videoId) return { lyrics: null, status: 'idle' }
 
   const entry = cache.get(videoId)
-  // Treat a missing or stale-negative entry as "loading" — the effect above is
-  // (re)fetching it, and showing the skeleton avoids a flash of "no lyrics".
-  if (!entry || !isFresh(entry)) return { lyrics: null, status: 'loading' }
-  if (entry.error) return { lyrics: null, status: 'error' }
-  return { lyrics: entry.lyrics, status: entry.lyrics ? 'loaded' : 'notfound' }
+  if (entry?.lyrics) return { lyrics: entry.lyrics, status: 'loaded' }
+  // No lyrics yet: while the retry loop is still running (or no attempt has
+  // settled), show the skeleton instead of a "no lyrics" flash. Only report
+  // not-found/error once we've actually stopped trying.
+  if (retrying.has(videoId) || !entry) return { lyrics: null, status: 'loading' }
+  return { lyrics: null, status: entry.error ? 'error' : 'notfound' }
 }
