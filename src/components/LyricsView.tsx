@@ -689,6 +689,17 @@ function SyncedLyrics({ lines, position, dim }: SyncedLyricsProps) {
               : index < activeIndex
                 ? 'is-sung'
                 : 'is-upcoming'
+          // Progressive blur: sharp on the active line, then softening with
+          // distance so lines melt away as they move up/down from the focus
+          // band. Capped so far-off lines don't turn to mush.
+          const distance = activeIndex < 0 ? index : Math.abs(index - activeIndex)
+          const blur = Math.min(distance * 1.15, 6)
+          const style = {
+            '--ytmq-line-blur': `${blur.toFixed(2)}px`,
+            ...(index === activeIndex
+              ? { '--ytmq-line-glow': activeGlow.toFixed(3) }
+              : null),
+          } as CSSProperties
           return (
             <p
               key={`${line.time}-${index}`}
@@ -697,13 +708,7 @@ function SyncedLyrics({ lines, position, dim }: SyncedLyricsProps) {
               }}
               role="listitem"
               className={`ytmq-lyric-line ${state}`}
-              style={
-                index === activeIndex
-                  ? ({
-                      '--ytmq-line-glow': activeGlow.toFixed(3),
-                    } as CSSProperties)
-                  : undefined
-              }
+              style={style}
             >
               {line.text || '♪'}
             </p>

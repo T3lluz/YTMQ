@@ -949,8 +949,13 @@ body {
 }
 
 .ytmq-lyric-line {
+  /* Driven from JS per line: 0 on the active line and growing with distance so
+     lines soften progressively as they move away from the focus band. */
+  --ytmq-line-blur: 0px;
   margin: 0;
-  padding: 0.46em 0.1em;
+  /* Generous horizontal padding keeps long lines from being clipped left/right
+     once the active line scales up, and forces them to wrap earlier instead. */
+  padding: 0.46em clamp(0.9rem, 7%, 2.75rem);
   font-family: var(--font-lyrics);
   font-size: 1.5rem;
   font-weight: 700;
@@ -959,6 +964,7 @@ body {
   text-align: center;
   text-wrap: balance;
   transform-origin: center center;
+  filter: blur(var(--ytmq-line-blur));
   /* A touch of overshoot on the scale so a line "pops" as it gains focus. */
   transition:
     color 0.5s ease,
@@ -999,13 +1005,11 @@ body {
 .ytmq-lyric-line.is-upcoming {
   color: rgba(255, 255, 255, 0.34);
   transform: scale(0.94);
-  filter: blur(0.5px);
 }
 
 .ytmq-lyric-line.is-sung {
   color: rgba(255, 255, 255, 0.24);
   transform: scale(0.94);
-  filter: blur(0.5px);
 }
 
 /* `--ytmq-line-glow` (0 → 1 → 0) is driven from JS across the line's duration:
@@ -1013,8 +1017,9 @@ body {
    giving a subtle breathing glow. Defaults to 0 so it degrades gracefully. */
 .ytmq-lyric-line.is-active {
   --ytmq-line-glow: 0;
+  --ytmq-line-blur: 0px;
   color: #fff;
-  transform: scale(1.14);
+  transform: scale(1.09);
   filter: blur(0);
   text-shadow:
     0 0 calc(12px + var(--ytmq-line-glow) * 36px)
@@ -1047,7 +1052,7 @@ body {
 .ytmq-lyrics-fullscreen .ytmq-lyric-line {
   font-size: clamp(1.9rem, 2.8vw, 3.1rem);
   line-height: 1.22;
-  padding: 0.5em 0.1em;
+  padding: 0.5em clamp(1rem, 7%, 3rem);
 }
 
 .ytmq-lyrics-fullscreen .ytmq-lyric-line.is-upcoming {
@@ -1059,7 +1064,7 @@ body {
 }
 
 .ytmq-lyrics-fullscreen .ytmq-lyric-line.is-active {
-  transform: scale(1.11);
+  transform: scale(1.06);
 }
 
 /* ----------------------------------------------------------------------------

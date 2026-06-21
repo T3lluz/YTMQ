@@ -24,7 +24,10 @@ type LrclibRecord = {
 
 async function lrclibRequest(path: string): Promise<unknown> {
   const res = await fetchWithTimeout(`${BASE}${path}`, {
-    headers: { Accept: 'application/json' },
+    headers: {
+      Accept: 'application/json',
+      'User-Agent': 'YTMQ (https://github.com/ytmq)',
+    },
     timeoutMs: 10_000,
   })
   if (res.status === 404) return null

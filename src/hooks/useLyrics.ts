@@ -15,11 +15,22 @@ export type UseLyricsResult = {
   status: LyricsStatus
 }
 
-type CacheEntry = { lyrics: Lyrics | null; error: boolean }
+type CacheEntry = { lyrics: Lyrics | null; error: boolean; ts: number }
 
 // Cache resolved lookups per video so switching tabs (or briefly losing the
 // now-playing broadcast) doesn't re-fetch the same lyrics.
 const cache = new Map<string, CacheEntry>()
+
+// Negative lookups (not-found / errored) are only cached briefly so a track
+// that had no match is retried later in the same session — important because
+// provider coverage changes over time (and after a backend deploy). Positive
+// results never expire in-session.
+const NEGATIVE_TTL_MS = 5 * 60_000
+
+function isFresh(entry: CacheEntry): boolean {
+  if (entry.lyrics) return true
+  return Date.now() - entry.ts < NEGATIVE_TTL_MS
+}
 
 // In-flight lookups keyed by videoId so a prefetch and the live view (or two
 // prefetches) never fire the same request twice.
@@ -31,24 +42,28 @@ const inFlight = new Map<string, Promise<void>>()
 // Only successful lookups are persisted; errors are intentionally excluded
 // so they're retried fresh on the next load.
 
-// Bump the prefix whenever the persisted shape changes so stale entries from
-// older builds (e.g. without a `source` field) don't get read back blindly.
-const SS_PREFIX = 'ytmq:lrc:v2:'
+// Bump the prefix whenever the persisted shape changes (or to invalidate
+// poisoned entries from older builds — e.g. negative results that used to be
+// cached permanently before coverage improved).
+const SS_PREFIX = 'ytmq:lrc:v3:'
 
 function ssLoad(videoId: string): CacheEntry | null {
   try {
     const raw = sessionStorage.getItem(SS_PREFIX + videoId)
-    return raw ? (JSON.parse(raw) as CacheEntry) : null
+    if (!raw) return null
+    const entry = JSON.parse(raw) as CacheEntry
+    // Only positive results are ever persisted; ignore anything else.
+    return entry?.lyrics ? entry : null
   } catch {
     return null
   }
 }
 
-function ssSave(videoId: string, lyrics: Lyrics | null): void {
+function ssSave(videoId: string, lyrics: Lyrics): void {
   try {
     sessionStorage.setItem(
       SS_PREFIX + videoId,
-      JSON.stringify({ lyrics, error: false }),
+      JSON.stringify({ lyrics, error: false, ts: Date.now() }),
     )
   } catch {
     // Silently ignore QuotaExceededError or private-browsing restrictions.
@@ -61,9 +76,12 @@ function ssSave(videoId: string, lyrics: Lyrics | null): void {
  */
 function loadLyrics(track: LyricsTrack, signal?: AbortSignal): Promise<void> {
   const { videoId } = track
-  if (!videoId || cache.has(videoId)) return Promise.resolve()
+  if (!videoId) return Promise.resolve()
 
-  // Serve from sessionStorage before hitting the network.
+  const cached = cache.get(videoId)
+  if (cached && isFresh(cached)) return Promise.resolve()
+
+  // Serve from sessionStorage before hitting the network (positives only).
   const persisted = ssLoad(videoId)
   if (persisted) {
     cache.set(videoId, persisted)
@@ -78,12 +96,14 @@ function loadLyrics(track: LyricsTrack, signal?: AbortSignal): Promise<void> {
     signal,
   )
     .then((result) => {
-      cache.set(videoId, { lyrics: result, error: false })
-      ssSave(videoId, result)
+      cache.set(videoId, { lyrics: result, error: false, ts: Date.now() })
+      // Only persist real lyrics; negative results stay in-memory with a TTL
+      // so they're retried later instead of being frozen for the session.
+      if (result) ssSave(videoId, result)
     })
     .catch((err: unknown) => {
       if (err instanceof DOMException && err.name === 'AbortError') return
-      cache.set(videoId, { lyrics: null, error: true })
+      cache.set(videoId, { lyrics: null, error: true, ts: Date.now() })
       // Errors are not persisted so they're retried next load.
     })
     .finally(() => {
@@ -118,7 +138,9 @@ export function useLyrics(track: LyricsTrack | null): UseLyricsResult {
   })
 
   useEffect(() => {
-    if (!videoId || cache.has(videoId)) return
+    if (!videoId) return
+    const entry = cache.get(videoId)
+    if (entry && isFresh(entry)) return
 
     let cancelled = false
     const current = trackRef.current
@@ -140,7 +162,9 @@ export function useLyrics(track: LyricsTrack | null): UseLyricsResult {
   if (!videoId) return { lyrics: null, status: 'idle' }
 
   const entry = cache.get(videoId)
-  if (!entry) return { lyrics: null, status: 'loading' }
+  // Treat a missing or stale-negative entry as "loading" — the effect above is
+  // (re)fetching it, and showing the skeleton avoids a flash of "no lyrics".
+  if (!entry || !isFresh(entry)) return { lyrics: null, status: 'loading' }
   if (entry.error) return { lyrics: null, status: 'error' }
   return { lyrics: entry.lyrics, status: entry.lyrics ? 'loaded' : 'notfound' }
 }

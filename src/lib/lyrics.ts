@@ -38,7 +38,7 @@ export type Lyrics = {
   source: LyricsSource
 }
 
-export type LyricsSource = 'lrclib' | 'netease' | 'kugou'
+export type LyricsSource = 'musixmatch' | 'lrclib' | 'netease' | 'kugou'
 
 type LrclibRecord = {
   id: number

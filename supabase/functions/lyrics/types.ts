@@ -1,7 +1,7 @@
 // Internal shared types and helpers used by every lyrics provider so the
 // aggregator can rank results from different sources side by side.
 
-export type ProviderName = 'lrclib' | 'netease' | 'kugou'
+export type ProviderName = 'musixmatch' | 'lrclib' | 'netease' | 'kugou'
 
 /** Normalised lyrics result returned by every provider. */
 export type ProviderResult = {

@@ -1,15 +1,16 @@
 // `lyrics` edge function — aggregates multiple lyrics providers behind a
 // single endpoint so the client gets the broadest possible catalog with one
-// network round-trip. The browser-side `fetchLyrics` still hits LRCLIB
-// directly for the fastest happy-path; this function adds NetEase + KuGou
-// coverage (the upstream sources used by unofficial Spotify lyrics tools)
-// for everything LRCLIB doesn't have.
+// network round-trip. Musixmatch is the primary source (largest synced
+// catalog), with LRCLIB / NetEase / KuGou as fallbacks for anything it can't
+// fully sync. The browser-side `fetchLyrics` still hits LRCLIB directly in
+// parallel for the fastest happy-path.
 
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts'
 
 import { searchLrclib } from './lrclib.ts'
 import { searchKugou } from './kugou.ts'
 import { searchNetease } from './netease.ts'
+import { searchMusixmatch } from './musixmatch.ts'
 import {
   hasContent,
   scoreResult,
@@ -95,7 +96,7 @@ async function readInput(req: Request): Promise<{
     .split(',')
     .map((s) => s.trim().toLowerCase())
     .filter(Boolean) as ProviderName[]
-  const allowed: ProviderName[] = ['lrclib', 'netease', 'kugou']
+  const allowed: ProviderName[] = ['musixmatch', 'lrclib', 'netease', 'kugou']
   const sources = new Set<ProviderName>(
     requested.length > 0
       ? requested.filter((s): s is ProviderName => allowed.includes(s))
@@ -121,26 +122,68 @@ function serialize(result: ProviderResult): SerializedLyrics {
 }
 
 /**
- * Race the configured providers and return as soon as any of them yields
- * time-synced lyrics. Plain-only and instrumental results are kept around so
- * we can still return *something* if no provider had a synced match.
+ * Resolve lyrics with a Musixmatch-first strategy:
+ *
+ *   1. **Musixmatch** is the primary source — it has the largest synced-lyrics
+ *      catalog. If it returns time-synced lyrics we use them immediately.
+ *   2. Otherwise we fall back to the other providers (LRCLIB / NetEase /
+ *      KuGou) and take the first one that yields synced lyrics. This is
+ *      important because Musixmatch sometimes only exposes *plain* lyrics for
+ *      a track that another provider has fully synced.
+ *   3. If nobody has synced lyrics, we return the best plain / instrumental
+ *      result gathered across every provider.
+ *
+ * Every provider is kicked off concurrently, so the fallback tier is already
+ * in flight while we wait on the primary — there's no added latency in the
+ * common case.
  */
 async function aggregate(
   query: LyricsQuery,
   sources: Set<ProviderName>,
 ): Promise<ProviderResult | null> {
-  const tasks: Promise<ProviderResult[]>[] = []
-  if (sources.has('lrclib')) tasks.push(searchLrclib(query).catch(() => []))
-  if (sources.has('netease')) tasks.push(searchNetease(query).catch(() => []))
-  if (sources.has('kugou')) tasks.push(searchKugou(query).catch(() => []))
-
-  if (tasks.length === 0) return null
-
   const pooled: ProviderResult[] = []
+  const collect = (results: ProviderResult[]) => {
+    for (const r of results) if (hasContent(r)) pooled.push(r)
+  }
 
-  // Resolve as soon as the first synced result lands; otherwise wait for all
-  // tasks so we can fall back to the best plain match.
-  const syncedWinner = await new Promise<ProviderResult | null>((resolve) => {
+  const mxmTask = sources.has('musixmatch')
+    ? searchMusixmatch(query).catch(() => [])
+    : null
+  const fallbackTasks: Promise<ProviderResult[]>[] = []
+  if (sources.has('lrclib')) fallbackTasks.push(searchLrclib(query).catch(() => []))
+  if (sources.has('netease')) fallbackTasks.push(searchNetease(query).catch(() => []))
+  if (sources.has('kugou')) fallbackTasks.push(searchKugou(query).catch(() => []))
+
+  // Tier 1 — Musixmatch (primary). Use its synced lyrics straight away.
+  if (mxmTask) {
+    const results = await mxmTask
+    collect(results)
+    const synced = results.filter((r) => r.syncedLrc && hasContent(r))
+    if (synced.length > 0) return bestOf(synced, query)
+  }
+
+  // Tier 2 — fall back to the other providers; first synced match wins.
+  const syncedWinner = await firstSyncedRecord(fallbackTasks, query, collect)
+  if (syncedWinner) return syncedWinner
+
+  // Tier 3 — no synced lyrics anywhere; best plain / instrumental result.
+  if (pooled.length === 0) return null
+  return bestOf(pooled, query)
+}
+
+/**
+ * Resolve with the best synced result as soon as any task produces one, or
+ * null once every task settles without a synced match. Every task's results
+ * are funnelled into {@link collect} so the caller can still fall back to the
+ * best plain match.
+ */
+function firstSyncedRecord(
+  tasks: Promise<ProviderResult[]>[],
+  query: LyricsQuery,
+  collect: (results: ProviderResult[]) => void,
+): Promise<ProviderResult | null> {
+  if (tasks.length === 0) return Promise.resolve(null)
+  return new Promise((resolve) => {
     let remaining = tasks.length
     let settled = false
     const finish = (value: ProviderResult | null) => {
@@ -151,13 +194,9 @@ async function aggregate(
     for (const task of tasks) {
       task
         .then((results) => {
+          collect(results)
           if (settled) return
-          for (const r of results) {
-            if (hasContent(r)) pooled.push(r)
-          }
-          const synced = results.filter(
-            (r) => r.syncedLrc && hasContent(r),
-          )
+          const synced = results.filter((r) => r.syncedLrc && hasContent(r))
           if (synced.length > 0) {
             finish(bestOf(synced, query))
             return
@@ -172,10 +211,6 @@ async function aggregate(
         })
     }
   })
-
-  if (syncedWinner) return syncedWinner
-  if (pooled.length === 0) return null
-  return bestOf(pooled, query)
 }
 
 function bestOf(
