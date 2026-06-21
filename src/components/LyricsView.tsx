@@ -747,11 +747,20 @@ const VIZ_BAR_COUNT = 27
  * Procedural music-style visualizer used when there are no lyrics to follow.
  *
  * We don't have access to the actual audio analyser (the audio plays inside
- * YT Music in a separate process), so each bar is driven by a layered mix of
- * sine waves at low/mid/high rates plus a synthetic kick on a fixed tempo.
- * The result reads as "moving with music" without claiming to be a true
- * spectrum. When playback isn't live, the bars smoothly settle to a small
- * resting size so the screen stays calm.
+ * YT Music in a separate process), so the bars are driven by a synthetic
+ * spectrum rather than a true FFT. The layout mirrors a real analyser though:
+ * bars run **left → right = low → high frequency**, the spectrum is bass-tilted
+ * (lower bands sit higher, like real music), a beat-locked kick drives the bass
+ * end while a snare adds shimmer to the treble end.
+ *
+ * Two layers of smoothing keep it from looking jittery:
+ *  - **Spatial** — each bar is blurred against its neighbours every frame, so
+ *    adjacent bars move together instead of independently.
+ *  - **Temporal** — bars rise quickly but fall back slowly (asymmetric easing),
+ *    so they "go up/down" smoothly the way a real spectrum decays.
+ *
+ * When playback isn't live, the energy ramps to zero and the bars settle to a
+ * small resting size so the screen stays calm.
  */
 function LyricsVisualizer({ live, title }: { live: boolean; title: string }) {
   const barRefs = useRef<(HTMLDivElement | null)[]>([])
@@ -766,10 +775,15 @@ function LyricsVisualizer({ live, title }: { live: boolean; title: string }) {
     const reduce =
       typeof window !== 'undefined' &&
       window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
-    // Stable per-bar phase offsets so each bar dances on its own beat.
-    const seeds = Array.from({ length: VIZ_BAR_COUNT }, (_, i) => i * 1.37 + 0.21)
+    const n = VIZ_BAR_COUNT
+    // Smoothed height currently shown for each bar (carried between frames so
+    // the temporal easing has memory).
+    const levels = new Float32Array(n)
+    // Scratch buffers reused every frame to avoid per-frame allocation.
+    const targets = new Float32Array(n)
+    const blurred = new Float32Array(n)
     let energy = 0
-    // ~110 BPM kick — close to the average pop/rock tempo.
+    // ~110 BPM groove — close to the average pop/rock tempo.
     const tempoHz = 110 / 60
 
     const tick = (now: number) => {
@@ -783,33 +797,53 @@ function LyricsVisualizer({ live, title }: { live: boolean; title: string }) {
       const beatPhase = (t * tempoHz) % 1
       const kick = Math.exp(-beatPhase * 5.5)
       // Snare on the off-beat, softer and with a quicker decay.
-      const offPhase = ((t * tempoHz + 0.5) % 1)
+      const offPhase = (t * tempoHz + 0.5) % 1
       const snare = Math.exp(-offPhase * 8) * 0.6
 
-      const center = (VIZ_BAR_COUNT - 1) / 2
-      for (let i = 0; i < VIZ_BAR_COUNT; i++) {
+      // 1. Build the raw target spectrum. `f` runs 0 (low/left) → 1 (high/right).
+      for (let i = 0; i < n; i++) {
+        const f = n > 1 ? i / (n - 1) : 0
+
+        // Bass-tilted envelope: lower frequencies carry more energy, like real
+        // music. Never quite zero so the treble end still has presence.
+        const tilt = Math.pow(1 - f, 1.25) * 0.78 + 0.16
+
+        // A few overlapping travelling waves across the spectrum give the bands
+        // motion that flows along the frequency axis (so neighbours relate).
+        const wave =
+          0.62 * Math.sin(t * 1.3 + f * 6.0) +
+          0.42 * Math.sin(t * 2.7 - f * 9.0 + 1.3) +
+          0.3 * Math.sin(t * 5.1 + f * 14.0 + 0.6)
+        const motion = wave / 1.34 // → roughly -1..1
+        const shaped = 0.5 + 0.5 * motion // → 0..1
+
+        // Percussion: kick lifts the low end, snare sparkles the high end.
+        const lowBoost = kick * Math.pow(1 - f, 2) * 0.6
+        const highBoost = snare * Math.pow(f, 1.5) * 0.4
+
+        targets[i] =
+          (tilt * (0.4 + 0.6 * shaped) + lowBoost + highBoost) * energy
+      }
+
+      // 2. Spatial smoothing — blur each bar against its neighbours so the
+      // spectrum reads as one connected shape rather than independent spikes.
+      for (let i = 0; i < n; i++) {
+        const left = targets[i > 0 ? i - 1 : 0]
+        const mid = targets[i]
+        const right = targets[i < n - 1 ? i + 1 : n - 1]
+        blurred[i] = (left + 2 * mid + right) / 4
+      }
+
+      // 3. Temporal smoothing — rise quickly, fall slowly, so bars move up/down
+      // smoothly instead of snapping frame to frame.
+      for (let i = 0; i < n; i++) {
         const node = barRefs.current[i]
         if (!node) continue
-        const seed = seeds[i]
-        // Bars near the centre = bass (low), edges = treble (high), mirrored.
-        const dist = Math.abs(i - center) / center
-        const bassWeight = 1 - dist
-        const trebleWeight = dist
-
-        const slow = Math.sin(t * 1.7 + seed) * 0.5 + 0.5
-        const mid = Math.sin(t * 4.3 + seed * 1.7) * 0.5 + 0.5
-        const fast = Math.sin(t * 9.1 + seed * 0.6) * 0.5 + 0.5
-
-        const ambient =
-          0.32 * slow * (0.55 + 0.45 * bassWeight) +
-          0.26 * mid +
-          0.18 * fast * (0.4 + 0.6 * trebleWeight)
-        const percussive =
-          kick * (0.55 * bassWeight + 0.1) +
-          snare * (0.35 * trebleWeight + 0.05)
-
-        const raw = (ambient + percussive) * energy
-        const h = Math.max(0.06, Math.min(1, raw + 0.06))
+        const want = blurred[i]
+        const rising = want > levels[i]
+        const ease = rising ? 0.34 : 0.12
+        levels[i] += (want - levels[i]) * ease
+        const h = Math.max(0.06, Math.min(1, levels[i] + 0.06))
         node.style.setProperty('--ytmq-viz-h', h.toFixed(3))
       }
 
