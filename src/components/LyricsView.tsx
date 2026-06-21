@@ -250,6 +250,36 @@ export function LyricsScreen({
     )
   }
 
+  // Whether there's anything to actually show in the lyrics pane. While the
+  // lookup is in flight we keep the pane (skeleton); otherwise it only appears
+  // when real synced/plain lyrics exist. For tracks with no lyrics (not found,
+  // instrumental, errors) we drop the pane and centre the artwork instead.
+  const showLyrics =
+    status === 'loading' ||
+    (!!lyrics &&
+      !lyrics.instrumental &&
+      (lyrics.synced.length > 0 || !!lyrics.plain))
+
+  const artPanel = (
+    <ArtPanel
+      art={art}
+      title={title}
+      artist={artist}
+      position={position}
+      duration={duration}
+      live={live}
+      fullscreen={fullscreen}
+      isPlaying={isPlaying}
+      controlsEnabled={controlsEnabled}
+      pendingAction={pendingAction}
+      onControl={onControl}
+    />
+  )
+
+  const lyricsPane = (
+    <LyricsBody status={status} lyrics={lyrics} position={position} stale={stale} />
+  )
+
   return (
     <section
       ref={sectionRef}
@@ -296,62 +326,39 @@ export function LyricsScreen({
         className="absolute inset-0 -z-[5] bg-zinc-950/10 backdrop-blur-md"
       />
 
-      {fullscreen ? (
-        // Two equal halves: the art + controls are centred in the left half of
-        // the screen, the lyrics centred in the right half. On narrow screens
-        // they stack instead.
-        <div className="relative flex min-h-0 flex-1 flex-col items-center justify-center gap-7 px-6 pt-[calc(env(safe-area-inset-top)+1.5rem)] pb-[calc(5.5rem+env(safe-area-inset-bottom))] sm:grid sm:grid-cols-2 sm:items-center sm:gap-0 sm:px-0 sm:pt-[calc(env(safe-area-inset-top)+1rem)]">
-          <div className="flex w-full min-h-0 items-center justify-center px-4 sm:px-8 lg:px-12 xl:px-16">
-            <ArtPanel
-              art={art}
-              title={title}
-              artist={artist}
-              position={position}
-              duration={duration}
-              live={live}
-              fullscreen={fullscreen}
-              isPlaying={isPlaying}
-              controlsEnabled={controlsEnabled}
-              pendingAction={pendingAction}
-              onControl={onControl}
-            />
-          </div>
-          <div className="flex w-full min-h-0 items-stretch justify-center px-2 sm:px-8 lg:px-12 xl:px-16">
-            <div className="ytmq-lyrics-pane relative min-h-0 w-full max-w-2xl self-stretch">
-              <LyricsBody
-                status={status}
-                lyrics={lyrics}
-                position={position}
-                stale={stale}
-                live={live}
-              />
+      {showLyrics ? (
+        fullscreen ? (
+          // Two equal halves: the art + controls in the left half, lyrics in
+          // the right half. On narrow screens they stack instead.
+          <div className="relative flex min-h-0 flex-1 flex-col items-center justify-center gap-7 px-6 pt-[calc(env(safe-area-inset-top)+1.5rem)] pb-[calc(5.5rem+env(safe-area-inset-bottom))] sm:grid sm:grid-cols-2 sm:items-center sm:gap-0 sm:px-0 sm:pt-[calc(env(safe-area-inset-top)+1rem)]">
+            <div className="flex w-full min-h-0 items-center justify-center px-4 sm:px-8 lg:px-12 xl:px-16">
+              {artPanel}
+            </div>
+            <div className="flex w-full min-h-0 items-stretch justify-center px-2 sm:px-8 lg:px-12 xl:px-16">
+              <div className="ytmq-lyrics-pane relative min-h-0 w-full max-w-2xl self-stretch">
+                {lyricsPane}
+              </div>
             </div>
           </div>
-        </div>
-      ) : (
-        <div className="relative flex min-h-0 flex-1 flex-col gap-4 p-4 sm:flex-row sm:gap-5 sm:p-5 md:gap-7 md:p-6">
-          <ArtPanel
-            art={art}
-            title={title}
-            artist={artist}
-            position={position}
-            duration={duration}
-            live={live}
-            fullscreen={fullscreen}
-            isPlaying={isPlaying}
-            controlsEnabled={controlsEnabled}
-            pendingAction={pendingAction}
-            onControl={onControl}
-          />
-          <div className="ytmq-lyrics-pane relative min-h-0 flex-1">
-            <LyricsBody
-              status={status}
-              lyrics={lyrics}
-              position={position}
-              stale={stale}
-              live={live}
-            />
+        ) : (
+          <div className="relative flex min-h-0 flex-1 flex-col gap-4 p-4 sm:flex-row sm:gap-5 sm:p-5 md:gap-7 md:p-6">
+            {artPanel}
+            <div className="ytmq-lyrics-pane relative min-h-0 flex-1">
+              {lyricsPane}
+            </div>
           </div>
+        )
+      ) : (
+        // No lyrics for this track — centre the artwork, title, progress and
+        // controls on their own rather than pairing them with an empty pane.
+        <div
+          className={
+            fullscreen
+              ? 'relative flex min-h-0 flex-1 flex-col items-center justify-center px-6 pt-[calc(env(safe-area-inset-top)+1.5rem)] pb-[calc(5.5rem+env(safe-area-inset-bottom))]'
+              : 'relative flex min-h-0 flex-1 flex-col items-center justify-center gap-4 p-6'
+          }
+        >
+          {artPanel}
         </div>
       )}
     </section>
@@ -608,38 +615,22 @@ type LyricsBodyProps = {
   lyrics: Lyrics | null
   position: number
   stale: boolean
-  live: boolean
 }
 
-function LyricsBody({ status, lyrics, position, stale, live }: LyricsBodyProps) {
+function LyricsBody({ status, lyrics, position, stale }: LyricsBodyProps) {
   if (status === 'loading') return <LyricsSkeleton />
 
-  if (status === 'error') {
-    return (
-      <LyricsMessage
-        title="Couldn’t load lyrics"
-        detail="There was a problem reaching the lyrics service. It’ll retry on the next track."
-      />
-    )
-  }
-
-  if (lyrics?.instrumental) {
-    return <LyricsVisualizer live={live} title="Instrumental" />
-  }
-
-  if (status === 'notfound' || !lyrics) {
-    return <LyricsVisualizer live={live} title="No lyrics found" />
-  }
-
-  if (lyrics.synced.length > 0) {
+  if (lyrics && lyrics.synced.length > 0) {
     return <SyncedLyrics lines={lyrics.synced} position={position} dim={stale} />
   }
 
-  if (lyrics.plain) {
+  if (lyrics?.plain) {
     return <PlainLyrics text={lyrics.plain} />
   }
 
-  return <LyricsVisualizer live={live} title="No lyrics found" />
+  // Tracks with no lyrics (not found / instrumental / error) are handled by the
+  // parent, which hides this pane entirely and centres the artwork instead.
+  return null
 }
 
 type SyncedLyricsProps = {
@@ -751,57 +742,6 @@ function LyricsSkeleton() {
           style={{ width: w, opacity: 1 - i * 0.08 }}
         />
       ))}
-    </div>
-  )
-}
-
-function LyricsMessage({ title, detail }: { title: string; detail: string }) {
-  return (
-    <div className="flex h-full flex-col items-center justify-center gap-2 px-4 text-center">
-      <LyricsGlyph className="mb-1 h-8 w-8 text-white/40" />
-      <p className="text-base font-semibold text-white drop-shadow">{title}</p>
-      <p className="max-w-xs text-sm text-zinc-300">{detail}</p>
-    </div>
-  )
-}
-
-/**
- * Ambient pulse shown when there are no lyrics to follow (or for instrumentals).
- *
- * The audio plays inside YT Music in a separate, cross-origin process, so a
- * real frequency spectrum isn't available to this app. Rather than fake an FFT,
- * we show a calm, modern "sound ripple": a glowing core that gently breathes
- * with concentric rings emitting outward while playback is live, settling to a
- * still resting state when paused. It reads as musical and friendly without
- * pretending to be a true analyser. The motion is pure CSS, so there's no
- * per-frame JS work.
- */
-function LyricsVisualizer({ live, title }: { live: boolean; title: string }) {
-  return (
-    <div className="flex h-full flex-col items-center justify-center gap-6 px-4 text-center">
-      <div
-        className={`ytmq-pulse ${live ? 'is-live' : ''}`}
-        role="img"
-        aria-label="Music visualizer"
-      >
-        <span className="ytmq-pulse-ring" aria-hidden />
-        <span className="ytmq-pulse-ring" aria-hidden />
-        <span className="ytmq-pulse-ring" aria-hidden />
-        <span className="ytmq-pulse-core" aria-hidden>
-          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path
-              d="M9 17V5l10-2v12"
-              stroke="currentColor"
-              strokeWidth="1.8"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-            <circle cx="6.5" cy="17" r="2.6" fill="currentColor" />
-            <circle cx="16.5" cy="15" r="2.6" fill="currentColor" />
-          </svg>
-        </span>
-      </div>
-      <p className="text-sm font-medium text-white/70 drop-shadow">{title}</p>
     </div>
   )
 }

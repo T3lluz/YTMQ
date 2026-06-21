@@ -877,15 +877,15 @@ body {
   -webkit-mask-image: linear-gradient(
     to bottom,
     transparent 0%,
-    #000 16%,
-    #000 84%,
+    #000 22%,
+    #000 78%,
     transparent 100%
   );
   mask-image: linear-gradient(
     to bottom,
     transparent 0%,
-    #000 16%,
-    #000 84%,
+    #000 22%,
+    #000 78%,
     transparent 100%
   );
 }
@@ -907,11 +907,11 @@ body {
   position: absolute;
   left: 0;
   right: 0;
-  height: clamp(48px, 20%, 124px);
+  height: clamp(72px, 28%, 168px);
   pointer-events: none;
   z-index: 2;
-  backdrop-filter: blur(7px);
-  -webkit-backdrop-filter: blur(7px);
+  backdrop-filter: blur(11px);
+  -webkit-backdrop-filter: blur(11px);
 }
 
 .ytmq-lyrics-blur-top {
@@ -919,10 +919,10 @@ body {
   -webkit-mask-image: linear-gradient(
     to bottom,
     #000 0%,
-    #000 22%,
+    #000 26%,
     transparent 100%
   );
-  mask-image: linear-gradient(to bottom, #000 0%, #000 22%, transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 0%, #000 26%, transparent 100%);
 }
 
 .ytmq-lyrics-blur-bottom {
@@ -930,14 +930,14 @@ body {
   -webkit-mask-image: linear-gradient(
     to top,
     #000 0%,
-    #000 22%,
+    #000 26%,
     transparent 100%
   );
-  mask-image: linear-gradient(to top, #000 0%, #000 22%, transparent 100%);
+  mask-image: linear-gradient(to top, #000 0%, #000 26%, transparent 100%);
 }
 
 .ytmq-lyrics-fullscreen .ytmq-lyrics-blur {
-  height: clamp(80px, 24%, 200px);
+  height: clamp(110px, 28%, 240px);
 }
 
 /* Reserve half the lyrics viewport above the first line and below the last,
@@ -959,11 +959,12 @@ body {
   text-align: center;
   text-wrap: balance;
   transform-origin: center center;
+  /* A touch of overshoot on the scale so a line "pops" as it gains focus. */
   transition:
     color 0.5s ease,
     opacity 0.5s ease,
-    transform 0.55s var(--ease-out-soft),
-    text-shadow 0.5s ease,
+    transform 0.5s cubic-bezier(0.34, 1.45, 0.5, 1),
+    text-shadow 0.45s ease,
     filter 0.5s ease;
 }
 
@@ -993,13 +994,18 @@ body {
   }
 }
 
+/* Non-focused lines recede slightly (smaller + dimmer + a hint of blur) so the
+   focused line stands out more and the column feels alive as it scrolls. */
 .ytmq-lyric-line.is-upcoming {
-  color: rgba(255, 255, 255, 0.42);
-  filter: blur(0.25px);
+  color: rgba(255, 255, 255, 0.34);
+  transform: scale(0.94);
+  filter: blur(0.5px);
 }
 
 .ytmq-lyric-line.is-sung {
-  color: rgba(255, 255, 255, 0.3);
+  color: rgba(255, 255, 255, 0.24);
+  transform: scale(0.94);
+  filter: blur(0.5px);
 }
 
 /* `--ytmq-line-glow` (0 → 1 → 0) is driven from JS across the line's duration:
@@ -1008,19 +1014,22 @@ body {
 .ytmq-lyric-line.is-active {
   --ytmq-line-glow: 0;
   color: #fff;
-  transform: scale(1.09);
+  transform: scale(1.14);
+  filter: blur(0);
   text-shadow:
-    0 0 calc(8px + var(--ytmq-line-glow) * 26px)
+    0 0 calc(12px + var(--ytmq-line-glow) * 36px)
       color-mix(
         in srgb,
-        var(--np-accent-glow-strong) calc(34% + var(--ytmq-line-glow) * 56%),
+        var(--np-accent-glow-strong) calc(42% + var(--ytmq-line-glow) * 54%),
         transparent
       ),
-    0 1px 2px rgba(0, 0, 0, 0.45);
+    0 1px 3px rgba(0, 0, 0, 0.5);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .ytmq-lyric-line.is-active {
+  .ytmq-lyric-line.is-active,
+  .ytmq-lyric-line.is-upcoming,
+  .ytmq-lyric-line.is-sung {
     transform: none;
   }
 }
@@ -1050,121 +1059,7 @@ body {
 }
 
 .ytmq-lyrics-fullscreen .ytmq-lyric-line.is-active {
-  transform: scale(1.06);
-}
-
-/* ----------------------------------------------------------------------------
-   Lyrics empty state — "no lyrics" / instrumental ambient pulse
-   ------------------------------------------------------------------------- */
-
-.ytmq-pulse {
-  position: relative;
-  display: grid;
-  place-items: center;
-  width: clamp(128px, 22vh, 184px);
-  height: clamp(128px, 22vh, 184px);
-  --ytmq-pulse-accent: color-mix(in srgb, var(--np-accent-light) 88%, white);
-}
-
-.ytmq-lyrics-fullscreen .ytmq-pulse {
-  width: clamp(180px, 32vh, 280px);
-  height: clamp(180px, 32vh, 280px);
-}
-
-.ytmq-pulse-core {
-  position: relative;
-  z-index: 1;
-  display: grid;
-  place-items: center;
-  width: 42%;
-  height: 42%;
-  border-radius: 9999px;
-  color: #fff;
-  background: radial-gradient(
-    circle at 32% 28%,
-    color-mix(in srgb, var(--ytmq-pulse-accent) 96%, white) 0%,
-    var(--np-accent) 72%
-  );
-  box-shadow:
-    0 0 26px var(--np-accent-glow),
-    0 0 10px var(--np-accent-glow-strong),
-    inset 0 1px 10px rgba(255, 255, 255, 0.28);
-}
-
-.ytmq-pulse-core svg {
-  width: 48%;
-  height: 48%;
-  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.35));
-}
-
-.ytmq-pulse.is-live .ytmq-pulse-core {
-  animation: ytmq-pulse-breathe 2.4s ease-in-out infinite;
-}
-
-/* Calm, still resting state when playback isn't live. */
-.ytmq-pulse:not(.is-live) .ytmq-pulse-core {
-  opacity: 0.72;
-  transform: scale(0.95);
-  transition:
-    transform 600ms cubic-bezier(0.22, 0.61, 0.36, 1),
-    opacity 600ms ease;
-}
-
-.ytmq-pulse-ring {
-  position: absolute;
-  width: 42%;
-  height: 42%;
-  border-radius: 9999px;
-  border: 1.5px solid var(--ytmq-pulse-accent);
-  opacity: 0;
-}
-
-.ytmq-pulse.is-live .ytmq-pulse-ring {
-  animation: ytmq-pulse-ripple 2.4s cubic-bezier(0.22, 0.61, 0.36, 1) infinite;
-  will-change: transform, opacity;
-}
-
-.ytmq-pulse.is-live .ytmq-pulse-ring:nth-child(2) {
-  animation-delay: 0.8s;
-}
-
-.ytmq-pulse.is-live .ytmq-pulse-ring:nth-child(3) {
-  animation-delay: 1.6s;
-}
-
-@keyframes ytmq-pulse-ripple {
-  0% {
-    transform: scale(1);
-    opacity: 0;
-  }
-  12% {
-    opacity: 0.5;
-  }
-  100% {
-    transform: scale(2.55);
-    opacity: 0;
-  }
-}
-
-@keyframes ytmq-pulse-breathe {
-  0%,
-  100% {
-    transform: scale(0.94);
-  }
-  50% {
-    transform: scale(1.06);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .ytmq-pulse.is-live .ytmq-pulse-core,
-  .ytmq-pulse.is-live .ytmq-pulse-ring {
-    animation: none;
-  }
-  .ytmq-pulse-ring:first-child {
-    opacity: 0.32;
-    transform: scale(1.7);
-  }
+  transform: scale(1.11);
 }
 
 /* ----------------------------------------------------------------------------
