@@ -2,6 +2,9 @@
 
 @theme {
   --font-sans: system-ui, 'Segoe UI', Roboto, sans-serif;
+  /* Spotify ships the proprietary "Circular" typeface; Montserrat is the
+     closest free geometric sans and is used for lyric display. */
+  --font-lyrics: 'Montserrat', system-ui, 'Segoe UI', Roboto, sans-serif;
   --ease-spring: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-out-soft: cubic-bezier(0.16, 1, 0.3, 1);
 }
@@ -891,6 +894,52 @@ body {
   height: 0;
 }
 
+/* Stage holds the scrolling lyrics plus fixed blur veils at the edges. */
+.ytmq-lyrics-stage {
+  position: relative;
+  min-height: 0;
+}
+
+/* Gradual ("progressive") blur over the top and bottom edges: strongest right
+   at the edge and fading to a perfectly clear reading band in the middle, so
+   lines soften as they leave the focus zone instead of hard-clipping. */
+.ytmq-lyrics-blur {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: clamp(48px, 20%, 124px);
+  pointer-events: none;
+  z-index: 2;
+  backdrop-filter: blur(7px);
+  -webkit-backdrop-filter: blur(7px);
+}
+
+.ytmq-lyrics-blur-top {
+  top: 0;
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    #000 0%,
+    #000 22%,
+    transparent 100%
+  );
+  mask-image: linear-gradient(to bottom, #000 0%, #000 22%, transparent 100%);
+}
+
+.ytmq-lyrics-blur-bottom {
+  bottom: 0;
+  -webkit-mask-image: linear-gradient(
+    to top,
+    #000 0%,
+    #000 22%,
+    transparent 100%
+  );
+  mask-image: linear-gradient(to top, #000 0%, #000 22%, transparent 100%);
+}
+
+.ytmq-lyrics-fullscreen .ytmq-lyrics-blur {
+  height: clamp(80px, 24%, 200px);
+}
+
 /* Reserve half the lyrics viewport above the first line and below the last,
    so any line (including the first/last) can sit at the vertical centre. */
 .ytmq-lyrics-spacer {
@@ -901,36 +950,37 @@ body {
 
 .ytmq-lyric-line {
   margin: 0;
-  padding: 0.28em 0.1em;
-  font-size: 1.2rem;
+  padding: 0.46em 0.1em;
+  font-family: var(--font-lyrics);
+  font-size: 1.5rem;
   font-weight: 700;
-  line-height: 1.28;
-  letter-spacing: -0.01em;
+  line-height: 1.26;
+  letter-spacing: -0.015em;
   text-align: center;
   text-wrap: balance;
   transform-origin: center center;
   transition:
-    color 0.45s ease,
-    opacity 0.45s ease,
-    transform 0.45s var(--ease-out-soft),
-    text-shadow 0.45s ease,
-    filter 0.45s ease;
+    color 0.5s ease,
+    opacity 0.5s ease,
+    transform 0.55s var(--ease-out-soft),
+    text-shadow 0.5s ease,
+    filter 0.5s ease;
 }
 
 @container (min-width: 340px) {
   .ytmq-lyric-line {
-    font-size: 1.35rem;
+    font-size: 1.7rem;
   }
 }
 @container (min-width: 460px) {
   .ytmq-lyric-line {
-    font-size: 1.6rem;
+    font-size: 2rem;
   }
 }
 @container (min-width: 600px) {
   .ytmq-lyric-line {
-    font-size: 1.9rem;
-    line-height: 1.22;
+    font-size: 2.35rem;
+    line-height: 1.2;
   }
 }
 
@@ -952,11 +1002,20 @@ body {
   color: rgba(255, 255, 255, 0.3);
 }
 
+/* `--ytmq-line-glow` (0 → 1 → 0) is driven from JS across the line's duration:
+   it ramps up as the line gains focus and eases back down as the line ends,
+   giving a subtle breathing glow. Defaults to 0 so it degrades gracefully. */
 .ytmq-lyric-line.is-active {
+  --ytmq-line-glow: 0;
   color: #fff;
-  transform: scale(1.04);
+  transform: scale(1.09);
   text-shadow:
-    0 1px 14px var(--np-accent-glow-strong),
+    0 0 calc(8px + var(--ytmq-line-glow) * 26px)
+      color-mix(
+        in srgb,
+        var(--np-accent-glow-strong) calc(34% + var(--ytmq-line-glow) * 56%),
+        transparent
+      ),
     0 1px 2px rgba(0, 0, 0, 0.45);
 }
 
@@ -977,9 +1036,9 @@ body {
 
 /* Bigger, more generously spaced lyrics for the immersive desktop layout. */
 .ytmq-lyrics-fullscreen .ytmq-lyric-line {
-  font-size: clamp(1.6rem, 2.3vw, 2.6rem);
-  line-height: 1.24;
-  padding: 0.34em 0.1em;
+  font-size: clamp(1.9rem, 2.8vw, 3.1rem);
+  line-height: 1.22;
+  padding: 0.5em 0.1em;
 }
 
 .ytmq-lyrics-fullscreen .ytmq-lyric-line.is-upcoming {
@@ -991,62 +1050,120 @@ body {
 }
 
 .ytmq-lyrics-fullscreen .ytmq-lyric-line.is-active {
-  transform: scale(1.02);
+  transform: scale(1.06);
 }
 
 /* ----------------------------------------------------------------------------
-   Lyrics "no lyrics found" / instrumental — procedural music visualizer
+   Lyrics empty state — "no lyrics" / instrumental ambient pulse
    ------------------------------------------------------------------------- */
 
-.ytmq-lyrics-viz {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  width: min(420px, 80%);
-  height: clamp(120px, 24vh, 220px);
-  padding: 0 4px;
-  --ytmq-viz-color: color-mix(in srgb, var(--np-accent-light) 86%, white);
-  --ytmq-viz-color-soft: color-mix(in srgb, var(--np-accent) 70%, transparent);
+.ytmq-pulse {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: clamp(128px, 22vh, 184px);
+  height: clamp(128px, 22vh, 184px);
+  --ytmq-pulse-accent: color-mix(in srgb, var(--np-accent-light) 88%, white);
 }
 
-.ytmq-lyrics-fullscreen .ytmq-lyrics-viz {
-  width: min(560px, 70%);
-  height: clamp(160px, 32vh, 320px);
-  gap: 8px;
+.ytmq-lyrics-fullscreen .ytmq-pulse {
+  width: clamp(180px, 32vh, 280px);
+  height: clamp(180px, 32vh, 280px);
 }
 
-.ytmq-lyrics-viz-bar {
-  flex: 1 1 0;
-  min-width: 4px;
-  max-width: 14px;
-  height: calc(var(--ytmq-viz-h, 0.12) * 100%);
-  min-height: 8px;
+.ytmq-pulse-core {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 42%;
+  height: 42%;
   border-radius: 9999px;
-  background: linear-gradient(
-    180deg,
-    var(--ytmq-viz-color) 0%,
-    var(--ytmq-viz-color-soft) 100%
+  color: #fff;
+  background: radial-gradient(
+    circle at 32% 28%,
+    color-mix(in srgb, var(--ytmq-pulse-accent) 96%, white) 0%,
+    var(--np-accent) 72%
   );
   box-shadow:
-    0 0 14px var(--np-accent-glow),
-    0 0 4px var(--np-accent-glow-strong);
-  /* No transition while live — heights are written every animation frame, so a
-     CSS transition would smear the beat. We re-enable one only for the paused
-     settle below. */
-  will-change: height;
+    0 0 26px var(--np-accent-glow),
+    0 0 10px var(--np-accent-glow-strong),
+    inset 0 1px 10px rgba(255, 255, 255, 0.28);
 }
 
-.ytmq-lyrics-viz:not(.is-live) .ytmq-lyrics-viz-bar {
-  transition: height 600ms cubic-bezier(0.22, 0.61, 0.36, 1);
-  opacity: 0.55;
+.ytmq-pulse-core svg {
+  width: 48%;
+  height: 48%;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.35));
+}
+
+.ytmq-pulse.is-live .ytmq-pulse-core {
+  animation: ytmq-pulse-breathe 2.4s ease-in-out infinite;
+}
+
+/* Calm, still resting state when playback isn't live. */
+.ytmq-pulse:not(.is-live) .ytmq-pulse-core {
+  opacity: 0.72;
+  transform: scale(0.95);
+  transition:
+    transform 600ms cubic-bezier(0.22, 0.61, 0.36, 1),
+    opacity 600ms ease;
+}
+
+.ytmq-pulse-ring {
+  position: absolute;
+  width: 42%;
+  height: 42%;
+  border-radius: 9999px;
+  border: 1.5px solid var(--ytmq-pulse-accent);
+  opacity: 0;
+}
+
+.ytmq-pulse.is-live .ytmq-pulse-ring {
+  animation: ytmq-pulse-ripple 2.4s cubic-bezier(0.22, 0.61, 0.36, 1) infinite;
+  will-change: transform, opacity;
+}
+
+.ytmq-pulse.is-live .ytmq-pulse-ring:nth-child(2) {
+  animation-delay: 0.8s;
+}
+
+.ytmq-pulse.is-live .ytmq-pulse-ring:nth-child(3) {
+  animation-delay: 1.6s;
+}
+
+@keyframes ytmq-pulse-ripple {
+  0% {
+    transform: scale(1);
+    opacity: 0;
+  }
+  12% {
+    opacity: 0.5;
+  }
+  100% {
+    transform: scale(2.55);
+    opacity: 0;
+  }
+}
+
+@keyframes ytmq-pulse-breathe {
+  0%,
+  100% {
+    transform: scale(0.94);
+  }
+  50% {
+    transform: scale(1.06);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .ytmq-lyrics-viz-bar {
-    transition: none;
-    height: 22%;
-    opacity: 0.7;
+  .ytmq-pulse.is-live .ytmq-pulse-core,
+  .ytmq-pulse.is-live .ytmq-pulse-ring {
+    animation: none;
+  }
+  .ytmq-pulse-ring:first-child {
+    opacity: 0.32;
+    transform: scale(1.7);
   }
 }
 

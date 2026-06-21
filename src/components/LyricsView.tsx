@@ -653,6 +653,18 @@ function SyncedLyrics({ lines, position, dim }: SyncedLyricsProps) {
   const lineRefs = useRef<(HTMLParagraphElement | null)[]>([])
   const activeIndex = activeLineIndex(lines, position)
 
+  // Subtle glow envelope for the focused line: ease up from 0 as the line
+  // gains focus, peak mid-line, then ease back to 0 as the next line nears.
+  // sin(π·progress) gives exactly that 0 → 1 → 0 arc.
+  const activeGlow = (() => {
+    if (activeIndex < 0) return 0
+    const start = lines[activeIndex]?.time ?? 0
+    const next = lines[activeIndex + 1]?.time
+    const duration = next != null ? Math.max(0.5, next - start) : 4
+    const progress = Math.min(1, Math.max(0, (position - start) / duration))
+    return Math.sin(Math.PI * progress)
+  })()
+
   useLayoutEffect(() => {
     const scroll = scrollRef.current
     const el = activeIndex >= 0 ? lineRefs.current[activeIndex] : null
@@ -667,38 +679,50 @@ function SyncedLyrics({ lines, position, dim }: SyncedLyricsProps) {
   }, [activeIndex])
 
   return (
-    <div
-      ref={scrollRef}
-      className={`ytmq-lyrics-scroll h-full overflow-y-auto px-1 ${
-        dim ? 'opacity-70' : ''
-      }`}
-      role="list"
-      aria-label="Synced lyrics"
-    >
-      {/* Half-viewport spacers let the first and last lines scroll to the
-          vertical centre, so the active line is always centred. */}
-      <div aria-hidden className="ytmq-lyrics-spacer" />
-      {lines.map((line, index) => {
-        const state =
-          index === activeIndex
-            ? 'is-active'
-            : index < activeIndex
-              ? 'is-sung'
-              : 'is-upcoming'
-        return (
-          <p
-            key={`${line.time}-${index}`}
-            ref={(node) => {
-              lineRefs.current[index] = node
-            }}
-            role="listitem"
-            className={`ytmq-lyric-line ${state}`}
-          >
-            {line.text || '♪'}
-          </p>
-        )
-      })}
-      <div aria-hidden className="ytmq-lyrics-spacer" />
+    <div className="ytmq-lyrics-stage h-full">
+      <div
+        ref={scrollRef}
+        className={`ytmq-lyrics-scroll h-full overflow-y-auto overflow-x-hidden px-1 ${
+          dim ? 'opacity-70' : ''
+        }`}
+        role="list"
+        aria-label="Synced lyrics"
+      >
+        {/* Half-viewport spacers let the first and last lines scroll to the
+            vertical centre, so the active line is always centred. */}
+        <div aria-hidden className="ytmq-lyrics-spacer" />
+        {lines.map((line, index) => {
+          const state =
+            index === activeIndex
+              ? 'is-active'
+              : index < activeIndex
+                ? 'is-sung'
+                : 'is-upcoming'
+          return (
+            <p
+              key={`${line.time}-${index}`}
+              ref={(node) => {
+                lineRefs.current[index] = node
+              }}
+              role="listitem"
+              className={`ytmq-lyric-line ${state}`}
+              style={
+                index === activeIndex
+                  ? ({
+                      '--ytmq-line-glow': activeGlow.toFixed(3),
+                    } as CSSProperties)
+                  : undefined
+              }
+            >
+              {line.text || '♪'}
+            </p>
+          )
+        })}
+        <div aria-hidden className="ytmq-lyrics-spacer" />
+      </div>
+      {/* Progressive blur veils so lines melt away at the edges. */}
+      <div aria-hidden className="ytmq-lyrics-blur ytmq-lyrics-blur-top" />
+      <div aria-hidden className="ytmq-lyrics-blur ytmq-lyrics-blur-bottom" />
     </div>
   )
 }
@@ -741,139 +765,41 @@ function LyricsMessage({ title, detail }: { title: string; detail: string }) {
   )
 }
 
-const VIZ_BAR_COUNT = 27
-
 /**
- * Procedural music-style visualizer used when there are no lyrics to follow.
+ * Ambient pulse shown when there are no lyrics to follow (or for instrumentals).
  *
- * We don't have access to the actual audio analyser (the audio plays inside
- * YT Music in a separate process), so the bars are driven by a synthetic
- * spectrum rather than a true FFT. The layout mirrors a real analyser though:
- * bars run **left → right = low → high frequency**, the spectrum is bass-tilted
- * (lower bands sit higher, like real music), a beat-locked kick drives the bass
- * end while a snare adds shimmer to the treble end.
- *
- * Two layers of smoothing keep it from looking jittery:
- *  - **Spatial** — each bar is blurred against its neighbours every frame, so
- *    adjacent bars move together instead of independently.
- *  - **Temporal** — bars rise quickly but fall back slowly (asymmetric easing),
- *    so they "go up/down" smoothly the way a real spectrum decays.
- *
- * When playback isn't live, the energy ramps to zero and the bars settle to a
- * small resting size so the screen stays calm.
+ * The audio plays inside YT Music in a separate, cross-origin process, so a
+ * real frequency spectrum isn't available to this app. Rather than fake an FFT,
+ * we show a calm, modern "sound ripple": a glowing core that gently breathes
+ * with concentric rings emitting outward while playback is live, settling to a
+ * still resting state when paused. It reads as musical and friendly without
+ * pretending to be a true analyser. The motion is pure CSS, so there's no
+ * per-frame JS work.
  */
 function LyricsVisualizer({ live, title }: { live: boolean; title: string }) {
-  const barRefs = useRef<(HTMLDivElement | null)[]>([])
-  const liveRef = useRef(live)
-  useEffect(() => {
-    liveRef.current = live
-  }, [live])
-
-  useEffect(() => {
-    let frame = 0
-    const start = performance.now()
-    const reduce =
-      typeof window !== 'undefined' &&
-      window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
-    const n = VIZ_BAR_COUNT
-    // Smoothed height currently shown for each bar (carried between frames so
-    // the temporal easing has memory).
-    const levels = new Float32Array(n)
-    // Scratch buffers reused every frame to avoid per-frame allocation.
-    const targets = new Float32Array(n)
-    const blurred = new Float32Array(n)
-    let energy = 0
-    // ~110 BPM groove — close to the average pop/rock tempo.
-    const tempoHz = 110 / 60
-
-    const tick = (now: number) => {
-      const t = (now - start) / 1000
-
-      // Smoothly track playback: ramp energy up while live, down when paused.
-      const target = liveRef.current ? 1 : 0
-      energy += (target - energy) * 0.05
-
-      // Synthetic kick: phase wraps every beat, exponential decay = thump.
-      const beatPhase = (t * tempoHz) % 1
-      const kick = Math.exp(-beatPhase * 5.5)
-      // Snare on the off-beat, softer and with a quicker decay.
-      const offPhase = (t * tempoHz + 0.5) % 1
-      const snare = Math.exp(-offPhase * 8) * 0.6
-
-      // 1. Build the raw target spectrum. `f` runs 0 (low/left) → 1 (high/right).
-      for (let i = 0; i < n; i++) {
-        const f = n > 1 ? i / (n - 1) : 0
-
-        // Bass-tilted envelope: lower frequencies carry more energy, like real
-        // music. Never quite zero so the treble end still has presence.
-        const tilt = Math.pow(1 - f, 1.25) * 0.78 + 0.16
-
-        // A few overlapping travelling waves across the spectrum give the bands
-        // motion that flows along the frequency axis (so neighbours relate).
-        const wave =
-          0.62 * Math.sin(t * 1.3 + f * 6.0) +
-          0.42 * Math.sin(t * 2.7 - f * 9.0 + 1.3) +
-          0.3 * Math.sin(t * 5.1 + f * 14.0 + 0.6)
-        const motion = wave / 1.34 // → roughly -1..1
-        const shaped = 0.5 + 0.5 * motion // → 0..1
-
-        // Percussion: kick lifts the low end, snare sparkles the high end.
-        const lowBoost = kick * Math.pow(1 - f, 2) * 0.6
-        const highBoost = snare * Math.pow(f, 1.5) * 0.4
-
-        targets[i] =
-          (tilt * (0.4 + 0.6 * shaped) + lowBoost + highBoost) * energy
-      }
-
-      // 2. Spatial smoothing — blur each bar against its neighbours so the
-      // spectrum reads as one connected shape rather than independent spikes.
-      for (let i = 0; i < n; i++) {
-        const left = targets[i > 0 ? i - 1 : 0]
-        const mid = targets[i]
-        const right = targets[i < n - 1 ? i + 1 : n - 1]
-        blurred[i] = (left + 2 * mid + right) / 4
-      }
-
-      // 3. Temporal smoothing — rise quickly, fall slowly, so bars move up/down
-      // smoothly instead of snapping frame to frame.
-      for (let i = 0; i < n; i++) {
-        const node = barRefs.current[i]
-        if (!node) continue
-        const want = blurred[i]
-        const rising = want > levels[i]
-        const ease = rising ? 0.34 : 0.12
-        levels[i] += (want - levels[i]) * ease
-        const h = Math.max(0.06, Math.min(1, levels[i] + 0.06))
-        node.style.setProperty('--ytmq-viz-h', h.toFixed(3))
-      }
-
-      if (reduce && energy < 0.01) {
-        // With reduced motion we still tick once to settle the resting state,
-        // but skip continuous animation.
-        return
-      }
-      frame = requestAnimationFrame(tick)
-    }
-    frame = requestAnimationFrame(tick)
-    return () => cancelAnimationFrame(frame)
-  }, [])
-
   return (
-    <div className="flex h-full flex-col items-center justify-center gap-5 px-4 text-center">
+    <div className="flex h-full flex-col items-center justify-center gap-6 px-4 text-center">
       <div
-        className={`ytmq-lyrics-viz ${live ? 'is-live' : ''}`}
+        className={`ytmq-pulse ${live ? 'is-live' : ''}`}
         role="img"
         aria-label="Music visualizer"
       >
-        {Array.from({ length: VIZ_BAR_COUNT }, (_, i) => (
-          <div
-            key={i}
-            ref={(node) => {
-              barRefs.current[i] = node
-            }}
-            className="ytmq-lyrics-viz-bar"
-          />
-        ))}
+        <span className="ytmq-pulse-ring" aria-hidden />
+        <span className="ytmq-pulse-ring" aria-hidden />
+        <span className="ytmq-pulse-ring" aria-hidden />
+        <span className="ytmq-pulse-core" aria-hidden>
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path
+              d="M9 17V5l10-2v12"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+            <circle cx="6.5" cy="17" r="2.6" fill="currentColor" />
+            <circle cx="16.5" cy="15" r="2.6" fill="currentColor" />
+          </svg>
+        </span>
       </div>
       <p className="text-sm font-medium text-white/70 drop-shadow">{title}</p>
     </div>
