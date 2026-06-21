@@ -163,10 +163,15 @@ async function fetchMacro(
     t: String(Date.now()),
   })
   if (query.album) params.set('q_album', query.album)
-  if (query.duration && query.duration > 0) {
-    params.set('q_duration', String(Math.round(query.duration)))
-    params.set('f_subtitle_length', String(Math.round(query.duration)))
-  }
+  // NOTE: we deliberately do NOT send `q_duration` / `f_subtitle_length`.
+  // Musixmatch treats those as a *hard* filter on the subtitle's own length, so
+  // when the duration we pass (e.g. a YouTube length) differs from Musixmatch's
+  // stored track length by even a couple of seconds, it returns the track with
+  // `has_subtitles: 1` but an *empty* subtitle list — silently downgrading a
+  // fully-synced track to plain-text-only. YouTube durations routinely differ
+  // (video vs. audio masters, ads, alternate edits), so filtering by duration
+  // here was the single biggest cause of "synced lyrics never load". The
+  // title+artist matcher is accurate enough on its own.
 
   const headers = { ...HEADERS }
   if (token.cookie) headers.Cookie = token.cookie
@@ -229,7 +234,10 @@ export async function searchMusixmatch(
     {
       source: 'musixmatch',
       syncedLrc,
-      plain: syncedLrc ? null : plainBody,
+      // Keep the plain body even when we have synced lyrics: it's a free
+      // fallback the renderer uses if the synced LRC is empty/unparseable, so
+      // the user still sees words instead of a blank pane.
+      plain: plainBody,
       instrumental,
       trackName: track.track_name ?? query.title,
       artistName: track.artist_name ?? query.artist ?? '',
