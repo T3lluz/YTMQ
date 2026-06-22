@@ -1216,11 +1216,11 @@ textarea,
   filter: blur(var(--ytmq-line-blur));
   /* A touch of overshoot on the scale so a line "pops" as it gains focus. */
   transition:
-    color 0.5s ease,
-    opacity 0.5s ease,
-    transform 0.5s cubic-bezier(0.34, 1.45, 0.5, 1),
-    text-shadow 0.45s ease,
-    filter 0.5s ease;
+    color 0.55s ease,
+    opacity 0.55s ease,
+    transform 0.62s cubic-bezier(0.22, 1.18, 0.4, 1),
+    text-shadow 0.5s ease,
+    filter 0.55s ease;
 }
 
 .ytmq-lyrics-plain {
@@ -1246,15 +1246,17 @@ textarea,
   --ytmq-line-glow: 0;
   --ytmq-line-blur: 0px;
   color: #fff;
-  transform: scale(1.09);
+  transform: scale(1.22);
   filter: blur(0);
+  /* White glow whose intensity is driven by `--ytmq-line-glow` (0 → 1 → 0):
+     a faint halo the instant the line gains focus, swelling to its brightest at
+     the line's midpoint, then easing back down just before the next line. The
+     text-shadow transition smooths the per-frame steps into a continuous fade. */
   text-shadow:
-    0 0 calc(12px + var(--ytmq-line-glow) * 36px)
-      color-mix(
-        in srgb,
-        var(--np-accent-glow-strong) calc(42% + var(--ytmq-line-glow) * 54%),
-        transparent
-      ),
+    0 0 calc(8px + var(--ytmq-line-glow) * 30px)
+      rgba(255, 255, 255, calc(0.25 + var(--ytmq-line-glow) * 0.7)),
+    0 0 calc(2px + var(--ytmq-line-glow) * 12px)
+      rgba(255, 255, 255, calc(0.2 + var(--ytmq-line-glow) * 0.55)),
     0 1px 3px rgba(0, 0, 0, 0.5);
 }
 
@@ -1291,7 +1293,7 @@ textarea,
 }
 
 .ytmq-lyrics-fullscreen .ytmq-lyric-line.is-active {
-  transform: scale(1.06);
+  transform: scale(1.2);
 }
 
 /* ----------------------------------------------------------------------------
