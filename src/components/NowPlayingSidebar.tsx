@@ -284,7 +284,7 @@ export function NowPlayingSidebar({
           </div>
 
           <div
-            className="ytmq-now-controls mt-0.5 flex items-center gap-2 rounded-full border px-2 py-1 backdrop-blur"
+            className="ytmq-now-controls mt-1 flex items-center justify-center gap-6"
             title={
               !canControl ? 'The host has limited playback controls' : undefined
             }
@@ -349,10 +349,7 @@ function ControlButton({
   primary,
   children,
 }: ControlButtonProps) {
-  const size = primary ? 'h-10 w-10' : 'h-9 w-9'
-  const tone = primary
-    ? 'ytmq-now-control-primary'
-    : 'bg-white/10 hover:bg-white/20'
+  const size = primary ? 'h-14 w-14' : 'h-11 w-11'
   const ring = active ? ' ytmq-now-control-active' : ''
   return (
     <button
@@ -361,7 +358,7 @@ function ControlButton({
       title={label}
       onClick={onClick}
       disabled={disabled}
-      className={`inline-flex items-center justify-center rounded-full text-white transition active:scale-95 disabled:opacity-40 disabled:active:scale-100 ${tone} ${size}${ring}`}
+      className={`ytmq-now-control inline-flex items-center justify-center text-white/75 transition hover:text-white active:scale-90 disabled:opacity-40 disabled:active:scale-100 ${size}${ring}`}
     >
       {children}
     </button>
@@ -370,7 +367,7 @@ function ControlButton({
 
 function PrevIcon() {
   return (
-    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden className="h-4 w-4">
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden className="h-7 w-7">
       <path d="M7 6h2v12H7zM10 12l9-6v12z" />
     </svg>
   )
@@ -378,7 +375,7 @@ function PrevIcon() {
 
 function NextIcon() {
   return (
-    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden className="h-4 w-4">
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden className="h-7 w-7">
       <path d="M15 6h2v12h-2zM5 6v12l9-6z" />
     </svg>
   )
@@ -386,7 +383,7 @@ function NextIcon() {
 
 function PlayIcon() {
   return (
-    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden className="h-4 w-4">
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden className="h-10 w-10">
       <path d="M8 5v14l11-7z" />
     </svg>
   )
@@ -394,7 +391,7 @@ function PlayIcon() {
 
 function PauseIcon() {
   return (
-    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden className="h-4 w-4">
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden className="h-10 w-10">
       <path d="M6 5h4v14H6zM14 5h4v14h-4z" />
     </svg>
   )

@@ -1018,26 +1018,13 @@ textarea,
   animation-delay: -0.5s;
 }
 
-.ytmq-now-controls {
-  border-color: color-mix(in srgb, var(--np-accent) 28%, transparent);
-  background: color-mix(in srgb, rgb(var(--np-accent-rgb)) 12%, rgba(0, 0, 0, 0.45));
-}
-
-.ytmq-now-control-primary {
-  background: linear-gradient(
-    135deg,
-    var(--np-accent) 0%,
-    color-mix(in srgb, var(--np-accent-light) 80%, white) 100%
-  );
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.28);
-}
-
-.ytmq-now-control-primary:hover:not(:disabled) {
-  filter: brightness(1.06);
+.ytmq-now-control {
+  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.45));
 }
 
 .ytmq-now-control-active {
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--np-accent-light) 55%, white);
+  color: var(--np-accent-light);
+  opacity: 1;
 }
 
 /* ----------------------------------------------------------------------------

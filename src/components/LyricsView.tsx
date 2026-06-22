@@ -14,7 +14,7 @@ import { useImagePalette } from '../hooks/useImagePalette'
 import { useLyrics, prefetchLyrics, type LyricsStatus } from '../hooks/useLyrics'
 import { activeLineIndex, type LyricLine, type Lyrics } from '../lib/lyrics'
 import { paletteCssVars } from '../lib/imagePalette'
-import { sendPlaybackControl } from '../lib/bridgeChannel'
+import { sendPlaybackControl, sendPlaybackSeek } from '../lib/bridgeChannel'
 import { formatPlaybackTime, type PlaybackAction } from '../lib/playback'
 import { LyricsUpNext, type UpNextTrack } from './LyricsUpNext'
 
@@ -114,6 +114,14 @@ export function LyricsView({
     [roomId],
   )
 
+  const onSeek = useCallback(
+    (target: number) => {
+      if (!roomId) return
+      sendPlaybackSeek(roomId, target)
+    },
+    [roomId],
+  )
+
   const art = nowPlaying ? hqThumbnail(nowPlaying.videoId) : undefined
   const { palette, ready: paletteReady } = useImagePalette(art)
 
@@ -194,6 +202,9 @@ export function LyricsView({
       controlsEnabled={canControl && connected && !stale}
       pendingAction={pendingAction}
       onControl={onControl}
+      onSeek={onSeek}
+      updatedAt={nowPlaying?.updatedAt}
+      videoId={nowPlaying?.videoId}
     />
   )
 }
@@ -265,6 +276,11 @@ export type LyricsScreenProps = {
   controlsEnabled?: boolean
   pendingAction?: PlaybackAction | null
   onControl?: (action: PlaybackAction) => void
+  onSeek?: (position: number) => void
+  /** Bumps when the bridge reports a fresh position; clears the optimistic scrub. */
+  updatedAt?: number
+  /** Resets optimistic scrub state when the track changes. */
+  videoId?: string
 }
 
 /** Pure presentation — easy to render with mock data for visual testing. */
@@ -289,6 +305,9 @@ export function LyricsScreen({
   controlsEnabled = false,
   pendingAction = null,
   onControl,
+  onSeek,
+  updatedAt,
+  videoId,
 }: LyricsScreenProps) {
   const sectionRef = useRef<HTMLElement | null>(null)
   const { zoom, zoomIn, zoomOut, reset: resetZoom } = useLyricsZoom()
@@ -404,6 +423,9 @@ export function LyricsScreen({
       controlsEnabled={controlsEnabled}
       pendingAction={pendingAction}
       onControl={onControl}
+      onSeek={onSeek}
+      updatedAt={updatedAt}
+      videoId={videoId}
     />
   )
 
@@ -493,6 +515,9 @@ type ArtPanelProps = {
   controlsEnabled?: boolean
   pendingAction?: PlaybackAction | null
   onControl?: (action: PlaybackAction) => void
+  onSeek?: (position: number) => void
+  updatedAt?: number
+  videoId?: string
 }
 
 function ArtPanel({
@@ -507,11 +532,12 @@ function ArtPanel({
   controlsEnabled = false,
   pendingAction = null,
   onControl,
+  onSeek,
+  updatedAt,
+  videoId,
 }: ArtPanelProps) {
   const hasDuration = duration != null && duration > 0
-  const percent = hasDuration
-    ? Math.min(100, Math.max(0, (position / duration) * 100))
-    : 0
+  const canSeek = controlsEnabled && hasDuration && !!onSeek
 
   if (fullscreen) {
     return (
@@ -544,23 +570,16 @@ function ArtPanel({
           )}
         </div>
 
-        <div className="w-full">
-          <div className="ytmq-now-progress-track h-1.5 w-full overflow-hidden rounded-full">
-            <div
-              className={`ytmq-now-progress-fill h-full rounded-full transition-[width] duration-300 ease-linear ${
-                live && percent > 1 && percent < 99 ? 'is-live' : ''
-              }`}
-              style={{ width: `${percent}%` }}
-            />
-          </div>
-          <div
-            className="mt-1.5 flex justify-between text-xs tabular-nums"
-            style={{ color: 'color-mix(in srgb, var(--np-accent-light) 60%, #a1a1aa)' }}
-          >
-            <span>{formatPlaybackTime(position)}</span>
-            <span>{hasDuration ? formatPlaybackTime(duration) : '--:--'}</span>
-          </div>
-        </div>
+        <SeekBar
+          position={position}
+          duration={duration}
+          live={live}
+          canSeek={canSeek}
+          onSeek={onSeek}
+          updatedAt={updatedAt}
+          videoId={videoId}
+          variant="full"
+        />
 
         {onControl && (
           <div className="flex items-center gap-4">
@@ -625,12 +644,168 @@ function ArtPanel({
       </div>
       {hasDuration && (
         <div className="hidden w-full sm:block">
-          <div className="ytmq-now-progress-track h-1 w-full overflow-hidden rounded-full">
-            <div
-              className="ytmq-now-progress-fill h-full rounded-full transition-[width] duration-300 ease-linear"
-              style={{ width: `${percent}%` }}
-            />
-          </div>
+          <SeekBar
+            position={position}
+            duration={duration}
+            live={live}
+            canSeek={canSeek}
+            onSeek={onSeek}
+            updatedAt={updatedAt}
+            videoId={videoId}
+            variant="compact"
+          />
+        </div>
+      )}
+    </div>
+  )
+}
+
+type SeekBarProps = {
+  position: number
+  duration?: number
+  live: boolean
+  canSeek: boolean
+  onSeek?: (position: number) => void
+  /** Bumps when the bridge reports a fresh position; clears the optimistic hold. */
+  updatedAt?: number
+  /** Resets optimistic scrub state when the track changes. */
+  videoId?: string
+  variant?: 'full' | 'compact'
+}
+
+/**
+ * Seekable playback bar for the lyrics screen. Drag (or tap) to scrub: the fill
+ * jumps optimistically to the target and holds there until the bridge confirms
+ * a newer position, so it never snaps back to a stale broadcast. The scrub
+ * "pill" stays hidden until the bar is hovered, then springs in, and swells
+ * with a soft accent glow while actively dragging.
+ */
+function SeekBar({
+  position,
+  duration,
+  live,
+  canSeek,
+  onSeek,
+  updatedAt,
+  videoId,
+  variant = 'full',
+}: SeekBarProps) {
+  const [pendingSeek, setPendingSeek] = useState<number | null>(null)
+  const [dragging, setDragging] = useState(false)
+  const trackRef = useRef<HTMLDivElement | null>(null)
+  const sentAtRef = useRef(0)
+
+  useEffect(() => {
+    setPendingSeek(null)
+  }, [videoId])
+
+  useEffect(() => {
+    if (pendingSeek == null) return
+    if (updatedAt != null && updatedAt > sentAtRef.current) setPendingSeek(null)
+  }, [updatedAt, pendingSeek])
+
+  const hasDuration = duration != null && duration > 0
+  const shown = pendingSeek ?? position
+  const percent =
+    hasDuration && duration ? Math.min(100, Math.max(0, (shown / duration) * 100)) : 0
+
+  const positionFromClientX = (clientX: number): number | null => {
+    const el = trackRef.current
+    if (!el || duration == null) return null
+    const rect = el.getBoundingClientRect()
+    if (rect.width <= 0) return null
+    const ratio = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width))
+    return ratio * duration
+  }
+
+  const onPointerDown = (e: React.PointerEvent) => {
+    if (!canSeek) return
+    const next = positionFromClientX(e.clientX)
+    if (next == null) return
+    e.preventDefault()
+    e.currentTarget.setPointerCapture?.(e.pointerId)
+    setDragging(true)
+    setPendingSeek(next)
+    // Hold the optimistic value through routine broadcasts until we send.
+    sentAtRef.current = Number.POSITIVE_INFINITY
+  }
+
+  const onPointerMove = (e: React.PointerEvent) => {
+    if (!dragging) return
+    const next = positionFromClientX(e.clientX)
+    if (next != null) setPendingSeek(next)
+  }
+
+  const endDrag = (e: React.PointerEvent) => {
+    if (!dragging) return
+    const next = positionFromClientX(e.clientX) ?? pendingSeek
+    e.currentTarget.releasePointerCapture?.(e.pointerId)
+    setDragging(false)
+    if (next != null && onSeek) {
+      setPendingSeek(next)
+      onSeek(next)
+      sentAtRef.current = Date.now()
+    }
+  }
+
+  const trackHeight = variant === 'full' ? 'h-1.5' : 'h-1'
+  const hoverHeight = variant === 'full' ? 'group-hover/seek:h-2.5' : 'group-hover/seek:h-1.5'
+  const dragHeight = variant === 'full' ? 'h-2.5' : 'h-1.5'
+  const thumbSize = variant === 'full' ? 'h-4 w-4' : 'h-3 w-3'
+
+  return (
+    <div className="w-full">
+      <div
+        ref={trackRef}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={endDrag}
+        onPointerCancel={endDrag}
+        className={`group/seek relative -my-2 py-2 ${
+          canSeek ? 'cursor-pointer touch-none' : ''
+        }`}
+        title={canSeek ? 'Drag to seek' : undefined}
+        role={canSeek ? 'slider' : undefined}
+        aria-label={canSeek ? 'Seek track position' : undefined}
+        aria-valuemin={canSeek ? 0 : undefined}
+        aria-valuemax={canSeek && duration != null ? Math.floor(duration) : undefined}
+        aria-valuenow={canSeek ? Math.floor(shown) : undefined}
+      >
+        <div
+          className={`ytmq-now-progress-track w-full overflow-hidden rounded-full transition-[height] duration-200 ${trackHeight} ${
+            canSeek ? hoverHeight : ''
+          } ${dragging ? dragHeight : ''}`}
+        >
+          <div
+            className={`ytmq-now-progress-fill h-full rounded-full transition-[width] duration-300 ease-linear ${
+              live && percent > 1 && percent < 99 ? 'is-live' : ''
+            }`}
+            style={{
+              width: `${percent}%`,
+              // Snap instantly to the scrub target instead of easing.
+              ...(pendingSeek != null ? { transition: 'none' } : null),
+            }}
+          />
+        </div>
+        {canSeek && (
+          <span
+            aria-hidden
+            className={`pointer-events-none absolute top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white ring-1 ring-black/25 transition-[opacity,transform,box-shadow] duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] ${thumbSize} ${
+              dragging
+                ? 'scale-125 opacity-100 shadow-[0_0_0_6px_rgba(var(--np-accent-rgb)/0.28),0_2px_10px_rgba(0,0,0,0.45)]'
+                : 'scale-50 opacity-0 shadow-md group-hover/seek:scale-100 group-hover/seek:opacity-100'
+            }`}
+            style={{ left: `${percent}%` }}
+          />
+        )}
+      </div>
+      {variant === 'full' && (
+        <div
+          className="mt-1.5 flex justify-between text-xs tabular-nums"
+          style={{ color: 'color-mix(in srgb, var(--np-accent-light) 60%, #a1a1aa)' }}
+        >
+          <span>{formatPlaybackTime(shown)}</span>
+          <span>{hasDuration && duration ? formatPlaybackTime(duration) : '--:--'}</span>
         </div>
       )}
     </div>
