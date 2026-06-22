@@ -198,7 +198,7 @@ export function NowPlayingSidebar({
       <LyricsBackdrop art={art} live={live} paletteReady={paletteReady} />
 
       <div
-        className={`relative flex min-h-0 flex-1 flex-col gap-4 p-5 ${
+        className={`relative flex min-h-0 flex-1 flex-col gap-4 px-2.5 py-5 ${
           showLyrics ? '' : 'justify-center'
         }`}
       >
@@ -208,7 +208,7 @@ export function NowPlayingSidebar({
             alt=""
             crossOrigin="anonymous"
             onError={handleArtError}
-            className={`ytmq-now-art aspect-square w-[clamp(8rem,58cqw,18rem)] rounded-2xl object-cover shadow-2xl ring-1 ring-white/15 ${
+            className={`ytmq-now-art aspect-square w-[clamp(9rem,90cqw,30rem)] rounded-2xl object-cover shadow-2xl ring-1 ring-white/15 ${
               live ? 'is-live' : ''
             }`}
           />

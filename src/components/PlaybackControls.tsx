@@ -31,12 +31,13 @@ export function PlaybackControls({
   title,
   className = '',
 }: PlaybackControlsProps) {
-  const [bump, setBump] = useState({ prev: 0, next: 0 })
+  const [bump, setBump] = useState({ prev: 0, next: 0, pp: 0 })
 
   const press = (action: PlaybackAction) => {
     onControl(action)
     if (action === 'prev') setBump((b) => ({ ...b, prev: b.prev + 1 }))
     else if (action === 'next') setBump((b) => ({ ...b, next: b.next + 1 }))
+    else setBump((b) => ({ ...b, pp: b.pp + 1 }))
   }
 
   return (
@@ -65,7 +66,12 @@ export function PlaybackControls({
         active={pendingAction === 'play' || pendingAction === 'pause'}
         onClick={() => press(isPlaying ? 'pause' : 'play')}
       >
-        <PlayPauseIcon isPlaying={isPlaying} />
+        <span
+          key={`pp-${bump.pp}`}
+          className={`flex ${bump.pp > 0 ? 'ytmq-pp-pop' : ''}`}
+        >
+          <PlayPauseIcon isPlaying={isPlaying} />
+        </span>
       </ControlButton>
 
       <ControlButton
@@ -126,8 +132,11 @@ function ControlButton({
 // interpolate `d` between them for a smooth morph. The rounded SF Symbols look
 // comes from a same-colour round-joined stroke; because the whole button is one
 // opacity layer, the stroke never darkens where it overlaps the fill.
-const PLAY_D = 'M7 5 L13 8.5 L13 15.5 L7 19 Z M13 8.5 L19 12 L19 12 L13 15.5 Z'
-const PAUSE_D = 'M7 5 L10.5 5 L10.5 19 L7 19 Z M13.5 5 L17 5 L17 19 L13.5 19 Z'
+// Thinner base geometry — the heavy round-joined stroke supplies most of the
+// mass and the generous corner radius, matching the latest chunky/rounded iOS
+// transport glyphs without fusing the pause bars together.
+const PLAY_D = 'M8 6 L13 9 L13 15 L8 18 Z M13 9 L18 12 L18 12 L13 15 Z'
+const PAUSE_D = 'M7 5.5 L9 5.5 L9 18.5 L7 18.5 Z M15 5.5 L17 5.5 L17 18.5 L15 18.5 Z'
 
 function PlayPauseIcon({ isPlaying }: { isPlaying: boolean }) {
   return (
@@ -137,7 +146,7 @@ function PlayPauseIcon({ isPlaying }: { isPlaying: boolean }) {
         d={isPlaying ? PAUSE_D : PLAY_D}
         fill="currentColor"
         stroke="currentColor"
-        strokeWidth={1.8}
+        strokeWidth={3}
         strokeLinejoin="round"
         strokeLinecap="round"
       />
@@ -152,11 +161,20 @@ function PlayPauseIcon({ isPlaying }: { isPlaying: boolean }) {
 function PrevIcon() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden className="h-10 w-10" fill="currentColor">
-      <rect x="5.6" y="5.6" width="2.8" height="12.8" rx="1.4" />
-      <path
-        d="M18 6 L9 12 L18 18 Z"
+      <rect
+        x="5.4"
+        y="6.6"
+        width="2.4"
+        height="10.8"
+        rx="1.2"
         stroke="currentColor"
-        strokeWidth={1.6}
+        strokeWidth={1.2}
+        strokeLinejoin="round"
+      />
+      <path
+        d="M17.6 7 L10 12 L17.6 17 Z"
+        stroke="currentColor"
+        strokeWidth={2.6}
         strokeLinejoin="round"
       />
     </svg>
@@ -167,12 +185,21 @@ function NextIcon() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden className="h-10 w-10" fill="currentColor">
       <path
-        d="M6 6 L15 12 L6 18 Z"
+        d="M6.4 7 L14 12 L6.4 17 Z"
         stroke="currentColor"
-        strokeWidth={1.6}
+        strokeWidth={2.6}
         strokeLinejoin="round"
       />
-      <rect x="15.6" y="5.6" width="2.8" height="12.8" rx="1.4" />
+      <rect
+        x="16.2"
+        y="6.6"
+        width="2.4"
+        height="10.8"
+        rx="1.2"
+        stroke="currentColor"
+        strokeWidth={1.2}
+        strokeLinejoin="round"
+      />
     </svg>
   )
 }
