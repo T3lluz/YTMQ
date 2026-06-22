@@ -28,6 +28,58 @@ type LyricsViewProps = {
   canControl?: boolean
 }
 
+/**
+ * The shared, palette-tinted moving background used behind the immersive
+ * lyrics screen and the now-playing sidebar: a blurred album-art wash, drifting
+ * coloured lights, and darkening veils. Expects a `position: relative`/isolate
+ * parent and sits behind the content (negative z-index layers).
+ */
+export function LyricsBackdrop({
+  art,
+  live,
+  paletteReady,
+}: {
+  art?: string
+  live: boolean
+  paletteReady: boolean
+}) {
+  return (
+    <>
+      <div
+        aria-hidden
+        className="absolute inset-0 -z-30 scale-110 bg-cover bg-center blur-3xl saturate-150 transition-opacity duration-700"
+        style={{
+          backgroundImage: art ? `url(${art})` : undefined,
+          opacity: paletteReady ? 0.9 : 0.6,
+        }}
+      />
+      <div
+        aria-hidden
+        className={`ytmq-now-lights absolute inset-0 -z-20 overflow-hidden ${live ? 'is-live' : ''}`}
+      >
+        <div className="ytmq-now-light ytmq-now-light-a" />
+        <div className="ytmq-now-light ytmq-now-light-b" />
+        <div className="ytmq-now-light ytmq-now-light-c" />
+        <div className="ytmq-now-light ytmq-now-light-d" />
+        <div className="ytmq-now-light ytmq-now-light-e" />
+        <div className="ytmq-now-light ytmq-now-light-f" />
+        <div className="ytmq-now-light ytmq-now-light-g" />
+        <div className="ytmq-now-light ytmq-now-light-h" />
+        <div className="ytmq-now-light ytmq-now-light-i" />
+        <div className="ytmq-now-light ytmq-now-light-j" />
+      </div>
+      <div
+        aria-hidden
+        className="absolute inset-0 -z-10 bg-gradient-to-b from-zinc-950/55 via-zinc-950/45 to-zinc-950/70"
+      />
+      <div
+        aria-hidden
+        className="absolute inset-0 -z-[5] bg-zinc-950/10 backdrop-blur-md"
+      />
+    </>
+  )
+}
+
 /** Connected wrapper: pulls live now-playing + lyrics data for the room. */
 export function LyricsView({
   roomId,
@@ -235,16 +287,62 @@ export function LyricsScreen({
 
   if (!hasTrack) {
     return (
-      <section className="ytmq-tab-panel flex min-h-[18rem] flex-1 flex-col">
-        <h2 className="sr-only">Lyrics</h2>
-        <div className="flex flex-1 flex-col items-center justify-center gap-3 rounded-2xl border border-zinc-800 bg-zinc-900/40 p-8 text-center">
-          <LyricsGlyph className="h-10 w-10 text-zinc-600" />
-          <p className="text-sm font-medium text-zinc-300">No track playing</p>
-          <p className="max-w-xs text-sm text-zinc-500">
-            {connected
-              ? 'Lyrics will appear here once a song starts playing.'
-              : 'Keep music.youtube.com open and playing to follow along with lyrics.'}
-          </p>
+      <section
+        ref={sectionRef}
+        className={`ytmq-lyrics ytmq-tab-panel isolate flex min-h-[24rem] flex-1 flex-col overflow-hidden border ${
+          fullscreen
+            ? 'ytmq-lyrics-fullscreen fixed inset-0 z-40 rounded-none bg-zinc-950'
+            : 'relative rounded-2xl'
+        }`}
+        style={{ ...themeStyle, borderColor: 'var(--np-accent-border)' }}
+        aria-label="Lyrics"
+      >
+        {fullscreen && <FullscreenButton targetRef={sectionRef} />}
+        {/* Reuse the immersive drifting-lights backdrop so the screen stays
+            alive even with nothing playing. `live` keeps the lights moving. */}
+        <LyricsBackdrop live paletteReady={false} />
+
+        <div className="relative flex min-h-0 flex-1 flex-col items-center justify-center gap-6 p-8 text-center">
+          <div className="relative flex h-28 w-28 items-center justify-center">
+            <span aria-hidden className="ytmq-idle-ring absolute inset-0 rounded-full" />
+            <span
+              aria-hidden
+              className="ytmq-idle-ring absolute inset-0 rounded-full"
+              style={{ animationDelay: '1.4s' }}
+            />
+            <div className="ytmq-idle-badge ytmq-now-control-primary relative flex h-20 w-20 items-center justify-center rounded-full text-white ring-1 ring-white/20">
+              <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden className="h-9 w-9">
+                <path d="M6 5h4v14H6zM14 5h4v14h-4z" />
+              </svg>
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <h2 className="font-lyrics text-2xl font-extrabold tracking-tight text-white drop-shadow sm:text-3xl">
+              Nothing playing
+            </h2>
+            <p className="mx-auto max-w-sm text-sm text-zinc-300/90">
+              {connected
+                ? 'Press play in YouTube Music and the lyrics will light up here.'
+                : 'Keep music.youtube.com open and playing to follow along with synced lyrics.'}
+            </p>
+          </div>
+
+          <span
+            className="inline-flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-white/90 backdrop-blur"
+            style={{
+              borderColor: 'var(--np-accent-border)',
+              background:
+                'color-mix(in srgb, var(--np-accent) 14%, rgba(0, 0, 0, 0.4))',
+            }}
+          >
+            <span
+              className={`h-2 w-2 rounded-full ${
+                connected ? 'bg-emerald-400' : 'bg-zinc-500'
+              }`}
+            />
+            {connected ? 'Connected · waiting for playback' : 'Not connected'}
+          </span>
         </div>
       </section>
     )
@@ -293,38 +391,7 @@ export function LyricsScreen({
     >
       <LyricsUpNext track={upNext} remaining={remaining} live={live} enabled />
       {fullscreen && <FullscreenButton targetRef={sectionRef} />}
-      {/* Abstract, blurry, palette-coloured moving background. */}
-      <div
-        aria-hidden
-        className="absolute inset-0 -z-30 scale-110 bg-cover bg-center blur-3xl saturate-150 transition-opacity duration-700"
-        style={{
-          backgroundImage: art ? `url(${art})` : undefined,
-          opacity: paletteReady ? 0.9 : 0.6,
-        }}
-      />
-      <div
-        aria-hidden
-        className={`ytmq-now-lights absolute inset-0 -z-20 overflow-hidden ${live ? 'is-live' : ''}`}
-      >
-        <div className="ytmq-now-light ytmq-now-light-a" />
-        <div className="ytmq-now-light ytmq-now-light-b" />
-        <div className="ytmq-now-light ytmq-now-light-c" />
-        <div className="ytmq-now-light ytmq-now-light-d" />
-        <div className="ytmq-now-light ytmq-now-light-e" />
-        <div className="ytmq-now-light ytmq-now-light-f" />
-        <div className="ytmq-now-light ytmq-now-light-g" />
-        <div className="ytmq-now-light ytmq-now-light-h" />
-        <div className="ytmq-now-light ytmq-now-light-i" />
-        <div className="ytmq-now-light ytmq-now-light-j" />
-      </div>
-      <div
-        aria-hidden
-        className="absolute inset-0 -z-10 bg-gradient-to-b from-zinc-950/55 via-zinc-950/45 to-zinc-950/70"
-      />
-      <div
-        aria-hidden
-        className="absolute inset-0 -z-[5] bg-zinc-950/10 backdrop-blur-md"
-      />
+      <LyricsBackdrop art={art} live={live} paletteReady={paletteReady} />
 
       {showLyrics ? (
         fullscreen ? (
@@ -617,7 +684,7 @@ type LyricsBodyProps = {
   stale: boolean
 }
 
-function LyricsBody({ status, lyrics, position, stale }: LyricsBodyProps) {
+export function LyricsBody({ status, lyrics, position, stale }: LyricsBodyProps) {
   if (status === 'loading') return <LyricsSkeleton />
 
   if (lyrics && lyrics.synced.length > 0) {
@@ -658,16 +725,27 @@ function SyncedLyrics({ lines, position, dim }: SyncedLyricsProps) {
 
   useLayoutEffect(() => {
     const scroll = scrollRef.current
-    const el = activeIndex >= 0 ? lineRefs.current[activeIndex] : null
-    if (!scroll || !el) return
+    if (!scroll) return
 
     const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+
+    // Before the first line is sung (activeIndex < 0) keep the lyrics pinned to
+    // the top so a new song starts from the beginning, instead of lingering at
+    // wherever the previous track left the scroll (often the bottom).
+    if (activeIndex < 0) {
+      scroll.scrollTo({ top: 0, behavior: reduce ? 'auto' : 'smooth' })
+      return
+    }
+
+    const el = lineRefs.current[activeIndex]
+    if (!el) return
+
     const target = el.offsetTop - scroll.clientHeight / 2 + el.clientHeight / 2
     scroll.scrollTo({
       top: Math.max(0, target),
       behavior: reduce ? 'auto' : 'smooth',
     })
-  }, [activeIndex])
+  }, [activeIndex, lines])
 
   return (
     <div className="ytmq-lyrics-stage h-full">
@@ -830,23 +908,3 @@ function PauseIcon() {
   )
 }
 
-function LyricsGlyph({ className }: { className?: string }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
-      aria-hidden
-    >
-      <path d="M4 6h10" />
-      <path d="M4 12h7" />
-      <path d="M4 18h6" />
-      <circle cx="17" cy="15" r="3" />
-      <path d="M20 15V5l-3 1" />
-    </svg>
-  )
-}

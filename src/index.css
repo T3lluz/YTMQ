@@ -28,6 +28,52 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 
+/* Desktop dock: shrinks when idle, springs up on hover / keyboard focus. */
+.ytmq-dock-nav {
+  transform-origin: bottom center;
+  transition:
+    transform 600ms cubic-bezier(0.34, 1.56, 0.64, 1),
+    opacity 400ms ease-out;
+  will-change: transform;
+}
+
+@media (min-width: 768px) and (hover: hover) {
+  .ytmq-dock-nav {
+    transform: scale(1.12);
+    opacity: 0.6;
+  }
+
+  /* Invisible proximity zone so the dock wakes up before the cursor lands on it. */
+  .ytmq-dock::before {
+    content: '';
+    position: absolute;
+    inset: -2.25rem -2.75rem;
+    z-index: -1;
+  }
+
+  .ytmq-dock:hover .ytmq-dock-nav,
+  .ytmq-dock:has(:focus-visible) .ytmq-dock-nav {
+    transform: scale(1.2);
+    opacity: 1;
+  }
+}
+
+/* Disable text/element selection app-wide so nothing picks up a browser
+   selection highlight on click — except real text-entry fields. */
+*,
+*::before,
+*::after {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+input,
+textarea,
+[contenteditable='true'] {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
 ::selection {
   background: rgba(139, 92, 246, 0.35);
 }
@@ -49,8 +95,19 @@ body {
   background: rgba(113, 113, 122, 0.55);
 }
 
-/* Smooth focus ring for keyboard users */
-:focus-visible {
+/* Horizontal filter rails hide their scrollbar but stay swipe/scrollable. */
+.ytmq-hide-scrollbar {
+  scrollbar-width: none;
+}
+.ytmq-hide-scrollbar::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+/* Smooth focus ring for keyboard users. Text inputs are excluded — they show
+   their own coloured border on focus, so the extra browser outline is redundant
+   and reads like a stray "selection" box. */
+:focus-visible:not(input):not(textarea) {
   outline: 2px solid rgba(139, 92, 246, 0.7);
   outline-offset: 2px;
   border-radius: 0.5rem;
@@ -259,9 +316,95 @@ body {
   animation: ytmq-fade-up 0.45s var(--ease-out-soft) backwards;
 }
 
-/* Tab content swap transition */
+/* Tab content swap — a full PowerPoint-style horizontal push handled by
+   <TabSlider/>. The outgoing and incoming panels are stacked (absolute) inside
+   a clipped viewport and travel one full width in the same direction, so the
+   old page slides completely offscreen as the new page slides in. `fwd` is a
+   move toward a tab further right (new page enters from the right); `back` is
+   the reverse. The same classes drive the fullscreen lyrics overlay so the
+   whole page appears to slide when there is no sidebar. */
+@keyframes ytmq-slide-in-fwd {
+  from {
+    transform: translate3d(100%, 0, 0);
+  }
+  to {
+    transform: translate3d(0, 0, 0);
+  }
+}
+@keyframes ytmq-slide-in-back {
+  from {
+    transform: translate3d(-100%, 0, 0);
+  }
+  to {
+    transform: translate3d(0, 0, 0);
+  }
+}
+@keyframes ytmq-slide-out-fwd {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(-100%, 0, 0);
+  }
+}
+@keyframes ytmq-slide-out-back {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(100%, 0, 0);
+  }
+}
+
+.ytmq-slide-in-fwd,
+.ytmq-slide-in-back,
+.ytmq-slide-out-fwd,
+.ytmq-slide-out-back {
+  /* Promote the sliding panel to its own compositor layer so the transform is
+     handled by the GPU instead of repainting on the main thread every frame. */
+  will-change: transform;
+  backface-visibility: hidden;
+}
+.ytmq-slide-in-fwd {
+  animation: ytmq-slide-in-fwd 0.28s var(--ease-out-soft) both;
+}
+.ytmq-slide-in-back {
+  animation: ytmq-slide-in-back 0.28s var(--ease-out-soft) both;
+}
+.ytmq-slide-out-fwd {
+  animation: ytmq-slide-out-fwd 0.28s var(--ease-out-soft) both;
+}
+.ytmq-slide-out-back {
+  animation: ytmq-slide-out-back 0.28s var(--ease-out-soft) both;
+}
+
+/* While a panel is mid-slide, two things murder performance: `backdrop-filter`
+   (it re-samples the moving page behind it every frame) and any continuously
+   running background animations (e.g. the lyrics drifting-lights). Suspend both
+   for the ~0.28s of travel — the result is visually identical at speed but lets
+   the whole layer composite as a cached bitmap. They snap back the instant the
+   slide settles (the slide class is removed). */
+.ytmq-slide-in-fwd *,
+.ytmq-slide-in-back *,
+.ytmq-slide-out-fwd *,
+.ytmq-slide-out-back * {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+.ytmq-slide-in-fwd .ytmq-now-light,
+.ytmq-slide-in-back .ytmq-now-light,
+.ytmq-slide-out-fwd .ytmq-now-light,
+.ytmq-slide-out-back .ytmq-now-light,
+.ytmq-slide-in-fwd .ytmq-now-lights,
+.ytmq-slide-in-back .ytmq-now-lights,
+.ytmq-slide-out-fwd .ytmq-now-lights,
+.ytmq-slide-out-back .ytmq-now-lights {
+  animation-play-state: paused !important;
+}
+
+/* Per-panel entrance is now just a soft fade so it never fights the push. */
 .ytmq-tab-panel {
-  animation: ytmq-fade-up 0.32s var(--ease-out-soft) both;
+  animation: ytmq-fade-in 0.28s var(--ease-out-soft) both;
 }
 
 /* ----------------------------------------------------------------------------
@@ -621,6 +764,51 @@ body {
     box-shadow 0.7s ease,
     opacity 0.35s ease;
   box-shadow: 0 10px 28px rgba(0, 0, 0, 0.32);
+}
+
+/* ----------------------------------------------------------------------------
+   Lyrics "nothing playing" idle state — a gently breathing pause badge with
+   expanding accent rings, sitting on the shared animated lyrics backdrop.
+   ------------------------------------------------------------------------- */
+@keyframes ytmq-idle-ring {
+  0% {
+    transform: scale(0.85);
+    opacity: 0.6;
+  }
+  70% {
+    transform: scale(1.7);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1.7);
+    opacity: 0;
+  }
+}
+
+@keyframes ytmq-idle-float {
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+  }
+  50% {
+    transform: translateY(-6px) scale(1.03);
+  }
+}
+
+.ytmq-idle-ring {
+  background: radial-gradient(
+    closest-side,
+    var(--np-accent-glow-strong),
+    transparent 72%
+  );
+  animation: ytmq-idle-ring 2.8s var(--ease-out-soft) infinite;
+}
+
+.ytmq-idle-badge {
+  animation: ytmq-idle-float 4.6s ease-in-out infinite;
+  box-shadow:
+    0 12px 34px rgba(0, 0, 0, 0.45),
+    0 0 28px var(--np-accent-glow);
 }
 
 /* Higher base saturation so each blob reads as a distinct vivid orb against
@@ -1156,4 +1344,12 @@ body {
   .ytmq-upnext-dot {
     animation: none;
   }
+}
+
+/* ----------------------------------------------------------------------------
+   Now-playing rail resize handle — a thin draggable strip on the rail's right
+   edge. `touch-action: none` keeps a touch-drag from scrolling the page.
+   ------------------------------------------------------------------------- */
+.ytmq-resize-handle {
+  touch-action: none;
 }

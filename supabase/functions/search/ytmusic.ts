@@ -392,13 +392,66 @@ function collectSearchResults(
   return results.slice(0, limit)
 }
 
-function collectMixedSearchResults(
-  data: JsonObject,
-  limit: number,
-): YtmSearchResult[] {
+/**
+ * The "Top result" card header is YouTube Music's single best-matching entity.
+ * Its subtitle's first run states the kind ("Artist", "Song", …) and the title
+ * run carries the navigation endpoint we need for the id.
+ */
+function parseCardHeader(card: JsonObject): YtmSearchResult | null {
+  const titleRuns = (card.title as {
+    runs?: Array<{ text?: string; navigationEndpoint?: unknown }>
+  })?.runs
+  const title = runsText(titleRuns)
+  if (!title) return null
+
+  const subtitleRuns = (card.subtitle as { runs?: Array<{ text?: string }> })
+    ?.runs
+  const kind = (subtitleRuns?.[0]?.text ?? '').toLowerCase()
+  const thumbnail = pickMusicThumbnail(
+    (card.thumbnail as { musicThumbnailRenderer?: unknown })
+      ?.musicThumbnailRenderer ?? card.thumbnail,
+  )
+  const nav = titleRuns?.[0]?.navigationEndpoint ?? card.onTap
+
+  if (kind.startsWith('artist')) {
+    const id = browseId(nav)
+    if (!id) return null
+    return {
+      id,
+      title,
+      channelTitle: runsText(subtitleRuns),
+      thumbnail,
+      type: 'artist',
+    }
+  }
+
+  if (kind.startsWith('song')) {
+    const videoId = watchVideoId(nav)
+    if (!videoId) return null
+    return {
+      id: videoId,
+      title,
+      channelTitle: songArtistLine(subtitleRuns) || 'Unknown artist',
+      thumbnail,
+      type: 'song',
+    }
+  }
+
+  return null
+}
+
+type MixedSearchResults = {
+  /** YouTube Music's "Top result" card header (artist or song), if any. */
+  topResult: YtmSearchResult | null
+  songs: YtmSearchResult[]
+  artists: YtmSearchResult[]
+}
+
+function collectMixedSearchResults(data: JsonObject): MixedSearchResults {
   const songs: YtmSearchResult[] = []
   const artists: YtmSearchResult[] = []
   const seen = new Set<string>()
+  let topResult: YtmSearchResult | null = null
 
   const tabs = (
     data.contents as {
@@ -420,6 +473,16 @@ function collectMixedSearchResults(
     for (const section of sections) {
       const card = section.musicCardShelfRenderer as JsonObject | undefined
       if (card) {
+        // The card header is YouTube Music's authoritative top match; its inner
+        // contents are typically that entity's related top songs.
+        const header = parseCardHeader(card)
+        if (header && !seen.has(`${header.type}:${header.id}`)) {
+          seen.add(`${header.type}:${header.id}`)
+          if (!topResult) topResult = header
+          if (header.type === 'song') songs.unshift(header)
+          else artists.unshift(header)
+        }
+
         for (const entry of (card.contents as Array<JsonObject> | undefined) ??
           []) {
           const item = entry.musicResponsiveListItemRenderer as
@@ -429,8 +492,8 @@ function collectMixedSearchResults(
           const parsed = parseSongItem(item) ?? parseArtistItem(item)
           if (!parsed || seen.has(`${parsed.type}:${parsed.id}`)) continue
           seen.add(`${parsed.type}:${parsed.id}`)
-          if (parsed.type === 'song') songs.unshift(parsed)
-          else artists.unshift(parsed)
+          if (parsed.type === 'song') songs.push(parsed)
+          else artists.push(parsed)
         }
       }
 
@@ -452,7 +515,111 @@ function collectMixedSearchResults(
     }
   }
 
-  return [...songs, ...artists].slice(0, limit)
+  return { topResult, songs, artists }
+}
+
+function dedupeResults(items: YtmSearchResult[]): YtmSearchResult[] {
+  const seen = new Set<string>()
+  const out: YtmSearchResult[] = []
+  for (const item of items) {
+    const key = `${item.type}:${item.id}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push(item)
+  }
+  return out
+}
+
+/** Lowercase, strip punctuation/accents, collapse whitespace for fuzzy matching. */
+function normalizeName(value: string): string {
+  return value
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+/**
+ * How strongly a result's name matches the query. Higher is better; 0 means no
+ * meaningful match. Tuned so exact/prefix/whole-word hits clearly outrank
+ * incidental substring matches.
+ */
+function nameMatchScore(name: string, query: string): number {
+  const n = normalizeName(name)
+  const q = normalizeName(query)
+  if (!n || !q) return 0
+
+  if (n === q) return 100
+  if (n.startsWith(q)) return 80
+
+  const words = n.split(' ')
+  if (words.includes(q)) return 70
+  if (words.some((w) => w.startsWith(q))) return 55
+
+  const qWords = q.split(' ')
+  if (qWords.length > 1 && qWords.every((w) => n.includes(w))) return 45
+  if (n.includes(q)) return 35
+
+  return 0
+}
+
+/**
+ * Parse a popularity figure from an artist subtitle such as
+ * "Artist • 125M monthly audience" or "910K subscribers" into a raw number.
+ */
+function parseAudience(text: string): number {
+  const m = text.match(
+    /([\d.]+)\s*([KMB])?\s*(?:monthly|subscriber|listener|fan|play|view)/i,
+  )
+  if (!m) return 0
+  const value = parseFloat(m[1])
+  if (!isFinite(value)) return 0
+  const unit = (m[2] ?? '').toUpperCase()
+  const mult = unit === 'B' ? 1e9 : unit === 'M' ? 1e6 : unit === 'K' ? 1e3 : 1
+  return value * mult
+}
+
+/**
+ * Pick the single best "Top result".
+ *
+ * Intent comes from YouTube Music's own top card: if it's an artist, the user is
+ * looking for an artist, so we surface the most *popular* well-matching one
+ * (e.g. "travis" -> Travis Scott, not an obscure exact-name match). If the card
+ * is a song, we keep that song on top (e.g. "rolling in the deep"). Without a
+ * usable card we fall back to name-match heuristics.
+ */
+function chooseTopResult(
+  query: string,
+  songs: YtmSearchResult[],
+  artists: YtmSearchResult[],
+  header: YtmSearchResult | null,
+  popularity: Map<string, number>,
+): YtmSearchResult | null {
+  const bestArtist =
+    artists
+      .map((item) => ({
+        item,
+        score: nameMatchScore(item.title, query),
+        pop: popularity.get(item.id) ?? 0,
+      }))
+      .filter((x) => x.score >= 55)
+      .sort((a, b) => b.pop - a.pop || b.score - a.score)[0]?.item ?? null
+
+  if (header?.type === 'artist') {
+    return bestArtist ?? header
+  }
+  if (header?.type === 'song') {
+    return header
+  }
+
+  const bestSong = songs
+    .map((item) => ({ item, score: nameMatchScore(item.title, query) }))
+    .sort((a, b) => b.score - a.score)[0]
+
+  if (bestArtist && (!bestSong || bestSong.score < 80)) return bestArtist
+  return bestSong?.item ?? songs[0] ?? bestArtist ?? artists[0] ?? null
 }
 
 function browseSections(data: JsonObject): Array<JsonObject> {
@@ -1108,22 +1275,68 @@ export async function searchYtmAll(
   query: string,
   limit = 25,
 ): Promise<YtmSearchResult[]> {
-  const [mixedData, songData] = await Promise.all([
+  // Up to this many artist slots are reserved so artists are never crowded
+  // out by the (typically far more numerous) song results.
+  const ARTIST_SLOTS = 4
+
+  const [mixedData, songData, artistData] = await Promise.all([
     ytmusicRequest('search', { query }),
     ytmusicRequest('search', { query, params: FILTER_SONGS }),
+    ytmusicRequest('search', { query, params: FILTER_ARTISTS }),
   ])
 
-  const mixed = collectMixedSearchResults(mixedData, limit)
-  const topSongs = collectSearchResults(songData, 'song', 8)
-  const seen = new Set(mixed.map((item) => `${item.type}:${item.id}`))
-  const merged = [...topSongs.filter((item) => {
-    const key = `${item.type}:${item.id}`
-    if (seen.has(key)) return false
-    seen.add(key)
-    return true
-  }), ...mixed]
+  const mixed = collectMixedSearchResults(mixedData)
+  const filterSongs = collectSearchResults(songData, 'song', limit)
+  const filterArtists = collectSearchResults(artistData, 'artist', ARTIST_SLOTS + 2)
 
-  return merged.slice(0, limit)
+  // Mixed results are relevance-ranked by YouTube Music, so they lead; the
+  // dedicated filter searches backfill so each type is well represented.
+  const songs = dedupeResults([...mixed.songs, ...filterSongs])
+
+  // Popularity (monthly audience / subscribers) parsed from each artist's
+  // subtitle, used to rank the top artist and order the Artists list.
+  const popularity = new Map<string, number>()
+  for (const a of [...mixed.artists, ...filterArtists]) {
+    const pop = parseAudience(a.channelTitle ?? '')
+    if (pop > (popularity.get(a.id) ?? 0)) popularity.set(a.id, pop)
+  }
+  const artists = dedupeResults([...mixed.artists, ...filterArtists]).sort(
+    (a, b) => (popularity.get(b.id) ?? 0) - (popularity.get(a.id) ?? 0),
+  )
+
+  // Decide the single best match using YouTube Music's card intent + popularity.
+  const top = chooseTopResult(query, songs, artists, mixed.topResult, popularity)
+  const topKey = top ? `${top.type}:${top.id}` : null
+
+  const artistCount = Math.min(artists.length, ARTIST_SLOTS)
+  const songCount = Math.max(0, limit - artistCount)
+  let pickedSongs = songs.slice(0, songCount)
+  let pickedArtists = artists.slice(0, artistCount)
+
+  // Guarantee the chosen top survives the per-type slicing above.
+  if (top && topKey) {
+    if (
+      top.type === 'song' &&
+      !pickedSongs.some((s) => `song:${s.id}` === topKey)
+    ) {
+      pickedSongs = [top, ...pickedSongs].slice(0, songCount)
+    }
+    if (
+      top.type === 'artist' &&
+      !pickedArtists.some((a) => `artist:${a.id}` === topKey)
+    ) {
+      pickedArtists = [top, ...pickedArtists].slice(0, artistCount)
+    }
+  }
+
+  // Top result leads; dedupe drops its duplicate from the type lists.
+  const combined = dedupeResults([
+    ...(top ? [top] : []),
+    ...pickedSongs,
+    ...pickedArtists,
+  ])
+
+  return combined.slice(0, limit)
 }
 
 export async function fetchYtmArtistTracks(

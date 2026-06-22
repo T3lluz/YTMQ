@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { YtmqLogo } from '../components/YtmqLogo'
 import { setNickname } from '../lib/nickname'
-import { createLobby, hostPath, setHostToken } from '../lib/room'
+import { createLobby, roomPath, setHostToken } from '../lib/room'
 
 export function Home() {
   const navigate = useNavigate()
@@ -23,7 +23,7 @@ export function Home() {
       const { room_id, host_token } = await createLobby()
       setHostToken(room_id, host_token)
       setNickname(room_id, trimmedNickname)
-      navigate(hostPath(room_id))
+      navigate(roomPath(room_id))
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Could not create lobby')
     } finally {

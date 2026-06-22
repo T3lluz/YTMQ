@@ -53,7 +53,7 @@ function QueueSkeleton() {
 
 function EmptyState() {
   return (
-    <div className="ytmq-anim-pop flex flex-col items-center gap-3 rounded-2xl border border-dashed border-zinc-800 bg-zinc-900/30 px-6 py-12 text-center">
+    <div className="ytmq-anim-pop flex h-full min-h-[16rem] flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-zinc-800 bg-zinc-900/30 px-6 py-12 text-center">
       <svg
         aria-hidden="true"
         viewBox="0 0 24 24"

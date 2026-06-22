@@ -74,6 +74,11 @@ type HostAdminPanelProps = {
   participants: PresenceParticipant[]
   onlineCount: number
   onToast: (message: string, variant?: ToastVariant) => void
+  /**
+   * Which slice to render. Desktop splits the panel across two columns
+   * (`controls` + `people`); mobile renders everything (`all`).
+   */
+  section?: 'all' | 'controls' | 'people'
 }
 
 export function HostAdminPanel({
@@ -83,6 +88,7 @@ export function HostAdminPanel({
   participants,
   onlineCount,
   onToast,
+  section = 'all',
 }: HostAdminPanelProps) {
   const [saving, setSaving] = useState(false)
   const [kickBusyId, setKickBusyId] = useState<string | null>(null)
@@ -188,8 +194,13 @@ export function HostAdminPanel({
     }
   }
 
+  const showControls = section !== 'people'
+  const showPeople = section !== 'controls'
+
   return (
     <section className="space-y-4">
+      {showControls && (
+        <>
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold">Admin</h2>
         {draft.locked && (
@@ -298,23 +309,27 @@ export function HostAdminPanel({
           </button>
         )}
       </div>
+        </>
+      )}
 
       {/* Participants */}
-      <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">
-            People
-          </h3>
-          <span className="text-xs text-zinc-500">
-            {onlineCount} online · {participants.length} joined
-          </span>
+      {showPeople && (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">
+              People
+            </h3>
+            <span className="text-xs text-zinc-500">
+              {onlineCount} online · {participants.length} joined
+            </span>
+          </div>
+          <ParticipantList
+            participants={participants}
+            busyId={kickBusyId}
+            onKick={(clientId, nickname) => void handleKick(clientId, nickname)}
+          />
         </div>
-        <ParticipantList
-          participants={participants}
-          busyId={kickBusyId}
-          onKick={(clientId, nickname) => void handleKick(clientId, nickname)}
-        />
-      </div>
+      )}
     </section>
   )
 }

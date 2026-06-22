@@ -1,10 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   searchByFilter,
   type SearchFilter,
   type SearchResultItem,
 } from '../lib/search'
-import { RecentlyPlayed } from './RecentlyPlayed'
 import { TrackRow } from './TrackRow'
 import { useQueueAdder } from '../hooks/useQueueAdder'
 import {
@@ -14,9 +13,10 @@ import {
 } from '../lib/queue'
 
 type SearchTabProps = {
-  roomId: string
   nickname: string
   canAdd?: boolean
+  /** Desktop: fill the available height with a pinned header + scrolling results. */
+  fillHeight?: boolean
   onAdd: (track: AddTrackInput, mode: QueueInsertMode) => Promise<void>
   onAdded?: (title: string, mode: QueueInsertMode) => void
 }
@@ -80,9 +80,9 @@ function SearchSkeleton() {
 }
 
 export function SearchTab({
-  roomId,
   nickname,
   canAdd = true,
+  fillHeight = false,
   onAdd,
   onAdded,
 }: SearchTabProps) {
@@ -91,9 +91,15 @@ export function SearchTab({
   const [results, setResults] = useState<SearchResultItem[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [focused, setFocused] = useState(false)
+  const inputRef = useRef<HTMLInputElement>(null)
   const { pending, add } = useQueueAdder(nickname, onAdd, onAdded)
 
   const trimmed = query.trim()
+
+  // The bar lives in the centre of the screen at rest and glides to the top
+  // (making room for results) once the user engages with it.
+  const active = focused || query.length > 0
 
   useEffect(() => {
     let cancelled = false
@@ -216,7 +222,7 @@ export function SearchTab({
 
     if (filter === 'artist') {
       return (
-        <ul className="flex flex-col gap-2 pb-4">
+        <ul className="grid grid-cols-1 gap-2 pb-4 xl:grid-cols-2">
           {artists.map((item) => renderArtistRow(item))}
         </ul>
       )
@@ -224,7 +230,7 @@ export function SearchTab({
 
     if (filter === 'song') {
       return (
-        <ul className="flex flex-col gap-1.5 pb-4">
+        <ul className="grid grid-cols-1 gap-1.5 pb-4 xl:grid-cols-2">
           {songs.map((item, index) => renderSong(item, index + 1))}
         </ul>
       )
@@ -234,6 +240,8 @@ export function SearchTab({
     const top = results[0]
     const restSongs =
       top.type === 'song' ? songs.filter((s) => s.id !== top.id) : songs
+    const restArtists =
+      top.type === 'artist' ? artists.filter((a) => a.id !== top.id) : artists
 
     return (
       <div className="ytmq-anim-fade-up flex flex-col gap-6 pb-4">
@@ -312,19 +320,19 @@ export function SearchTab({
             <h3 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">
               Songs
             </h3>
-            <ul className="flex flex-col gap-1.5">
+            <ul className="grid grid-cols-1 gap-1.5 xl:grid-cols-2">
               {restSongs.map((item) => renderSong(item))}
             </ul>
           </section>
         )}
 
-        {artists.length > 0 && (
+        {restArtists.length > 0 && (
           <section className="space-y-2">
             <h3 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">
               Artists
             </h3>
-            <ul className="flex flex-col gap-2">
-              {artists.map((item) => renderArtistRow(item))}
+            <ul className="grid grid-cols-1 gap-2 xl:grid-cols-2">
+              {restArtists.map((item) => renderArtistRow(item))}
             </ul>
           </section>
         )}
@@ -332,12 +340,20 @@ export function SearchTab({
     )
   }
 
-  return (
-    <section className="flex flex-1 flex-col gap-3">
-      <h2 className="text-lg font-semibold">Search</h2>
+  function clearSearch() {
+    setQuery('')
+    // Keep the bar pinned to the top so the user can keep typing right away.
+    inputRef.current?.focus()
+  }
 
+  return (
+    <section
+      className={`flex flex-col ${
+        fillHeight ? 'h-full min-h-0' : 'min-h-[62vh] flex-1'
+      }`}
+    >
       {!canAdd && (
-        <p className="ytmq-anim-fade flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-100">
+        <p className="ytmq-anim-fade mb-3 flex shrink-0 items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-100">
           <svg viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4 shrink-0" aria-hidden>
             <path
               fillRule="evenodd"
@@ -349,43 +365,87 @@ export function SearchTab({
         </p>
       )}
 
-      <div className="relative">
-        <input
-          type="text"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Songs, artists…"
-          autoComplete="off"
-          enterKeyHint="search"
-          className="min-h-12 w-full rounded-xl border border-zinc-700 bg-zinc-900 px-4 pr-10 text-base outline-none transition-colors focus:border-violet-500"
-        />
-        {query && (
-          <button
-            type="button"
-            onClick={() => setQuery('')}
-            aria-label="Clear search"
-            className="ytmq-anim-fade absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-1.5 text-zinc-500 transition-colors hover:text-zinc-200"
+      <div className={`flex flex-col ${fillHeight ? 'min-h-0 flex-1' : ''}`}>
+        <div
+          className="shrink-0 transition-[padding-top] duration-[480ms] [transition-timing-function:var(--ease-out-soft)]"
+          style={{ paddingTop: active ? 0 : 'clamp(1.5rem, 24vh, 13rem)' }}
+        >
+          {/* "Search songs" hero — collapses up and out as the bar takes over. */}
+          <div
+            className={`grid overflow-hidden text-center transition-all duration-[420ms] [transition-timing-function:var(--ease-out-soft)] ${
+              active
+                ? 'mb-0 max-h-0 -translate-y-2 opacity-0'
+                : 'mb-7 max-h-40 translate-y-0 opacity-100'
+            }`}
           >
-            <svg viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
-              <path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" />
+            <h2 className="font-lyrics text-4xl font-extrabold tracking-tight text-white sm:text-5xl">
+              Search songs
+            </h2>
+            <p className="mt-2.5 text-sm text-zinc-400">
+              Find any song or artist to add to the queue
+            </p>
+          </div>
+
+          <div
+            className={`relative mx-auto w-full transition-[max-width] duration-[480ms] [transition-timing-function:var(--ease-out-soft)] ${
+              active ? 'max-w-xl' : 'max-w-2xl'
+            }`}
+          >
+            <svg
+              viewBox="0 0 20 20"
+              fill="currentColor"
+              aria-hidden
+              className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-zinc-500"
+            >
+              <path
+                fillRule="evenodd"
+                d="M9 3.5a5.5 5.5 0 1 0 3.4 9.83l3.64 3.63a.75.75 0 1 0 1.06-1.06l-3.63-3.64A5.5 5.5 0 0 0 9 3.5ZM5 9a4 4 0 1 1 8 0 4 4 0 0 1-8 0Z"
+                clipRule="evenodd"
+              />
             </svg>
-          </button>
+            <input
+              ref={inputRef}
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onFocus={() => setFocused(true)}
+              onBlur={() => setFocused(false)}
+              placeholder="Songs, artists…"
+              autoComplete="off"
+              enterKeyHint="search"
+              className="min-h-14 w-full rounded-full border border-zinc-700 bg-zinc-900 pl-12 pr-11 text-base shadow-lg shadow-black/20 outline-none transition-colors focus:border-violet-500"
+            />
+            {query && (
+              <button
+                type="button"
+                onClick={clearSearch}
+                aria-label="Clear search"
+                className="ytmq-anim-fade absolute right-3 top-1/2 -translate-y-1/2 rounded-full p-1.5 text-zinc-500 transition-colors hover:text-zinc-200"
+              >
+                <svg viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
+                  <path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" />
+                </svg>
+              </button>
+            )}
+          </div>
+
+          {trimmed.length >= 2 && (
+            <div className="ytmq-anim-fade mt-3">
+              <FilterPills value={filter} onChange={setFilter} />
+            </div>
+          )}
+        </div>
+
+        {trimmed.length >= 2 && (
+          <div
+            className={`mt-3 ${
+              fillHeight ? 'min-h-0 flex-1 overflow-y-auto pb-28 pr-1' : ''
+            }`}
+          >
+            {renderResults()}
+          </div>
         )}
       </div>
-
-      {trimmed.length >= 2 && <FilterPills value={filter} onChange={setFilter} />}
-
-      {trimmed.length < 2 ? (
-        <RecentlyPlayed
-          roomId={roomId}
-          nickname={nickname}
-          canAdd={canAdd}
-          onAdd={onAdd}
-          onAdded={onAdded}
-        />
-      ) : (
-        renderResults()
-      )}
     </section>
   )
 }
