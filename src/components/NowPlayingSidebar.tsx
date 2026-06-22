@@ -8,6 +8,7 @@ import { paletteCssVars } from '../lib/imagePalette'
 import { sendPlaybackControl, sendPlaybackSeek } from '../lib/bridgeChannel'
 import { formatPlaybackTime, type PlaybackAction } from '../lib/playback'
 import { LyricsBackdrop, LyricsBody } from './LyricsView'
+import { PlaybackControls } from './PlaybackControls'
 
 type NowPlayingSidebarProps = {
   roomId: string
@@ -190,7 +191,7 @@ export function NowPlayingSidebar({
 
   return (
     <aside
-      className={`ytmq-anim-fade relative isolate flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border ${className}`}
+      className={`ytmq-now-rail ytmq-anim-fade relative isolate flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border ${className}`}
       style={{ ...paletteCssVars(palette), borderColor: 'var(--np-accent-border)' }}
       aria-label={`Now playing: ${nowPlaying.title}`}
     >
@@ -207,7 +208,7 @@ export function NowPlayingSidebar({
             alt=""
             crossOrigin="anonymous"
             onError={handleArtError}
-            className={`ytmq-now-art aspect-square w-40 rounded-2xl object-cover shadow-2xl ring-1 ring-white/15 lg:w-48 ${
+            className={`ytmq-now-art aspect-square w-[clamp(8rem,58cqw,18rem)] rounded-2xl object-cover shadow-2xl ring-1 ring-white/15 ${
               live ? 'is-live' : ''
             }`}
           />
@@ -283,38 +284,16 @@ export function NowPlayingSidebar({
             </div>
           </div>
 
-          <div
-            className="ytmq-now-controls mt-1 flex items-center justify-center gap-6"
+          <PlaybackControls
+            className="mt-1"
+            isPlaying={isPlaying}
+            disabled={controlsDisabled}
+            pendingAction={pendingAction}
+            onControl={trigger}
             title={
               !canControl ? 'The host has limited playback controls' : undefined
             }
-          >
-            <ControlButton
-              label="Previous"
-              onClick={() => trigger('prev')}
-              disabled={controlsDisabled}
-              active={pendingAction === 'prev'}
-            >
-              <PrevIcon />
-            </ControlButton>
-            <ControlButton
-              label={isPlaying ? 'Pause' : 'Play'}
-              onClick={() => trigger(isPlaying ? 'pause' : 'play')}
-              disabled={controlsDisabled}
-              active={pendingAction === 'play' || pendingAction === 'pause'}
-              primary
-            >
-              {isPlaying ? <PauseIcon /> : <PlayIcon />}
-            </ControlButton>
-            <ControlButton
-              label="Next"
-              onClick={() => trigger('next')}
-              disabled={controlsDisabled}
-              active={pendingAction === 'next'}
-            >
-              <NextIcon />
-            </ControlButton>
-          </div>
+          />
         </div>
 
         {showLyrics && (
@@ -332,83 +311,3 @@ export function NowPlayingSidebar({
   )
 }
 
-type ControlButtonProps = {
-  label: string
-  onClick: () => void
-  disabled?: boolean
-  active?: boolean
-  primary?: boolean
-  children: React.ReactNode
-}
-
-function ControlButton({
-  label,
-  onClick,
-  disabled,
-  active,
-  primary,
-  children,
-}: ControlButtonProps) {
-  const size = primary ? 'h-14 w-14' : 'h-11 w-11'
-  const ring = active ? ' ytmq-now-control-active' : ''
-  return (
-    <button
-      type="button"
-      aria-label={label}
-      title={label}
-      onClick={onClick}
-      disabled={disabled}
-      className={`ytmq-now-control inline-flex items-center justify-center text-white/75 transition hover:text-white active:scale-90 disabled:opacity-40 disabled:active:scale-100 ${size}${ring}`}
-    >
-      {children}
-    </button>
-  )
-}
-
-/**
- * Apple SF Symbols-style glyphs: filled shapes whose sharp corners are softened
- * by painting a same-colour rounded stroke on top of the fill. The generous
- * `strokeWidth` also fattens the shapes so they read bold at small sizes.
- */
-const softFill = {
-  fill: 'currentColor',
-  stroke: 'currentColor',
-  strokeWidth: 2.4,
-  strokeLinejoin: 'round',
-  strokeLinecap: 'round',
-} as const
-
-function PrevIcon() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden className="h-8 w-8" {...softFill}>
-      <path d="M7 6.5v11" />
-      <path d="M18 6.8v10.4L9.5 12z" />
-    </svg>
-  )
-}
-
-function NextIcon() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden className="h-8 w-8" {...softFill}>
-      <path d="M17 6.5v11" />
-      <path d="M6 6.8v10.4L14.5 12z" />
-    </svg>
-  )
-}
-
-function PlayIcon() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden className="h-11 w-11" {...softFill}>
-      <path d="M8 5.5v13l11-6.5z" />
-    </svg>
-  )
-}
-
-function PauseIcon() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden className="h-11 w-11" fill="currentColor">
-      <rect x="6.5" y="5" width="3.6" height="14" rx="1.8" />
-      <rect x="13.9" y="5" width="3.6" height="14" rx="1.8" />
-    </svg>
-  )
-}

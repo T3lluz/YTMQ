@@ -17,6 +17,7 @@ import { paletteCssVars } from '../lib/imagePalette'
 import { sendPlaybackControl, sendPlaybackSeek } from '../lib/bridgeChannel'
 import { formatPlaybackTime, type PlaybackAction } from '../lib/playback'
 import { LyricsUpNext, type UpNextTrack } from './LyricsUpNext'
+import { PlaybackControls } from './PlaybackControls'
 
 type LyricsViewProps = {
   roomId: string
@@ -582,33 +583,12 @@ function ArtPanel({
         />
 
         {onControl && (
-          <div className="flex items-center gap-4">
-            <TransportButton
-              label="Previous"
-              disabled={!controlsEnabled}
-              active={pendingAction === 'prev'}
-              onClick={() => onControl('prev')}
-            >
-              <PrevIcon />
-            </TransportButton>
-            <TransportButton
-              label={isPlaying ? 'Pause' : 'Play'}
-              primary
-              disabled={!controlsEnabled}
-              active={pendingAction === 'play' || pendingAction === 'pause'}
-              onClick={() => onControl(isPlaying ? 'pause' : 'play')}
-            >
-              {isPlaying ? <PauseIcon /> : <PlayIcon />}
-            </TransportButton>
-            <TransportButton
-              label="Next"
-              disabled={!controlsEnabled}
-              active={pendingAction === 'next'}
-              onClick={() => onControl('next')}
-            >
-              <NextIcon />
-            </TransportButton>
-          </div>
+          <PlaybackControls
+            isPlaying={isPlaying}
+            disabled={!controlsEnabled}
+            pendingAction={pendingAction}
+            onControl={onControl}
+          />
         )}
       </div>
     )
@@ -1179,71 +1159,4 @@ function Equalizer() {
   )
 }
 
-type TransportButtonProps = {
-  label: string
-  onClick: () => void
-  disabled?: boolean
-  active?: boolean
-  primary?: boolean
-  children: React.ReactNode
-}
-
-function TransportButton({
-  label,
-  onClick,
-  disabled,
-  active,
-  primary,
-  children,
-}: TransportButtonProps) {
-  const size = primary ? 'h-14 w-14' : 'h-11 w-11'
-  const tone = primary
-    ? 'ytmq-now-control-primary'
-    : 'bg-white/10 hover:bg-white/20'
-  const ring = active ? ' ytmq-now-control-active' : ''
-  return (
-    <button
-      type="button"
-      aria-label={label}
-      title={label}
-      onClick={onClick}
-      disabled={disabled}
-      className={`inline-flex items-center justify-center rounded-full text-white transition active:scale-95 disabled:opacity-40 disabled:active:scale-100 ${tone} ${size}${ring}`}
-    >
-      {children}
-    </button>
-  )
-}
-
-function PrevIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden className="h-5 w-5">
-      <path d="M7 6h2v12H7zM10 12l9-6v12z" />
-    </svg>
-  )
-}
-
-function NextIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden className="h-5 w-5">
-      <path d="M15 6h2v12h-2zM5 6v12l9-6z" />
-    </svg>
-  )
-}
-
-function PlayIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden className="h-6 w-6">
-      <path d="M8 5v14l11-7z" />
-    </svg>
-  )
-}
-
-function PauseIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden className="h-6 w-6">
-      <path d="M6 5h4v14H6zM14 5h4v14h-4z" />
-    </svg>
-  )
-}
 
