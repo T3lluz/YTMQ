@@ -365,34 +365,50 @@ function ControlButton({
   )
 }
 
+/**
+ * Apple SF Symbols-style glyphs: filled shapes whose sharp corners are softened
+ * by painting a same-colour rounded stroke on top of the fill. The generous
+ * `strokeWidth` also fattens the shapes so they read bold at small sizes.
+ */
+const softFill = {
+  fill: 'currentColor',
+  stroke: 'currentColor',
+  strokeWidth: 2.4,
+  strokeLinejoin: 'round',
+  strokeLinecap: 'round',
+} as const
+
 function PrevIcon() {
   return (
-    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden className="h-7 w-7">
-      <path d="M7 6h2v12H7zM10 12l9-6v12z" />
+    <svg viewBox="0 0 24 24" aria-hidden className="h-8 w-8" {...softFill}>
+      <path d="M7 6.5v11" />
+      <path d="M18 6.8v10.4L9.5 12z" />
     </svg>
   )
 }
 
 function NextIcon() {
   return (
-    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden className="h-7 w-7">
-      <path d="M15 6h2v12h-2zM5 6v12l9-6z" />
+    <svg viewBox="0 0 24 24" aria-hidden className="h-8 w-8" {...softFill}>
+      <path d="M17 6.5v11" />
+      <path d="M6 6.8v10.4L14.5 12z" />
     </svg>
   )
 }
 
 function PlayIcon() {
   return (
-    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden className="h-10 w-10">
-      <path d="M8 5v14l11-7z" />
+    <svg viewBox="0 0 24 24" aria-hidden className="h-11 w-11" {...softFill}>
+      <path d="M8 5.5v13l11-6.5z" />
     </svg>
   )
 }
 
 function PauseIcon() {
   return (
-    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden className="h-10 w-10">
-      <path d="M6 5h4v14H6zM14 5h4v14h-4z" />
+    <svg viewBox="0 0 24 24" aria-hidden className="h-11 w-11" fill="currentColor">
+      <rect x="6.5" y="5" width="3.6" height="14" rx="1.8" />
+      <rect x="13.9" y="5" width="3.6" height="14" rx="1.8" />
     </svg>
   )
 }
