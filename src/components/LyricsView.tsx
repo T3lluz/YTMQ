@@ -996,7 +996,8 @@ function LyricsZoomControl({
  * screen. Like the zoom control, it stays invisible until the pointer comes
  * near (or while actively dragging) so it never clutters the immersive view.
  * Drives the host player volume optimistically: the fill jumps to the dragged
- * level and holds there until the bridge confirms a fresh value.
+ * level and holds there until the bridge confirms a fresh value. The speaker
+ * button toggles mute, restoring the previous level on unmute.
  */
 function VolumeControl({
   volume,
@@ -1014,11 +1015,13 @@ function VolumeControl({
   const [pending, setPending] = useState<number | null>(null)
   const sentAtRef = useRef(0)
   const lastSendRef = useRef(0)
+  // Remembers the last audible level so the mute toggle can restore it.
+  const prevAudibleRef = useRef(60)
 
   // Reveal when the pointer is within a generous radius of the slider, matching
   // the zoom control's behaviour instead of requiring a pixel-perfect hover.
   useEffect(() => {
-    const REVEAL_DISTANCE = 140
+    const REVEAL_DISTANCE = 150
     const onMove = (e: PointerEvent) => {
       const el = ref.current
       if (!el) return
@@ -1039,6 +1042,18 @@ function VolumeControl({
 
   const shown = pending ?? volume
   const percent = Math.min(100, Math.max(0, shown))
+  const muted = percent <= 0
+
+  useEffect(() => {
+    if (percent > 0) prevAudibleRef.current = percent
+  }, [percent])
+
+  const apply = (next: number) => {
+    const clamped = Math.min(100, Math.max(0, next))
+    setPending(clamped)
+    onVolume(clamped)
+    sentAtRef.current = Date.now()
+  }
 
   const volumeFromClientY = (clientY: number): number | null => {
     const el = trackRef.current
@@ -1070,7 +1085,7 @@ function VolumeControl({
     setPending(next)
     // Trickle updates to the bridge while dragging instead of flooding it.
     const t = Date.now()
-    if (t - lastSendRef.current >= 80) {
+    if (t - lastSendRef.current >= 70) {
       lastSendRef.current = t
       onVolume(next)
     }
@@ -1081,29 +1096,46 @@ function VolumeControl({
     e.currentTarget.releasePointerCapture?.(e.pointerId)
     setDragging(false)
     const next = volumeFromClientY(e.clientY) ?? pending
-    if (next != null) {
-      setPending(next)
-      onVolume(next)
-      sentAtRef.current = Date.now()
+    if (next != null) apply(next)
+  }
+
+  const toggleMute = () => {
+    if (muted) {
+      apply(prevAudibleRef.current > 5 ? prevAudibleRef.current : 50)
+    } else {
+      prevAudibleRef.current = percent
+      apply(0)
     }
   }
 
   return (
     <div
       ref={ref}
-      className={`group absolute left-3 top-1/2 z-30 hidden -translate-y-1/2 flex-col items-center gap-2 rounded-full border bg-black/35 px-1.5 py-3 text-white shadow-lg backdrop-blur transition-opacity duration-300 sm:flex ${
-        near || dragging ? 'opacity-100' : 'pointer-events-none opacity-0'
+      className={`ytmq-vol group absolute left-3 top-1/2 z-30 hidden -translate-y-1/2 flex-col items-center gap-3 rounded-full border bg-black/40 px-2 py-3.5 text-white backdrop-blur transition-[opacity,transform] duration-300 sm:flex ${
+        near || dragging
+          ? 'scale-100 opacity-100'
+          : 'pointer-events-none scale-95 opacity-0'
       }`}
-      style={{ borderColor: 'var(--np-accent-border)' }}
+      style={{
+        borderColor: 'var(--np-accent-border)',
+        boxShadow: '0 10px 30px rgba(0, 0, 0, 0.45), 0 0 22px var(--np-accent-glow)',
+      }}
       role="group"
       aria-label="Volume"
     >
+      <span
+        aria-hidden
+        className="text-[10px] font-semibold tabular-nums tracking-wide"
+        style={{ color: 'color-mix(in srgb, var(--np-accent-light) 70%, white)' }}
+      >
+        {Math.round(percent)}
+      </span>
       <div
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={endDrag}
         onPointerCancel={endDrag}
-        className="relative flex h-32 w-6 cursor-pointer touch-none items-stretch justify-center"
+        className="relative flex h-44 w-7 cursor-pointer touch-none items-stretch justify-center"
         role="slider"
         aria-label="Volume"
         aria-orientation="vertical"
@@ -1113,32 +1145,52 @@ function VolumeControl({
       >
         <div
           ref={trackRef}
-          className="ytmq-now-progress-track relative w-1.5 overflow-hidden rounded-full"
+          className={`ytmq-vol-track relative w-1.5 overflow-hidden rounded-full ${
+            dragging ? 'is-dragging' : ''
+          }`}
         >
           <div
-            className="ytmq-now-progress-fill absolute bottom-0 left-0 w-full rounded-full"
-            style={{
-              height: `${percent}%`,
-              ...(pending != null ? { transition: 'none' } : null),
-            }}
+            className={`ytmq-vol-fill absolute inset-x-0 bottom-0 rounded-full ${
+              dragging ? 'is-dragging' : ''
+            }`}
+            style={{ height: `${percent}%` }}
           />
         </div>
         <span
           aria-hidden
-          className={`pointer-events-none absolute left-1/2 h-3.5 w-3.5 -translate-x-1/2 translate-y-1/2 rounded-full bg-white ring-1 ring-black/25 transition-[transform,box-shadow] duration-200 ${
-            dragging
-              ? 'scale-125 shadow-[0_0_0_6px_rgba(var(--np-accent-rgb)/0.28),0_2px_10px_rgba(0,0,0,0.45)]'
-              : 'shadow-md'
+          className={`ytmq-vol-thumb pointer-events-none absolute left-1/2 h-4 w-4 rounded-full ${
+            dragging ? 'is-dragging' : ''
           }`}
           style={{ bottom: `${percent}%` }}
         />
       </div>
-      <VolumeIcon muted={percent <= 0} />
+      <button
+        type="button"
+        onClick={toggleMute}
+        aria-label={muted ? 'Unmute' : 'Mute'}
+        aria-pressed={muted}
+        title={muted ? 'Unmute' : 'Mute'}
+        className="flex h-8 w-8 items-center justify-center rounded-full text-white/90 transition hover:bg-white/15 active:scale-90"
+      >
+        <VolumeIcon level={percent} muted={muted} />
+      </button>
     </div>
   )
 }
 
-function VolumeIcon({ muted }: { muted: boolean }) {
+/**
+ * Speaker glyph whose sound waves fade in/out with the level (1/2/3 arcs) and
+ * whose diagonal "slash" draws across the icon when muted, then retracts
+ * smoothly on unmute.
+ */
+function VolumeIcon({ level, muted }: { level: number; muted: boolean }) {
+  const wave = (show: boolean): CSSProperties => ({
+    opacity: show && !muted ? 1 : 0,
+    transformOrigin: '7px 12px',
+    transform: show && !muted ? 'scale(1)' : 'scale(0.45)',
+    transition:
+      'opacity 260ms ease, transform 260ms cubic-bezier(0.34, 1.56, 0.64, 1)',
+  })
   return (
     <svg
       viewBox="0 0 24 24"
@@ -1148,17 +1200,21 @@ function VolumeIcon({ muted }: { muted: boolean }) {
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden
-      className="h-4 w-4 shrink-0 opacity-80"
+      className="h-5 w-5 shrink-0"
     >
       <path d="M11 5 6 9H3v6h3l5 4z" fill="currentColor" stroke="none" />
-      {muted ? (
-        <path d="m16 9 5 6M21 9l-5 6" />
-      ) : (
-        <>
-          <path d="M15.5 8.5a5 5 0 0 1 0 7" />
-          <path d="M18.5 6a9 9 0 0 1 0 12" />
-        </>
-      )}
+      <path d="M14.5 9a4.5 4.5 0 0 1 0 6" style={wave(level > 0)} />
+      <path d="M17 6.5a8 8 0 0 1 0 11" style={wave(level >= 45)} />
+      <path d="M19.5 4a11.5 11.5 0 0 1 0 16" style={wave(level >= 80)} />
+      <path
+        d="M3.5 3.5 20.5 20.5"
+        pathLength={1}
+        style={{
+          strokeDasharray: '1 1',
+          strokeDashoffset: muted ? 0 : 1,
+          transition: 'stroke-dashoffset 340ms cubic-bezier(0.65, 0, 0.35, 1)',
+        }}
+      />
     </svg>
   )
 }
