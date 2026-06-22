@@ -812,7 +812,11 @@ export function Room() {
                   : 'opacity 260ms ease, transform 380ms var(--ease-out-soft)',
               }}
             >
-              <NowPlayingSidebar roomId={roomId} className="h-full" />
+              <NowPlayingSidebar
+                roomId={roomId}
+                className="h-full"
+                canControl={canControl}
+              />
             </div>
 
             <button

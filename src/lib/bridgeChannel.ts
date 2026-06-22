@@ -22,6 +22,8 @@ export function notifyBridgeQueueRemove(
 
 export type PlaybackControlPayload = {
   action: PlaybackAction
+  /** Target position in seconds — only used by the `seek` action. */
+  position?: number
 }
 
 /** Tell the YT Music bridge to next/prev/play/pause the current track. */
@@ -30,6 +32,14 @@ export function sendPlaybackControl(
   action: PlaybackAction,
 ): void {
   void sendBridgeBroadcast(roomId, 'playback_control', { action })
+}
+
+/** Tell the YT Music bridge to seek the current track to `position` seconds. */
+export function sendPlaybackSeek(roomId: string, position: number): void {
+  void sendBridgeBroadcast(roomId, 'playback_control', {
+    action: 'seek',
+    position: Math.max(0, Math.round(position)),
+  })
 }
 
 type SenderState = {

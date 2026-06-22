@@ -48,7 +48,7 @@ type NowPlayingPayload = {
   }
 }
 
-type PlaybackAction = 'next' | 'prev' | 'play' | 'pause' | 'toggle'
+type PlaybackAction = 'next' | 'prev' | 'play' | 'pause' | 'toggle' | 'seek'
 
 type QueueStoreState = {
   queue: {
@@ -482,7 +482,31 @@ function doToggle(): boolean {
   return doPlay()
 }
 
-function runPlaybackAction(action: PlaybackAction): boolean {
+function doSeek(seconds: number): boolean {
+  if (!Number.isFinite(seconds) || seconds < 0) return false
+  const bar = getPlayerBar()
+  try {
+    if (bar?.playerApi?.seekTo) {
+      bar.playerApi.seekTo(seconds, true)
+      return true
+    }
+  } catch {
+    /* fall through to the raw <video> element */
+  }
+
+  const video = document.querySelector('video') as HTMLVideoElement | null
+  if (video && Number.isFinite(video.duration) && video.duration > 0) {
+    try {
+      video.currentTime = Math.min(seconds, video.duration)
+      return true
+    } catch {
+      /* ignore */
+    }
+  }
+  return false
+}
+
+function runPlaybackAction(action: PlaybackAction, position?: number): boolean {
   switch (action) {
     case 'next':
       return doNext()
@@ -494,6 +518,8 @@ function runPlaybackAction(action: PlaybackAction): boolean {
       return doPause()
     case 'toggle':
       return doToggle()
+    case 'seek':
+      return typeof position === 'number' ? doSeek(position) : false
     default:
       return false
   }
@@ -1354,15 +1380,17 @@ async function runBridge() {
   }
 
   let lastControlAt = 0
-  function handlePlaybackControl(action: PlaybackAction) {
+  function handlePlaybackControl(action: PlaybackAction, position?: number) {
     const now = Date.now()
-    if (now - lastControlAt < 300) {
+    // Seeks are already coalesced to one message per gesture on the client, so
+    // don't let the generic debounce swallow them.
+    if (action !== 'seek' && now - lastControlAt < 300) {
       log('Playback control debounced', action)
       return
     }
     lastControlAt = now
 
-    const ok = runPlaybackAction(action)
+    const ok = runPlaybackAction(action, position)
     log('Playback control', action, ok ? 'ok' : 'failed')
     if (!ok) {
       showToast(`Could not ${action} — open YouTube Music tab`)
@@ -1377,6 +1405,7 @@ async function runBridge() {
     .on('broadcast', { event: 'playback_control' }, ({ payload }) => {
       if (!payload || typeof payload !== 'object') return
       const action = (payload as { action?: PlaybackAction }).action
+      const position = (payload as { position?: number }).position
       if (
         action === 'next' ||
         action === 'prev' ||
@@ -1385,6 +1414,11 @@ async function runBridge() {
         action === 'toggle'
       ) {
         handlePlaybackControl(action)
+      } else if (action === 'seek') {
+        handlePlaybackControl(
+          'seek',
+          typeof position === 'number' ? position : undefined,
+        )
       }
     })
     .on('broadcast', { event: 'queue_remove' }, ({ payload }) => {

@@ -69,7 +69,12 @@ export function TabSlider({
       className={`relative isolate flex flex-col ${minH} ${className ?? ''}`}
       style={
         sliding
-          ? { height: outgoing.height, overflow: 'clip' }
+          ? // During the slide both panels are absolutely positioned, so the
+            // viewport has no in-flow content to size from. Lock it to the
+            // measured height — and force `flex: none` so the `flex-1` class
+            // (`flex-basis: 0%`) can't override this height back to 0 when an
+            // ancestor isn't height-bounded (e.g. the scrolling mobile page).
+            { height: outgoing.height, flex: 'none', overflow: 'clip' }
           : { overflowX: 'clip' }
       }
     >

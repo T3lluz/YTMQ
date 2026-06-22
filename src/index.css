@@ -1145,7 +1145,9 @@ textarea,
      once the active line scales up, and forces them to wrap earlier instead. */
   padding: 0.46em clamp(0.9rem, 7%, 2.75rem);
   font-family: var(--font-lyrics);
-  font-size: 1.5rem;
+  /* `--ytmq-lyric-zoom` (default 1) scales only the lyric text, driven by the
+     in-screen zoom control. All lyric font-sizes multiply by it. */
+  font-size: calc(1.5rem * var(--ytmq-lyric-zoom, 1));
   font-weight: 700;
   line-height: 1.26;
   letter-spacing: -0.015em;
@@ -1164,27 +1166,27 @@ textarea,
 
 @container (min-width: 340px) {
   .ytmq-lyric-line {
-    font-size: 1.7rem;
+    font-size: calc(1.7rem * var(--ytmq-lyric-zoom, 1));
   }
 }
 @container (min-width: 460px) {
   .ytmq-lyric-line {
-    font-size: 2rem;
+    font-size: calc(2rem * var(--ytmq-lyric-zoom, 1));
   }
 }
 @container (min-width: 600px) {
   .ytmq-lyric-line {
-    font-size: 2.35rem;
+    font-size: calc(2.35rem * var(--ytmq-lyric-zoom, 1));
     line-height: 1.2;
   }
 }
 
 .ytmq-lyrics-plain {
-  font-size: 1rem;
+  font-size: calc(1rem * var(--ytmq-lyric-zoom, 1));
 }
 @container (min-width: 460px) {
   .ytmq-lyrics-plain {
-    font-size: 1.05rem;
+    font-size: calc(1.05rem * var(--ytmq-lyric-zoom, 1));
   }
 }
 
@@ -1238,7 +1240,7 @@ textarea,
 
 /* Bigger, more generously spaced lyrics for the immersive desktop layout. */
 .ytmq-lyrics-fullscreen .ytmq-lyric-line {
-  font-size: clamp(1.9rem, 2.8vw, 3.1rem);
+  font-size: calc(clamp(1.9rem, 2.8vw, 3.1rem) * var(--ytmq-lyric-zoom, 1));
   line-height: 1.22;
   padding: 0.5em clamp(1rem, 7%, 3rem);
 }

@@ -212,6 +212,38 @@ function handleArtError(event: React.SyntheticEvent<HTMLImageElement>) {
   }
 }
 
+const LYRICS_ZOOM_KEY = 'ytmq.lyricsZoom'
+const LYRICS_ZOOM_MIN = 0.6
+const LYRICS_ZOOM_MAX = 2
+const LYRICS_ZOOM_STEP = 0.1
+
+const clampZoom = (n: number) =>
+  Math.min(LYRICS_ZOOM_MAX, Math.max(LYRICS_ZOOM_MIN, Math.round(n * 10) / 10))
+
+/**
+ * Persisted, lyrics-only zoom level. Scales just the lyric text (via the
+ * `--ytmq-lyric-zoom` CSS variable) and remembers the choice across sessions.
+ */
+function useLyricsZoom() {
+  const [zoom, setZoom] = useState(() => {
+    if (typeof window === 'undefined') return 1
+    const raw = window.localStorage.getItem(LYRICS_ZOOM_KEY)
+    const parsed = raw != null ? Number.parseFloat(raw) : NaN
+    return Number.isFinite(parsed) ? clampZoom(parsed) : 1
+  })
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    window.localStorage.setItem(LYRICS_ZOOM_KEY, String(zoom))
+  }, [zoom])
+
+  const zoomIn = useCallback(() => setZoom((z) => clampZoom(z + LYRICS_ZOOM_STEP)), [])
+  const zoomOut = useCallback(() => setZoom((z) => clampZoom(z - LYRICS_ZOOM_STEP)), [])
+  const reset = useCallback(() => setZoom(1), [])
+
+  return { zoom, zoomIn, zoomOut, reset }
+}
+
 export type LyricsScreenProps = {
   hasTrack: boolean
   connected: boolean
@@ -259,6 +291,7 @@ export function LyricsScreen({
   onControl,
 }: LyricsScreenProps) {
   const sectionRef = useRef<HTMLElement | null>(null)
+  const { zoom, zoomIn, zoomOut, reset: resetZoom } = useLyricsZoom()
 
   // F key — toggle native browser fullscreen while on the lyrics page.
   // Ignored when focus is inside a text field.
@@ -386,12 +419,28 @@ export function LyricsScreen({
           ? 'ytmq-lyrics-fullscreen fixed inset-0 z-40 rounded-none bg-zinc-950'
           : 'relative rounded-2xl'
       }`}
-      style={{ ...themeStyle, borderColor: 'var(--np-accent-border)' }}
+      style={
+        {
+          ...themeStyle,
+          borderColor: 'var(--np-accent-border)',
+          '--ytmq-lyric-zoom': zoom,
+        } as CSSProperties
+      }
       aria-label={`Lyrics for ${title}`}
     >
       <LyricsUpNext track={upNext} remaining={remaining} live={live} enabled />
       {fullscreen && <FullscreenButton targetRef={sectionRef} />}
       <LyricsBackdrop art={art} live={live} paletteReady={paletteReady} />
+      {showLyrics && (
+        <LyricsZoomControl
+          zoom={zoom}
+          onZoomIn={zoomIn}
+          onZoomOut={zoomOut}
+          onReset={resetZoom}
+          min={LYRICS_ZOOM_MIN}
+          max={LYRICS_ZOOM_MAX}
+        />
+      )}
 
       {showLyrics ? (
         fullscreen ? (
@@ -673,6 +722,121 @@ function MinimizeIcon() {
       <path d="M16 3v3a2 2 0 0 0 2 2h3" />
       <path d="M8 21v-3a2 2 0 0 0-2-2H3" />
       <path d="M16 21v-3a2 2 0 0 1 2-2h3" />
+    </svg>
+  )
+}
+
+/**
+ * Lyrics-only zoom control tucked into the bottom-right corner of the lyrics
+ * screen. Sits at a low opacity so it stays out of the way, brightening on
+ * hover/focus. Tapping the percentage resets to 100%.
+ */
+function LyricsZoomControl({
+  zoom,
+  onZoomIn,
+  onZoomOut,
+  onReset,
+  min,
+  max,
+}: {
+  zoom: number
+  onZoomIn: () => void
+  onZoomOut: () => void
+  onReset: () => void
+  min: number
+  max: number
+}) {
+  const percent = Math.round(zoom * 100)
+  const ref = useRef<HTMLDivElement | null>(null)
+  // Stay invisible until the pointer comes close to the corner, so the control
+  // doesn't clutter the immersive lyrics view. We measure the pointer's
+  // distance to the pill's own box rather than using :hover, giving a generous
+  // reveal zone around the corner instead of requiring a pixel-perfect hover.
+  const [near, setNear] = useState(false)
+  useEffect(() => {
+    const REVEAL_DISTANCE = 140
+    const onMove = (e: PointerEvent) => {
+      const el = ref.current
+      if (!el) return
+      const r = el.getBoundingClientRect()
+      const dx = Math.max(r.left - e.clientX, 0, e.clientX - r.right)
+      const dy = Math.max(r.top - e.clientY, 0, e.clientY - r.bottom)
+      setNear(Math.hypot(dx, dy) <= REVEAL_DISTANCE)
+    }
+    window.addEventListener('pointermove', onMove)
+    return () => window.removeEventListener('pointermove', onMove)
+  }, [])
+  return (
+    <div
+      ref={ref}
+      className={`group absolute bottom-[calc(env(safe-area-inset-bottom)+1rem)] right-4 z-30 flex items-center gap-0.5 rounded-full border bg-black/35 p-1 text-white shadow-lg backdrop-blur transition-opacity duration-300 focus-within:opacity-100 focus-within:pointer-events-auto ${
+        near ? 'opacity-100' : 'opacity-0 pointer-events-none'
+      }`}
+      style={{ borderColor: 'var(--np-accent-border)' }}
+      role="group"
+      aria-label="Lyrics zoom"
+    >
+      <button
+        type="button"
+        onClick={onZoomOut}
+        disabled={zoom <= min}
+        aria-label="Decrease lyrics size"
+        title="Decrease lyrics size"
+        className="flex h-8 w-8 items-center justify-center rounded-full transition hover:bg-white/15 active:scale-95 disabled:opacity-30 disabled:active:scale-100"
+      >
+        <MinusIcon />
+      </button>
+      <button
+        type="button"
+        onClick={onReset}
+        aria-label={`Lyrics zoom ${percent}% — reset to 100%`}
+        title="Reset lyrics size"
+        className="min-w-[3rem] rounded-full px-1 text-center text-xs font-semibold tabular-nums transition hover:bg-white/15"
+      >
+        {percent}%
+      </button>
+      <button
+        type="button"
+        onClick={onZoomIn}
+        disabled={zoom >= max}
+        aria-label="Increase lyrics size"
+        title="Increase lyrics size"
+        className="flex h-8 w-8 items-center justify-center rounded-full transition hover:bg-white/15 active:scale-95 disabled:opacity-30 disabled:active:scale-100"
+      >
+        <PlusIcon />
+      </button>
+    </div>
+  )
+}
+
+function MinusIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.4"
+      strokeLinecap="round"
+      aria-hidden
+      className="h-4 w-4"
+    >
+      <path d="M5 12h14" />
+    </svg>
+  )
+}
+
+function PlusIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.4"
+      strokeLinecap="round"
+      aria-hidden
+      className="h-4 w-4"
+    >
+      <path d="M12 5v14M5 12h14" />
     </svg>
   )
 }

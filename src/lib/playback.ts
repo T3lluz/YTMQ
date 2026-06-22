@@ -56,4 +56,10 @@ export function playbackChannelName(roomId: string) {
   return `ytmq-playback:${roomId}`
 }
 
-export type PlaybackAction = 'next' | 'prev' | 'play' | 'pause' | 'toggle'
+export type PlaybackAction =
+  | 'next'
+  | 'prev'
+  | 'play'
+  | 'pause'
+  | 'toggle'
+  | 'seek'
