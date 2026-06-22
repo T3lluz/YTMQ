@@ -41,7 +41,7 @@ export function PlaybackControls({
 
   return (
     <div
-      className={`ytmq-now-controls flex items-center justify-center gap-4 ${className}`}
+      className={`ytmq-now-controls flex items-center justify-center gap-5 ${className}`}
       title={title}
     >
       <ControlButton
@@ -102,7 +102,7 @@ function ControlButton({
   primary,
   children,
 }: ControlButtonProps) {
-  const size = primary ? 'h-20 w-20' : 'h-12 w-12'
+  const size = primary ? 'h-16 w-16' : 'h-11 w-11'
   const ring = active ? ' ytmq-now-control-active' : ''
   // Opacity is applied to the whole button (one composited layer) rather than
   // baked into the fill colour, so overlapping shapes/strokes inside the glyph
@@ -131,7 +131,7 @@ const PAUSE_D = 'M7 5 L10.5 5 L10.5 19 L7 19 Z M13.5 5 L17 5 L17 19 L13.5 19 Z'
 
 function PlayPauseIcon({ isPlaying }: { isPlaying: boolean }) {
   return (
-    <svg viewBox="0 0 24 24" aria-hidden className="h-16 w-16">
+    <svg viewBox="0 0 24 24" aria-hidden className="h-14 w-14">
       <path
         className="ytmq-pp-path"
         d={isPlaying ? PAUSE_D : PLAY_D}

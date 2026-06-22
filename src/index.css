@@ -1033,31 +1033,33 @@ textarea,
   opacity: 1;
 }
 
-/* Smoothly morph the play triangle <-> pause bars by interpolating the path. */
+/* Smoothly morph the play triangle <-> pause bars by interpolating the path.
+   Quick + clean so the in-between never reads as "wonky". */
 .ytmq-pp-path {
-  transition: d 360ms cubic-bezier(0.65, 0, 0.35, 1);
+  transition: d 190ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* Prev/Next press: spring in the travel direction, overshoot, settle back. */
+/* Prev/Next press: a subtle, smooth nudge in the travel direction with a tiny
+   settle back — clean and snappy rather than a big springy bounce. */
 .ytmq-bounce-left {
-  animation: ytmq-bounce-left 460ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  animation: ytmq-bounce-left 380ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .ytmq-bounce-right {
-  animation: ytmq-bounce-right 460ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  animation: ytmq-bounce-right 380ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 @keyframes ytmq-bounce-left {
   0% { transform: translateX(0); }
-  35% { transform: translateX(-42%); }
-  65% { transform: translateX(10%); }
+  40% { transform: translateX(-14%); }
+  72% { transform: translateX(3%); }
   100% { transform: translateX(0); }
 }
 
 @keyframes ytmq-bounce-right {
   0% { transform: translateX(0); }
-  35% { transform: translateX(42%); }
-  65% { transform: translateX(-10%); }
+  40% { transform: translateX(14%); }
+  72% { transform: translateX(-3%); }
   100% { transform: translateX(0); }
 }
 
