@@ -18,6 +18,8 @@ export type NowPlaying = {
   /** Total track length in seconds, when known. */
   duration?: number
   state?: PlaybackState
+  /** Host player volume, 0–100 (0 reflects a muted player). */
+  volume?: number
   /**
    * YouTube Music's own next-up track, read from its live queue by the bridge.
    * Lets the lyrics "Up next" banner work even when the app's shared queue is
@@ -63,3 +65,4 @@ export type PlaybackAction =
   | 'pause'
   | 'toggle'
   | 'seek'
+  | 'volume'

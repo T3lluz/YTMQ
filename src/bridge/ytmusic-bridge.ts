@@ -40,6 +40,7 @@ type NowPlayingPayload = {
   currentTime: number
   duration?: number
   state: PlaybackState
+  volume?: number
   nextUp?: {
     videoId: string
     title: string
@@ -48,7 +49,14 @@ type NowPlayingPayload = {
   }
 }
 
-type PlaybackAction = 'next' | 'prev' | 'play' | 'pause' | 'toggle' | 'seek'
+type PlaybackAction =
+  | 'next'
+  | 'prev'
+  | 'play'
+  | 'pause'
+  | 'toggle'
+  | 'seek'
+  | 'volume'
 
 type QueueStoreState = {
   queue: {
@@ -94,6 +102,11 @@ type PlayerBar = HTMLElement & {
     playVideo?: () => void
     pauseVideo?: () => void
     seekTo?: (seconds: number, allowSeekAhead?: boolean) => void
+    getVolume?: () => number
+    setVolume?: (volume: number) => void
+    isMuted?: () => boolean
+    mute?: () => void
+    unMute?: () => void
   }
 }
 
@@ -377,6 +390,7 @@ function readNowPlaying(): NowPlayingPayload | null {
   const times = getPlayerTimes()
   const currentTime = times?.current ?? readPlayerCurrentTime(bar)
   const duration = times?.duration ?? readPlayerDuration(bar) ?? undefined
+  const volume = readVolume(bar)
 
   return {
     videoId,
@@ -386,6 +400,7 @@ function readNowPlaying(): NowPlayingPayload | null {
     currentTime,
     ...(duration != null ? { duration } : {}),
     state: readPlaybackState(bar),
+    ...(volume != null ? { volume } : {}),
   }
 }
 
@@ -506,7 +521,59 @@ function doSeek(seconds: number): boolean {
   return false
 }
 
-function runPlaybackAction(action: PlaybackAction, position?: number): boolean {
+function doSetVolume(level: number): boolean {
+  if (!Number.isFinite(level)) return false
+  const clamped = Math.min(100, Math.max(0, Math.round(level)))
+  const bar = getPlayerBar()
+  try {
+    if (bar?.playerApi?.setVolume) {
+      // Setting a non-zero level should also lift an existing mute so the
+      // change is actually audible.
+      if (clamped > 0 && bar.playerApi.isMuted?.()) bar.playerApi.unMute?.()
+      bar.playerApi.setVolume(clamped)
+      return true
+    }
+  } catch {
+    /* fall through to the raw <video> element */
+  }
+
+  const video = document.querySelector('video') as HTMLVideoElement | null
+  if (video) {
+    try {
+      video.muted = clamped === 0
+      video.volume = clamped / 100
+      return true
+    } catch {
+      /* ignore */
+    }
+  }
+  return false
+}
+
+/** Current host volume as 0–100, reporting 0 while the player is muted. */
+function readVolume(bar: PlayerBar | null): number | undefined {
+  try {
+    const v = bar?.playerApi?.getVolume?.()
+    if (typeof v === 'number' && Number.isFinite(v)) {
+      if (bar?.playerApi?.isMuted?.()) return 0
+      return Math.min(100, Math.max(0, Math.round(v)))
+    }
+  } catch {
+    /* fall through to the raw <video> element */
+  }
+
+  const video = document.querySelector('video') as HTMLVideoElement | null
+  if (video && Number.isFinite(video.volume)) {
+    return video.muted ? 0 : Math.min(100, Math.max(0, Math.round(video.volume * 100)))
+  }
+  return undefined
+}
+
+function runPlaybackAction(
+  action: PlaybackAction,
+  position?: number,
+  volume?: number,
+): boolean {
   switch (action) {
     case 'next':
       return doNext()
@@ -520,6 +587,8 @@ function runPlaybackAction(action: PlaybackAction, position?: number): boolean {
       return doToggle()
     case 'seek':
       return typeof position === 'number' ? doSeek(position) : false
+    case 'volume':
+      return typeof volume === 'number' ? doSetVolume(volume) : false
     default:
       return false
   }
@@ -1380,17 +1449,21 @@ async function runBridge() {
   }
 
   let lastControlAt = 0
-  function handlePlaybackControl(action: PlaybackAction, position?: number) {
+  function handlePlaybackControl(
+    action: PlaybackAction,
+    position?: number,
+    volume?: number,
+  ) {
     const now = Date.now()
-    // Seeks are already coalesced to one message per gesture on the client, so
-    // don't let the generic debounce swallow them.
-    if (action !== 'seek' && now - lastControlAt < 300) {
+    // Seeks and volume changes are already throttled to a steady trickle on the
+    // client during a drag, so don't let the generic debounce swallow them.
+    if (action !== 'seek' && action !== 'volume' && now - lastControlAt < 300) {
       log('Playback control debounced', action)
       return
     }
     lastControlAt = now
 
-    const ok = runPlaybackAction(action, position)
+    const ok = runPlaybackAction(action, position, volume)
     log('Playback control', action, ok ? 'ok' : 'failed')
     if (!ok) {
       showToast(`Could not ${action} — open YouTube Music tab`)
@@ -1406,6 +1479,7 @@ async function runBridge() {
       if (!payload || typeof payload !== 'object') return
       const action = (payload as { action?: PlaybackAction }).action
       const position = (payload as { position?: number }).position
+      const volume = (payload as { volume?: number }).volume
       if (
         action === 'next' ||
         action === 'prev' ||
@@ -1418,6 +1492,12 @@ async function runBridge() {
         handlePlaybackControl(
           'seek',
           typeof position === 'number' ? position : undefined,
+        )
+      } else if (action === 'volume') {
+        handlePlaybackControl(
+          'volume',
+          undefined,
+          typeof volume === 'number' ? volume : undefined,
         )
       }
     })

@@ -56,6 +56,10 @@ export function useNowPlaying(roomId: string) {
               ? p.duration
               : undefined,
           state: p.state,
+          volume:
+            typeof p.volume === 'number' && Number.isFinite(p.volume)
+              ? Math.min(100, Math.max(0, p.volume))
+              : undefined,
           nextUp:
             p.nextUp && typeof p.nextUp === 'object' && p.nextUp.videoId
               ? {

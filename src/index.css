@@ -748,16 +748,6 @@ textarea,
   }
 }
 
-@keyframes ytmq-art-pulse {
-  0%,
-  100% {
-    transform: scale(1);
-  }
-  50% {
-    transform: scale(1.02);
-  }
-}
-
 .ytmq-now-playing-card {
   transition:
     border-color 0.7s ease,
@@ -954,10 +944,6 @@ textarea,
 .ytmq-now-lights:not(.is-live) .ytmq-now-light {
   animation-play-state: paused;
   opacity: 0.55;
-}
-
-.ytmq-now-art.is-live {
-  animation: ytmq-art-pulse 4.2s ease-in-out infinite;
 }
 
 /* The now-playing rail is a size container so the album art (and the lyrics

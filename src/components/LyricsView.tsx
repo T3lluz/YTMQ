@@ -14,7 +14,11 @@ import { useImagePalette } from '../hooks/useImagePalette'
 import { useLyrics, prefetchLyrics, type LyricsStatus } from '../hooks/useLyrics'
 import { activeLineIndex, type LyricLine, type Lyrics } from '../lib/lyrics'
 import { paletteCssVars } from '../lib/imagePalette'
-import { sendPlaybackControl, sendPlaybackSeek } from '../lib/bridgeChannel'
+import {
+  sendPlaybackControl,
+  sendPlaybackSeek,
+  sendPlaybackVolume,
+} from '../lib/bridgeChannel'
 import { formatPlaybackTime, type PlaybackAction } from '../lib/playback'
 import { LyricsUpNext, type UpNextTrack } from './LyricsUpNext'
 import { PlaybackControls } from './PlaybackControls'
@@ -123,6 +127,14 @@ export function LyricsView({
     [roomId],
   )
 
+  const onVolume = useCallback(
+    (level: number) => {
+      if (!roomId) return
+      sendPlaybackVolume(roomId, level)
+    },
+    [roomId],
+  )
+
   const art = nowPlaying ? hqThumbnail(nowPlaying.videoId) : undefined
   const { palette, ready: paletteReady } = useImagePalette(art)
 
@@ -204,6 +216,8 @@ export function LyricsView({
       pendingAction={pendingAction}
       onControl={onControl}
       onSeek={onSeek}
+      onVolume={onVolume}
+      volume={nowPlaying?.volume}
       updatedAt={nowPlaying?.updatedAt}
       videoId={nowPlaying?.videoId}
     />
@@ -278,6 +292,10 @@ export type LyricsScreenProps = {
   pendingAction?: PlaybackAction | null
   onControl?: (action: PlaybackAction) => void
   onSeek?: (position: number) => void
+  /** Sets the host player volume (0–100). */
+  onVolume?: (volume: number) => void
+  /** Current host volume (0–100), when known. */
+  volume?: number
   /** Bumps when the bridge reports a fresh position; clears the optimistic scrub. */
   updatedAt?: number
   /** Resets optimistic scrub state when the track changes. */
@@ -307,6 +325,8 @@ export function LyricsScreen({
   pendingAction = null,
   onControl,
   onSeek,
+  onVolume,
+  volume,
   updatedAt,
   videoId,
 }: LyricsScreenProps) {
@@ -462,6 +482,13 @@ export function LyricsScreen({
           onReset={resetZoom}
           min={LYRICS_ZOOM_MIN}
           max={LYRICS_ZOOM_MAX}
+        />
+      )}
+      {onVolume && controlsEnabled && (
+        <VolumeControl
+          volume={volume ?? 100}
+          onVolume={onVolume}
+          updatedAt={updatedAt}
         />
       )}
 
@@ -961,6 +988,178 @@ function LyricsZoomControl({
         <PlusIcon />
       </button>
     </div>
+  )
+}
+
+/**
+ * Desktop-only vertical volume slider pinned to the middle-left of the lyrics
+ * screen. Like the zoom control, it stays invisible until the pointer comes
+ * near (or while actively dragging) so it never clutters the immersive view.
+ * Drives the host player volume optimistically: the fill jumps to the dragged
+ * level and holds there until the bridge confirms a fresh value.
+ */
+function VolumeControl({
+  volume,
+  onVolume,
+  updatedAt,
+}: {
+  volume: number
+  onVolume: (volume: number) => void
+  updatedAt?: number
+}) {
+  const ref = useRef<HTMLDivElement | null>(null)
+  const trackRef = useRef<HTMLDivElement | null>(null)
+  const [near, setNear] = useState(false)
+  const [dragging, setDragging] = useState(false)
+  const [pending, setPending] = useState<number | null>(null)
+  const sentAtRef = useRef(0)
+  const lastSendRef = useRef(0)
+
+  // Reveal when the pointer is within a generous radius of the slider, matching
+  // the zoom control's behaviour instead of requiring a pixel-perfect hover.
+  useEffect(() => {
+    const REVEAL_DISTANCE = 140
+    const onMove = (e: PointerEvent) => {
+      const el = ref.current
+      if (!el) return
+      const r = el.getBoundingClientRect()
+      const dx = Math.max(r.left - e.clientX, 0, e.clientX - r.right)
+      const dy = Math.max(r.top - e.clientY, 0, e.clientY - r.bottom)
+      setNear(Math.hypot(dx, dy) <= REVEAL_DISTANCE)
+    }
+    window.addEventListener('pointermove', onMove)
+    return () => window.removeEventListener('pointermove', onMove)
+  }, [])
+
+  // Drop the optimistic value once the bridge reports a newer state.
+  useEffect(() => {
+    if (pending == null) return
+    if (updatedAt != null && updatedAt > sentAtRef.current) setPending(null)
+  }, [updatedAt, pending])
+
+  const shown = pending ?? volume
+  const percent = Math.min(100, Math.max(0, shown))
+
+  const volumeFromClientY = (clientY: number): number | null => {
+    const el = trackRef.current
+    if (!el) return null
+    const rect = el.getBoundingClientRect()
+    if (rect.height <= 0) return null
+    // Top of the track is full volume, bottom is silence.
+    const ratio = Math.min(1, Math.max(0, (rect.bottom - clientY) / rect.height))
+    return ratio * 100
+  }
+
+  const onPointerDown = (e: React.PointerEvent) => {
+    const next = volumeFromClientY(e.clientY)
+    if (next == null) return
+    e.preventDefault()
+    e.currentTarget.setPointerCapture?.(e.pointerId)
+    setDragging(true)
+    setPending(next)
+    // Hold the optimistic value through routine broadcasts until we release.
+    sentAtRef.current = Number.POSITIVE_INFINITY
+    onVolume(next)
+    lastSendRef.current = Date.now()
+  }
+
+  const onPointerMove = (e: React.PointerEvent) => {
+    if (!dragging) return
+    const next = volumeFromClientY(e.clientY)
+    if (next == null) return
+    setPending(next)
+    // Trickle updates to the bridge while dragging instead of flooding it.
+    const t = Date.now()
+    if (t - lastSendRef.current >= 80) {
+      lastSendRef.current = t
+      onVolume(next)
+    }
+  }
+
+  const endDrag = (e: React.PointerEvent) => {
+    if (!dragging) return
+    e.currentTarget.releasePointerCapture?.(e.pointerId)
+    setDragging(false)
+    const next = volumeFromClientY(e.clientY) ?? pending
+    if (next != null) {
+      setPending(next)
+      onVolume(next)
+      sentAtRef.current = Date.now()
+    }
+  }
+
+  return (
+    <div
+      ref={ref}
+      className={`group absolute left-3 top-1/2 z-30 hidden -translate-y-1/2 flex-col items-center gap-2 rounded-full border bg-black/35 px-1.5 py-3 text-white shadow-lg backdrop-blur transition-opacity duration-300 sm:flex ${
+        near || dragging ? 'opacity-100' : 'pointer-events-none opacity-0'
+      }`}
+      style={{ borderColor: 'var(--np-accent-border)' }}
+      role="group"
+      aria-label="Volume"
+    >
+      <div
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={endDrag}
+        onPointerCancel={endDrag}
+        className="relative flex h-32 w-6 cursor-pointer touch-none items-stretch justify-center"
+        role="slider"
+        aria-label="Volume"
+        aria-orientation="vertical"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={Math.round(percent)}
+      >
+        <div
+          ref={trackRef}
+          className="ytmq-now-progress-track relative w-1.5 overflow-hidden rounded-full"
+        >
+          <div
+            className="ytmq-now-progress-fill absolute bottom-0 left-0 w-full rounded-full"
+            style={{
+              height: `${percent}%`,
+              ...(pending != null ? { transition: 'none' } : null),
+            }}
+          />
+        </div>
+        <span
+          aria-hidden
+          className={`pointer-events-none absolute left-1/2 h-3.5 w-3.5 -translate-x-1/2 translate-y-1/2 rounded-full bg-white ring-1 ring-black/25 transition-[transform,box-shadow] duration-200 ${
+            dragging
+              ? 'scale-125 shadow-[0_0_0_6px_rgba(var(--np-accent-rgb)/0.28),0_2px_10px_rgba(0,0,0,0.45)]'
+              : 'shadow-md'
+          }`}
+          style={{ bottom: `${percent}%` }}
+        />
+      </div>
+      <VolumeIcon muted={percent <= 0} />
+    </div>
+  )
+}
+
+function VolumeIcon({ muted }: { muted: boolean }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+      className="h-4 w-4 shrink-0 opacity-80"
+    >
+      <path d="M11 5 6 9H3v6h3l5 4z" fill="currentColor" stroke="none" />
+      {muted ? (
+        <path d="m16 9 5 6M21 9l-5 6" />
+      ) : (
+        <>
+          <path d="M15.5 8.5a5 5 0 0 1 0 7" />
+          <path d="M18.5 6a9 9 0 0 1 0 12" />
+        </>
+      )}
+    </svg>
   )
 }
 

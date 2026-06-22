@@ -24,6 +24,8 @@ export type PlaybackControlPayload = {
   action: PlaybackAction
   /** Target position in seconds — only used by the `seek` action. */
   position?: number
+  /** Target volume 0–100 — only used by the `volume` action. */
+  volume?: number
 }
 
 /** Tell the YT Music bridge to next/prev/play/pause the current track. */
@@ -39,6 +41,14 @@ export function sendPlaybackSeek(roomId: string, position: number): void {
   void sendBridgeBroadcast(roomId, 'playback_control', {
     action: 'seek',
     position: Math.max(0, Math.round(position)),
+  })
+}
+
+/** Tell the YT Music bridge to set the host player volume to `volume` (0–100). */
+export function sendPlaybackVolume(roomId: string, volume: number): void {
+  void sendBridgeBroadcast(roomId, 'playback_control', {
+    action: 'volume',
+    volume: Math.min(100, Math.max(0, Math.round(volume))),
   })
 }
 
