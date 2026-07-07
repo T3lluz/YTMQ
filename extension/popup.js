@@ -26,7 +26,7 @@ function render(session) {
 
   document.getElementById('dot').classList.toggle('on', active)
   document.getElementById('status-text').textContent = active
-    ? 'Linked — auto-connecting YT Music tabs'
+    ? 'Linked — YT Music tabs auto-connect'
     : 'Not linked to a room'
 
   var room = document.getElementById('room')
