@@ -66,7 +66,7 @@ export function Join() {
   }
 
   return (
-    <main className="mx-auto flex min-h-dvh max-w-lg flex-col justify-center gap-6 p-6">
+    <main className="mx-auto flex min-h-dvh w-full max-w-lg flex-col justify-center gap-6 p-4 sm:p-6">
       <header className="ytmq-anim-fade-up space-y-2">
         <Link
           to="/"

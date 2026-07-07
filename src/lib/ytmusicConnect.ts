@@ -31,11 +31,6 @@ export function bridgeSiteRoot(): string | null {
   return null
 }
 
-/** @deprecated Use bridgeSiteRoot — kept for callers expecting an “origin”. */
-export function bridgeScriptOrigin(): string | null {
-  return bridgeSiteRoot()
-}
-
 /** Path to bundled bridge on this deployment (no query string — GH Pages 404s some ? URLs). */
 export function bridgeScriptFetchUrl(): string | null {
   const urls = bridgeScriptFetchUrls()

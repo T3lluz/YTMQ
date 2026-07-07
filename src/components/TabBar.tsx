@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import QRCode from 'qrcode'
-import { shareUrl } from '../lib/room'
+import { CopiedCheck } from './CopiedCheck'
+import { useLobbyShare } from '../hooks/useLobbyShare'
 
 export type RoomTab = 'search' | 'queue' | 'lyrics' | 'room' | 'admin'
 
@@ -142,23 +142,6 @@ function QrIcon({ className }: { className?: string }) {
   )
 }
 
-function CopiedCheck() {
-  return (
-    <svg
-      viewBox="0 0 20 20"
-      fill="currentColor"
-      className="ytmq-check h-3.5 w-3.5"
-      aria-hidden
-    >
-      <path
-        fillRule="evenodd"
-        d="M16.7 5.3a1 1 0 0 1 0 1.4l-7.5 7.5a1 1 0 0 1-1.4 0l-3.5-3.5a1 1 0 1 1 1.4-1.4l2.8 2.79 6.8-6.79a1 1 0 0 1 1.4 0Z"
-        clipRule="evenodd"
-      />
-    </svg>
-  )
-}
-
 type TabDef = {
   id: RoomTab
   label: string
@@ -186,36 +169,16 @@ function LobbyShareCard({
   onClose: () => void
   onCopied?: (message: string) => void
 }) {
-  const link = shareUrl(roomId)
-  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null)
-  const [copied, setCopied] = useState<'link' | 'code' | null>(null)
-
-  useEffect(() => {
-    let cancelled = false
-    void QRCode.toDataURL(link, { margin: 2, width: 200 })
-      .then((url) => {
-        if (!cancelled) setQrDataUrl(url)
-      })
-      .catch(() => {
-        if (!cancelled) setQrDataUrl(null)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [link])
-
-  async function copy(kind: 'link' | 'code') {
-    await navigator.clipboard.writeText(kind === 'link' ? link : code)
-    setCopied(kind)
-    onCopied?.(kind === 'link' ? 'Link copied' : 'Code copied')
-    window.setTimeout(() => setCopied(null), 2000)
-  }
+  const { qrDataUrl, copied, copy } = useLobbyShare(roomId, code, {
+    qrWidth: 200,
+    onCopied,
+  })
 
   return (
     <div
       role="dialog"
       aria-label="Lobby share options"
-      className="ytmq-anim-pop absolute bottom-full left-1/2 mb-3 w-[17rem] -translate-x-1/2 rounded-3xl border border-white/10 bg-zinc-950/85 p-4 shadow-[0_20px_60px_rgba(0,0,0,0.55)] backdrop-blur-2xl backdrop-saturate-150"
+      className="ytmq-anim-pop absolute bottom-full left-1/2 mb-3 w-[min(17rem,calc(100vw-1.5rem))] max-w-[17rem] -translate-x-1/2 rounded-3xl border border-white/10 bg-zinc-950/85 p-4 shadow-[0_20px_60px_rgba(0,0,0,0.55)] backdrop-blur-2xl backdrop-saturate-150"
     >
       <div className="flex flex-col items-center gap-3">
         {qrDataUrl ? (
@@ -238,7 +201,7 @@ function LobbyShareCard({
           <p className="text-[11px] font-medium uppercase tracking-wide text-zinc-500">
             Lobby code
           </p>
-          <p className="font-mono text-2xl tracking-widest text-zinc-100">
+          <p className="font-mono text-xl tracking-widest text-zinc-100 sm:text-2xl">
             {code}
           </p>
         </div>
@@ -356,10 +319,10 @@ export function TabBar({
 
   return (
     <div
-      className="pointer-events-none fixed inset-x-0 bottom-0 z-50 flex justify-center px-3 pb-[calc(1rem+env(safe-area-inset-bottom))]"
+      className="pointer-events-none fixed inset-x-0 bottom-0 z-50 flex justify-center px-2 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:px-3 sm:pb-[calc(1rem+env(safe-area-inset-bottom))]"
       aria-label="Room navigation"
     >
-      <div ref={dockRef} className="ytmq-dock pointer-events-auto relative">
+      <div ref={dockRef} className="ytmq-dock pointer-events-auto relative max-w-full">
         {/* Soft glow that lifts the dock off the content behind it */}
         <div
           aria-hidden
@@ -375,7 +338,7 @@ export function TabBar({
           />
         )}
 
-        <nav className="ytmq-dock-nav relative flex transform-gpu items-center gap-0.5 rounded-full border border-white/10 bg-zinc-950/70 p-1.5 shadow-[0_12px_40px_rgba(0,0,0,0.5)] backdrop-blur-2xl backdrop-saturate-150">
+        <nav className="ytmq-dock-nav relative flex max-w-full transform-gpu items-center gap-0.5 overflow-x-auto rounded-full border border-white/10 bg-zinc-950/70 p-1 shadow-[0_12px_40px_rgba(0,0,0,0.5)] backdrop-blur-2xl backdrop-saturate-150 ytmq-hide-scrollbar sm:p-1.5">
           {indicator && (
             <span
               aria-hidden
@@ -404,7 +367,7 @@ export function TabBar({
                 }}
                 type="button"
                 onClick={() => handleChange(tab.id)}
-                className={`group relative z-10 flex min-h-12 w-[3.75rem] flex-col items-center justify-center gap-0.5 rounded-full px-1 text-[11px] font-medium transition-colors ${
+                className={`group relative z-10 flex min-h-11 w-[3.1rem] shrink-0 flex-col items-center justify-center gap-0.5 rounded-full px-0.5 text-[10px] font-medium transition-colors sm:min-h-12 sm:w-[3.75rem] sm:px-1 sm:text-[11px] ${
                   isActive ? 'text-violet-300' : 'text-zinc-500 hover:text-zinc-200'
                 }`}
                 aria-current={isActive ? 'page' : undefined}
@@ -452,7 +415,7 @@ export function TabBar({
             onClick={() => setShareOpen((v) => !v)}
             aria-expanded={shareOpen}
             aria-label={`Lobby ${code} — show QR and share`}
-            className={`group flex min-h-12 items-center gap-2 rounded-full py-1 pl-2.5 pr-3 transition-colors ${
+            className={`group flex min-h-11 shrink-0 items-center gap-1.5 rounded-full py-1 pl-2 pr-2.5 transition-colors sm:min-h-12 sm:gap-2 sm:pl-2.5 sm:pr-3 ${
               shareOpen
                 ? 'bg-white/10 text-zinc-100'
                 : 'text-zinc-400 hover:bg-white/5 hover:text-zinc-100'
@@ -463,7 +426,7 @@ export function TabBar({
               <span className="text-[9px] font-medium uppercase tracking-wide text-zinc-500">
                 Lobby
               </span>
-              <span className="font-mono text-sm font-semibold tracking-widest text-zinc-100">
+              <span className="max-w-[4.5rem] truncate font-mono text-xs font-semibold tracking-widest text-zinc-100 sm:max-w-none sm:text-sm">
                 {code}
               </span>
             </span>

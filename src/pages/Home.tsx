@@ -32,12 +32,12 @@ export function Home() {
   }
 
   return (
-    <main className="mx-auto flex min-h-dvh max-w-lg flex-col justify-center gap-6 p-6">
+    <main className="mx-auto flex min-h-dvh w-full max-w-lg flex-col justify-center gap-6 p-4 sm:p-6">
       <header className="ytmq-anim-fade-up space-y-3 text-center">
         <div className="ytmq-anim-pop" style={{ animationDelay: '80ms' }}>
           <YtmqLogo className="mx-auto h-16 w-16 rounded-2xl shadow-lg shadow-violet-900/40" />
         </div>
-        <h1 className="bg-gradient-to-br from-white to-zinc-400 bg-clip-text text-4xl font-bold tracking-tight text-transparent">
+        <h1 className="bg-gradient-to-br from-white to-zinc-400 bg-clip-text text-3xl font-bold tracking-tight text-transparent sm:text-4xl">
           YTMQ
         </h1>
         <p className="text-zinc-400">Shared queue for YouTube Music</p>
