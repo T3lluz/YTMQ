@@ -2,18 +2,18 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { NicknamePrompt } from '../components/NicknamePrompt'
 import { SearchTab } from '../components/SearchTab'
-import { QueueList } from '../components/QueueList'
 import { NowPlaying } from '../components/NowPlaying'
 import { NowPlayingSidebar } from '../components/NowPlayingSidebar'
 import { LyricsView } from '../components/LyricsView'
-import { RecentlyPlayed } from '../components/RecentlyPlayed'
-import { SharePanel } from '../components/SharePanel'
 import { TabBar, type RoomTab } from '../components/TabBar'
 import { TabSlider } from '../components/TabSlider'
 import { ToastStack } from '../components/ToastStack'
-import { ListenersBadge, ParticipantList } from '../components/ParticipantList'
-import { HostAdminPanel } from '../components/HostAdminPanel'
-import { YtMusicConnect } from '../components/YtMusicConnect'
+import { ListenersBadge } from '../components/ParticipantList'
+import {
+  AdminTabContent,
+  QueueTabContent,
+  RoomTabContent,
+} from '../components/RoomTabPanels'
 import { useQueue } from '../hooks/useQueue'
 import { useIsDesktop } from '../hooks/useMediaQuery'
 import { useToast } from '../hooks/useToast'
@@ -503,6 +503,15 @@ export function Room() {
   // The content for a single tab. Rendered through <TabSlider/> so switching
   // tabs pushes the whole panel offscreen. On desktop Lyrics is handled by the
   // overlay instead, so this only renders it inline (mobile).
+  const handleQueueRemove = (id: string) => {
+    const target = items.find((item) => item.id === id)
+    void removeItem(id)
+    showToast(
+      target ? `Removed “${target.title}”` : 'Removed from queue',
+      'info',
+    )
+  }
+
   const renderPanel = (panelTab: RoomTab) => {
     switch (panelTab) {
       case 'search':
@@ -523,84 +532,21 @@ export function Room() {
         )
 
       case 'queue':
-        return showSidebar ? (
-          <section className="ytmq-tab-panel flex min-h-0 flex-1 flex-col gap-5 lg:grid lg:grid-cols-2 lg:grid-rows-1">
-            <div className="flex min-h-0 flex-1 flex-col">
-              <div className="mb-3 flex shrink-0 items-center justify-between gap-2">
-                <h2 className="text-lg font-semibold">Queue</h2>
-                <span className="text-xs text-zinc-500">
-                  {items.length} {items.length === 1 ? 'track' : 'tracks'}
-                </span>
-              </div>
-              {!settings.allow_guest_remove && !isHost && (
-                <p className="mb-2 shrink-0 text-xs text-zinc-500">
-                  The host has disabled removing tracks.
-                </p>
-              )}
-              <div className={`${deskScroll} pr-1`}>
-                <QueueList
-                  items={items}
-                  loading={loading}
-                  busyId={busyId}
-                  editable={isHost || settings.allow_guest_remove}
-                  onRemove={(id) => {
-                    const target = items.find((item) => item.id === id)
-                    void removeItem(id)
-                    showToast(
-                      target
-                        ? `Removed “${target.title}”`
-                        : 'Removed from queue',
-                      'info',
-                    )
-                  }}
-                />
-              </div>
-            </div>
-
-            <div className="flex min-h-0 flex-1 flex-col">
-              <h2 className="mb-3 shrink-0 text-lg font-semibold">History</h2>
-              <div className={`${deskScroll} pr-1`}>
-                <RecentlyPlayed
-                  roomId={roomId}
-                  nickname={nickname}
-                  canAdd={settings.allow_guest_add}
-                  onAdd={onAdd}
-                  onAdded={onAdded}
-                />
-              </div>
-            </div>
-          </section>
-        ) : (
-          <section className="ytmq-tab-panel flex flex-1 flex-col gap-3">
-            <h2 className="text-lg font-semibold">Queue</h2>
-            {!settings.allow_guest_remove && !isHost && (
-              <p className="text-xs text-zinc-500">
-                The host has disabled removing tracks.
-              </p>
-            )}
-            <QueueList
-              items={items}
-              loading={loading}
-              busyId={busyId}
-              editable={isHost || settings.allow_guest_remove}
-              onRemove={(id) => {
-                const target = items.find((item) => item.id === id)
-                void removeItem(id)
-                showToast(
-                  target ? `Removed “${target.title}”` : 'Removed from queue',
-                  'info',
-                )
-              }}
-            />
-
-            <RecentlyPlayed
-              roomId={roomId}
-              nickname={nickname}
-              canAdd={settings.allow_guest_add}
-              onAdd={onAdd}
-              onAdded={onAdded}
-            />
-          </section>
+        return (
+          <QueueTabContent
+            roomId={roomId}
+            nickname={nickname}
+            items={items}
+            loading={loading}
+            busyId={busyId}
+            editable={isHost || settings.allow_guest_remove}
+            allowGuestAdd={settings.allow_guest_add}
+            deskScroll={showSidebar ? deskScroll : undefined}
+            onRemove={handleQueueRemove}
+            onAdd={onAdd}
+            onAdded={onAdded}
+            showGuestRemoveHint={!settings.allow_guest_remove && !isHost}
+          />
         )
 
       case 'lyrics':
@@ -614,151 +560,33 @@ export function Room() {
         )
 
       case 'room':
-        return showSidebar ? (
-          <section className="ytmq-tab-panel flex min-h-0 flex-1 flex-col">
-            <h2 className="mb-4 shrink-0 text-lg font-semibold">Room</h2>
-            <div className={`${deskScroll} pr-1`}>
-              <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-                <div className="space-y-5">
-                  <label className="block space-y-1">
-                    <span className="text-sm text-zinc-500">Nickname</span>
-                    <input
-                      type="text"
-                      value={nickname}
-                      onChange={(e) => saveNickname(e.target.value)}
-                      placeholder="Your name on the queue"
-                      maxLength={32}
-                      className="min-h-11 w-full rounded-xl border border-zinc-700 bg-zinc-900 px-3 outline-none transition-colors focus:border-violet-500"
-                    />
-                  </label>
-
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">
-                        In this room
-                      </h3>
-                      <span className="text-xs text-zinc-500">
-                        {onlineCount} online
-                      </span>
-                    </div>
-                    <ParticipantList
-                      participants={participants}
-                      emptyHint="You're the first one here. Share the code below!"
-                    />
-                  </div>
-                </div>
-
-                <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-5">
-                  <SharePanel
-                    roomId={roomId}
-                    code={room.code}
-                    onCopied={(msg) => showToast(msg, 'info')}
-                  />
-                </div>
-              </div>
-            </div>
-          </section>
-        ) : (
-          <section className="ytmq-tab-panel flex flex-1 flex-col gap-4">
-            <h2 className="text-lg font-semibold">Room</h2>
-
-            <label className="block space-y-1">
-              <span className="text-sm text-zinc-500">Nickname</span>
-              <input
-                type="text"
-                value={nickname}
-                onChange={(e) => saveNickname(e.target.value)}
-                placeholder="Your name on the queue"
-                maxLength={32}
-                className="min-h-11 w-full rounded-xl border border-zinc-700 bg-zinc-900 px-3 outline-none transition-colors focus:border-violet-500"
-              />
-            </label>
-
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">
-                  In this room
-                </h3>
-                <span className="text-xs text-zinc-500">
-                  {onlineCount} online
-                </span>
-              </div>
-              <ParticipantList
-                participants={participants}
-                emptyHint="You're the first one here. Share the code below!"
-              />
-            </div>
-
-            <SharePanel
-              roomId={roomId}
-              code={room.code}
-              onCopied={(msg) => showToast(msg, 'info')}
-            />
-          </section>
+        return (
+          <RoomTabContent
+            roomId={roomId}
+            code={room.code}
+            nickname={nickname}
+            onNicknameChange={saveNickname}
+            participants={participants}
+            onlineCount={onlineCount}
+            deskScroll={showSidebar ? deskScroll : undefined}
+            onCopied={(msg) => showToast(msg, 'info')}
+          />
         )
 
       case 'admin':
         if (!isHost || !hostToken) return null
-        return showSidebar ? (
-          <section className="ytmq-tab-panel grid min-h-0 flex-1 grid-cols-1 grid-rows-2 gap-6 lg:grid-cols-2 lg:grid-rows-1">
-            <div className={`${deskScroll} flex flex-col gap-6 pr-1`}>
-              <YtMusicConnect roomId={roomId} />
-              <HostAdminPanel
-                section="controls"
-                roomId={roomId}
-                hostToken={hostToken}
-                settings={settings}
-                participants={participants}
-                onlineCount={onlineCount}
-                onToast={showToast}
-              />
-
-              <button
-                type="button"
-                disabled={ending}
-                onClick={handleEndLobby}
-                className="ytmq-press inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-red-500/40 px-4 text-sm font-medium text-red-300 hover:bg-red-500/10 disabled:opacity-60"
-              >
-                {ending && <span className="ytmq-spinner h-4 w-4" aria-hidden />}
-                {ending ? 'Ending…' : 'End lobby & delete queue'}
-              </button>
-            </div>
-
-            <div className={`${deskScroll} flex flex-col gap-6 pr-1`}>
-              <HostAdminPanel
-                section="people"
-                roomId={roomId}
-                hostToken={hostToken}
-                settings={settings}
-                participants={participants}
-                onlineCount={onlineCount}
-                onToast={showToast}
-              />
-            </div>
-          </section>
-        ) : (
-          <section className="ytmq-tab-panel flex flex-1 flex-col gap-6">
-            <YtMusicConnect roomId={roomId} />
-
-            <HostAdminPanel
-              roomId={roomId}
-              hostToken={hostToken}
-              settings={settings}
-              participants={participants}
-              onlineCount={onlineCount}
-              onToast={showToast}
-            />
-
-            <button
-              type="button"
-              disabled={ending}
-              onClick={handleEndLobby}
-              className="ytmq-press inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-red-500/40 px-4 text-sm font-medium text-red-300 hover:bg-red-500/10 disabled:opacity-60"
-            >
-              {ending && <span className="ytmq-spinner h-4 w-4" aria-hidden />}
-              {ending ? 'Ending…' : 'End lobby & delete queue'}
-            </button>
-          </section>
+        return (
+          <AdminTabContent
+            roomId={roomId}
+            hostToken={hostToken}
+            settings={settings}
+            participants={participants}
+            onlineCount={onlineCount}
+            ending={ending}
+            deskScroll={showSidebar ? deskScroll : undefined}
+            onToast={showToast}
+            onEndLobby={handleEndLobby}
+          />
         )
 
       default:
