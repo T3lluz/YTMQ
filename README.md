@@ -48,9 +48,23 @@ Shared queue for **YouTube Music**: guests use this web app to search and manage
 
 5. If the site still loads `/src/main.tsx`, the wrong source is selected — fix step 3 and hard-refresh.
 
-Live site: `https://t3lluz.github.io/YTMQ/` (includes `ytmusic-bridge.js` for host connect).
+Live site: `https://t3lluz.github.io/YTMQ/` (includes `ytmusic-bridge.js` for host connect and `ytmq-extension.zip` for the Chrome extension).
 
 Guest links and QR codes point at `/YTMQ/room/<id>`. GitHub Pages needs `public/404.html` (copied to `dist/404.html`) plus the redirect script in `index.html` so those deep links load the app instead of a static 404.
+
+## Chrome extension (host auto-connect)
+
+The `extension/` folder is a Manifest V3 Chrome extension that auto-injects the YTMQ bridge on **every** `music.youtube.com` tab — no Tampermonkey, no console pasting, and it survives reloads and browser restarts.
+
+**Install (one time):**
+
+1. Download `ytmq-extension.zip` from the deployed site (or run `npm run build` and grab `dist/ytmq-extension.zip`), unzip it somewhere permanent — or use the `extension/` folder of a checkout directly.
+2. Open `chrome://extensions`, enable **Developer mode**.
+3. Click **Load unpacked** and select the folder.
+
+**How it works:** the host clicks *Connect YouTube Music* in the lobby, which opens `music.youtube.com` with the room credentials in the URL. The extension's content script captures them (before YT Music strips the query string), stores the session (`chrome.storage.local` + `localStorage`, 7-day expiry), and the service worker injects the bundled `ytmusic-bridge.js` into the page's main world via `chrome.scripting`. Every later YT Music tab reconnects automatically from the stored session. The toolbar popup shows the linked room and offers a one-click **Disconnect** (stops the bridge in all YT Music tabs and clears the session).
+
+`extension/ytmusic-bridge.js` is the same bundle built by `npm run build:bridge` (kept in sync by `scripts/copy-bridge-root.mjs`); `scripts/pack-extension.mjs` zips the extension into `dist/` on every build.
 
 ## E2E tests (Playwright)
 

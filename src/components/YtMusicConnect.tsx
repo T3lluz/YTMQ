@@ -11,6 +11,7 @@ import {
   needsHttpsBridgeOrigin,
   openYtmMusicWindow,
   YTMQ_CONNECTED_MESSAGE,
+  ytmExtensionZipUrl,
   ytmUserscriptInstallUrl,
 } from '../lib/ytmusicConnect'
 
@@ -22,6 +23,80 @@ type Step = 'connect' | 'waiting' | 'done'
 
 function doneKey(roomId: string) {
   return `ytmq_ytm_connected_${roomId}`
+}
+
+/** One-time Chrome extension install: download the zip, load unpacked. */
+function ExtensionInstall({
+  zipUrl,
+  userscriptUrl,
+  defaultOpen = false,
+}: {
+  zipUrl: string | null
+  userscriptUrl: string | null
+  defaultOpen?: boolean
+}) {
+  if (!zipUrl && !userscriptUrl) return null
+
+  return (
+    <details
+      open={defaultOpen}
+      className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-3 text-sm text-zinc-400"
+    >
+      <summary className="cursor-pointer font-medium text-violet-300">
+        Install the YTMQ helper (one time)
+      </summary>
+      {zipUrl && (
+        <div className="mt-2">
+          <p className="text-xs font-medium text-zinc-300">
+            Option A — Chrome extension (recommended)
+          </p>
+          <ol className="mt-1 list-decimal space-y-1 pl-5 text-xs text-zinc-500">
+            <li>
+              <a
+                href={zipUrl}
+                className="text-violet-300 underline"
+                download
+              >
+                Download the extension
+              </a>{' '}
+              and unzip it somewhere permanent.
+            </li>
+            <li>
+              Open <code className="rounded bg-zinc-800 px-1">chrome://extensions</code>,
+              turn on <strong className="text-zinc-300">Developer mode</strong> (top right).
+            </li>
+            <li>
+              Click <strong className="text-zinc-300">Load unpacked</strong> and pick the
+              unzipped folder.
+            </li>
+          </ol>
+          <p className="mt-1 text-xs text-zinc-500">
+            After that, every music.youtube.com tab connects automatically —
+            even after reloads and restarts.
+          </p>
+        </div>
+      )}
+      {userscriptUrl && (
+        <div className="mt-3">
+          <p className="text-xs font-medium text-zinc-300">
+            Option B — Tampermonkey userscript
+          </p>
+          <p className="mt-1 text-xs text-zinc-500">
+            Have Tampermonkey/Violentmonkey?{' '}
+            <a
+              href={userscriptUrl}
+              className="text-violet-300 underline"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Install the YTMQ userscript
+            </a>{' '}
+            instead.
+          </p>
+        </div>
+      )}
+    </details>
+  )
 }
 
 /** Always-available manual connect: copy a script to paste into the YT Music console. */
@@ -93,6 +168,7 @@ export function YtMusicConnect({ roomId }: YtMusicConnectProps) {
 
   const httpsRequired = needsHttpsBridgeOrigin()
   const userscriptUrl = useMemo(() => ytmUserscriptInstallUrl(), [])
+  const extensionZipUrl = useMemo(() => ytmExtensionZipUrl(), [])
   // Always have a snippet ready for manual pasting, even before (or instead of)
   // clicking Connect — auto-connect doesn't work in every browser.
   const snippet = useMemo(() => {
@@ -210,8 +286,9 @@ export function YtMusicConnect({ roomId }: YtMusicConnectProps) {
           It&apos;s connected
         </button>
         <p className="text-xs text-zinc-500">
-          Auto-connect not working? Use manual setup below.
+          Auto-connect not working? Install the helper or use manual setup below.
         </p>
+        <ExtensionInstall zipUrl={extensionZipUrl} userscriptUrl={userscriptUrl} />
         <ManualConnect snippet={snippet} defaultOpen />
       </section>
     )
@@ -224,24 +301,17 @@ export function YtMusicConnect({ roomId }: YtMusicConnectProps) {
         links your queue. Use Chrome on desktop (not the phone app).
       </p>
       <ol className="list-decimal space-y-1 pl-5 text-xs text-zinc-500">
-        {!hostInitialized && userscriptUrl && (
+        {!hostInitialized && (
           <li>
-            Install the{' '}
-            <a
-              href={userscriptUrl}
-              className="text-violet-300 underline"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              YTMQ helper
-            </a>{' '}
-            in Tampermonkey (one time).
+            Install the YTMQ helper once — Chrome extension or userscript (see
+            below).
           </li>
         )}
         <li>Click Connect — a YouTube Music tab opens and links automatically.</li>
         <li>Open the queue panel on YouTube Music and wait for &quot;YTMQ connected&quot;.</li>
         <li>
-          After that, every new YouTube Music tab from here reconnects on its own.
+          After that, every YouTube Music tab in this browser reconnects on its
+          own.
         </li>
       </ol>
       {hostInitialized && (
@@ -256,6 +326,11 @@ export function YtMusicConnect({ roomId }: YtMusicConnectProps) {
       >
         Connect YouTube Music
       </button>
+      <ExtensionInstall
+        zipUrl={extensionZipUrl}
+        userscriptUrl={userscriptUrl}
+        defaultOpen={!hostInitialized}
+      />
       <ManualConnect snippet={snippet} />
     </section>
   )

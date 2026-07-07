@@ -34,4 +34,5 @@ jobs:
           test -f dist/index.html
           test -f dist/ytmusic-bridge.js
           test -f dist/ytmq-connect.user.js
+          test -f dist/ytmq-extension.zip
           ! grep -qE 'src="/src/main\.tsx"|src="/src/main"' dist/index.html
