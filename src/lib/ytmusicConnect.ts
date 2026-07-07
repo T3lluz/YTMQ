@@ -132,6 +132,13 @@ export function ytmUserscriptInstallUrl(): string | null {
   return `${root}/ytmq-connect.user.js`
 }
 
+/** Chrome extension zip download URL (hosted on your Pages site). */
+export function ytmExtensionZipUrl(): string | null {
+  const root = bridgeSiteRoot()
+  if (!root) return null
+  return `${root}/ytmq-extension.zip`
+}
+
 export function needsHttpsBridgeOrigin(): boolean {
   return (
     typeof window !== 'undefined' &&

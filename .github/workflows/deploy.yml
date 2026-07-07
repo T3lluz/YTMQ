@@ -54,6 +54,7 @@ jobs:
           test -f dist/index.html
           test -f dist/404.html
           test -f dist/ytmusic-bridge.js
+          test -f dist/ytmq-extension.zip
           grep -q '/YTMQ/assets/index-' dist/index.html
           grep -q 'segmentCount' dist/404.html
           ! grep -qE 'src="/src/main\.tsx"|src="/src/main"' dist/index.html
