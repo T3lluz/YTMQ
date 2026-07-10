@@ -370,11 +370,12 @@ export function Room() {
   useEffect(() => {
     if (!roomId || !isHost || roomLoading || roomError) return
 
-    announceSessionToExtension(roomId)
+    const activeId = roomId
+    announceSessionToExtension(activeId)
 
     function onVisible() {
       if (document.visibilityState === 'visible') {
-        announceSessionToExtension(roomId)
+        announceSessionToExtension(activeId)
       }
     }
     document.addEventListener('visibilitychange', onVisible)

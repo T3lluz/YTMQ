@@ -1185,7 +1185,7 @@ async function runBridge() {
   }
 
   const existing = window.__YTMQ_BRIDGE__ as
-    | { roomId?: string; since?: string }
+    | { roomId?: string; since?: string; stop?: () => void }
     | undefined
   if (existing?.roomId) {
     const sameRoom =
@@ -1304,8 +1304,37 @@ async function runBridge() {
   let lastPlaybackKey = ''
   let lastPublishedVideoId = ''
   let playbackJoined = false
+  let playbackChannel = supabase.channel(`ytmq-playback:${roomId}`)
+  let playbackReconnectTimer: number | undefined
 
-  const playbackChannel = supabase.channel(`ytmq-playback:${roomId}`)
+  function attachPlaybackChannel() {
+    void playbackChannel.subscribe((status) => {
+      if (status === 'SUBSCRIBED') {
+        playbackJoined = true
+        publishNowPlaying()
+      } else if (
+        status === 'CLOSED' ||
+        status === 'CHANNEL_ERROR' ||
+        status === 'TIMED_OUT'
+      ) {
+        playbackJoined = false
+        schedulePlaybackReconnect()
+      }
+    })
+  }
+
+  function schedulePlaybackReconnect() {
+    if (playbackReconnectTimer !== undefined) return
+    playbackReconnectTimer = window.setTimeout(() => {
+      playbackReconnectTimer = undefined
+      void supabase.removeChannel(playbackChannel).finally(() => {
+        playbackChannel = supabase.channel(`ytmq-playback:${roomId}`)
+        attachPlaybackChannel()
+      })
+    }, 1500)
+  }
+
+  attachPlaybackChannel()
 
   const removePlayedFromSharedQueue = createPlayedQueueCleanup({
     findByVideoId: async (videoId) => {
@@ -1390,14 +1419,6 @@ async function runBridge() {
     })
   }
 
-  void playbackChannel.subscribe((status) => {
-    if (status === 'SUBSCRIBED') {
-      playbackJoined = true
-      publishNowPlaying()
-    } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
-      playbackJoined = false
-    }
-  })
   const playbackTimer = window.setInterval(publishNowPlaying, 2000)
 
   const nextToastTimer = window.setInterval(() => {
@@ -1609,6 +1630,9 @@ async function runBridge() {
     stop() {
       window.clearInterval(playbackTimer)
       window.clearInterval(nextToastTimer)
+      if (playbackReconnectTimer !== undefined) {
+        window.clearTimeout(playbackReconnectTimer)
+      }
       hideNextSongToast({ immediate: true })
       void supabase.removeChannel(channel)
       void supabase.removeChannel(playbackChannel)
