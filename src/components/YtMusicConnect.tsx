@@ -4,6 +4,12 @@ import {
   resetPlaybackSession,
 } from '../lib/playbackSession'
 import {
+  announceSessionToExtension,
+  EXTENSION_MESSAGE_SOURCE,
+  isExtensionInstalled,
+  requestExtensionConnect,
+} from '../lib/extensionBridge'
+import {
   bridgeSiteRoot,
   buildYtmConnectSnippet,
   isYtmHostInitialized,
@@ -177,6 +183,7 @@ export function YtMusicConnect({ roomId }: YtMusicConnectProps) {
   }, [roomId, playbackSince])
 
   const hostInitialized = isYtmHostInitialized()
+  const extensionInstalled = isExtensionInstalled()
 
   const markDone = useCallback(() => {
     sessionStorage.setItem(doneKey(roomId), '1')
@@ -186,18 +193,53 @@ export function YtMusicConnect({ roomId }: YtMusicConnectProps) {
 
   useEffect(() => {
     function onMessage(event: MessageEvent) {
-      if (event.data?.type !== YTMQ_CONNECTED_MESSAGE) return
-      if (event.data.roomId !== roomId) return
-      markDone()
+      if (event.source !== window) return
+      const data = event.data as
+        | {
+            type?: string
+            source?: string
+            roomId?: string
+            connectedTabs?: number
+          }
+        | undefined
+      if (data?.type === YTMQ_CONNECTED_MESSAGE && data.roomId === roomId) {
+        markDone()
+        return
+      }
+      // The extension auto-linked an already-open YouTube Music tab after we
+      // announced this room's session — no clicking needed.
+      if (
+        data?.source === EXTENSION_MESSAGE_SOURCE &&
+        data.type === 'ytmq:session-result' &&
+        (data.connectedTabs ?? 0) > 0
+      ) {
+        markDone()
+      }
     }
 
     window.addEventListener('message', onMessage)
     return () => window.removeEventListener('message', onMessage)
   }, [roomId, markDone])
 
-  const startConnect = useCallback(() => {
+  // Keep the extension's stored session pointing at THIS room. With the
+  // extension installed, any open music.youtube.com tab links automatically.
+  useEffect(() => {
+    announceSessionToExtension(roomId)
+  }, [roomId])
+
+  const startConnect = useCallback(async () => {
     const since = resetPlaybackSession(roomId)
     setPlaybackSince(since)
+
+    // Extension first: it reuses an already-open YouTube Music tab (or opens
+    // one itself). Fall back to the deep link when it's not installed.
+    const ext = await requestExtensionConnect(roomId, since)
+    if (ext?.ok) {
+      markYtmHostInitialized()
+      markDone()
+      return
+    }
+
     openYtmMusicWindow(roomId, { resetSession: false })
     // Returning hosts already have the helper installed, which auto-injects on
     // music.youtube.com — link immediately instead of asking them to verify.
@@ -208,7 +250,14 @@ export function YtMusicConnect({ roomId }: YtMusicConnectProps) {
     }
   }, [roomId, markDone])
 
-  const reopenYtm = useCallback(() => {
+  const reopenYtm = useCallback(async () => {
+    // Focus/link an existing YouTube Music tab via the extension when we can,
+    // instead of always spawning a new window.
+    const ext = await requestExtensionConnect(
+      roomId,
+      getOrStartPlaybackSince(roomId),
+    )
+    if (ext?.ok) return
     openYtmMusicWindow(roomId)
   }, [roomId])
 
@@ -248,7 +297,7 @@ export function YtMusicConnect({ roomId }: YtMusicConnectProps) {
         <div className="flex shrink-0 flex-col items-end gap-1">
           <button
             type="button"
-            onClick={reopenYtm}
+            onClick={() => void reopenYtm()}
             className="text-xs font-medium text-violet-300 underline"
           >
             Open YouTube Music
@@ -296,41 +345,53 @@ export function YtMusicConnect({ roomId }: YtMusicConnectProps) {
 
   return (
     <section className="space-y-3 rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
-      <p className="text-sm text-zinc-400">
-        One click opens <strong className="text-zinc-300">music.youtube.com</strong> and
-        links your queue. Use Chrome on desktop (not the phone app).
-      </p>
-      <ol className="list-decimal space-y-1 pl-5 text-xs text-zinc-500">
-        {!hostInitialized && (
-          <li>
-            Install the YTMQ helper once — Chrome extension or userscript (see
-            below).
-          </li>
-        )}
-        <li>Click Connect — a YouTube Music tab opens and links automatically.</li>
-        <li>Open the queue panel on YouTube Music and wait for &quot;YTMQ connected&quot;.</li>
-        <li>
-          After that, every YouTube Music tab in this browser reconnects on its
-          own.
-        </li>
-      </ol>
-      {hostInitialized && (
-        <p className="text-xs text-emerald-400/90">
-          Helper already set up on this browser — just click Connect.
+      {extensionInstalled ? (
+        <p className="text-sm text-zinc-400">
+          Extension detected — Connect links your{' '}
+          <strong className="text-zinc-300">open YouTube Music tab</strong> (or
+          opens one for you).
         </p>
+      ) : (
+        <>
+          <p className="text-sm text-zinc-400">
+            One click opens <strong className="text-zinc-300">music.youtube.com</strong> and
+            links your queue. Use Chrome on desktop (not the phone app).
+          </p>
+          <ol className="list-decimal space-y-1 pl-5 text-xs text-zinc-500">
+            {!hostInitialized && (
+              <li>
+                Install the YTMQ helper once — Chrome extension or userscript (see
+                below).
+              </li>
+            )}
+            <li>Click Connect — a YouTube Music tab opens and links automatically.</li>
+            <li>Open the queue panel on YouTube Music and wait for &quot;YTMQ connected&quot;.</li>
+            <li>
+              After that, every YouTube Music tab in this browser reconnects on its
+              own.
+            </li>
+          </ol>
+          {hostInitialized && (
+            <p className="text-xs text-emerald-400/90">
+              Helper already set up on this browser — just click Connect.
+            </p>
+          )}
+        </>
       )}
       <button
         type="button"
-        onClick={startConnect}
+        onClick={() => void startConnect()}
         className="w-full rounded-xl bg-violet-600 py-3.5 text-base font-medium text-white active:bg-violet-500"
       >
         Connect YouTube Music
       </button>
-      <ExtensionInstall
-        zipUrl={extensionZipUrl}
-        userscriptUrl={userscriptUrl}
-        defaultOpen={!hostInitialized}
-      />
+      {!extensionInstalled && (
+        <ExtensionInstall
+          zipUrl={extensionZipUrl}
+          userscriptUrl={userscriptUrl}
+          defaultOpen={!hostInitialized}
+        />
+      )}
       <ManualConnect snippet={snippet} />
     </section>
   )

@@ -84,16 +84,25 @@ function readExtensionSession() {
 }
 
 async function resolveSession() {
+  // An explicit deep link always wins (the host just clicked Connect).
+  var fromUrl = readQueryParams()
+  if (isValidSession(fromUrl)) return fromUrl
+
+  // Otherwise the NEWEST session wins. The extension session is synced from
+  // the YTMQ app whenever the host opens a lobby, so a freshly created room
+  // beats a stale one left behind in this tab's local/session storage.
   var candidates = [
-    readQueryParams(),
     readJson(sessionStorage, CAPTURE_KEY),
     readJson(localStorage, SESSION_KEY),
     await readExtensionSession(),
   ]
+  var best = null
   for (var i = 0; i < candidates.length; i += 1) {
-    if (isValidSession(candidates[i])) return candidates[i]
+    var candidate = candidates[i]
+    if (!isValidSession(candidate)) continue
+    if (!best || (candidate.at || 0) > (best.at || 0)) best = candidate
   }
-  return null
+  return best
 }
 
 function requestInject(session) {

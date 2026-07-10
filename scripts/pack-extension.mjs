@@ -15,6 +15,7 @@ const requiredFiles = [
   'manifest.json',
   'background.js',
   'content.js',
+  'site.js',
   'popup.html',
   'popup.js',
   'ytmusic-bridge.js',

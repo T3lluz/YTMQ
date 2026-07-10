@@ -20,9 +20,10 @@ import { useToast } from '../hooks/useToast'
 import { useRoomSettings } from '../hooks/useRoomSettings'
 import { useRoomPresence } from '../hooks/useRoomPresence'
 import { getClientId } from '../lib/clientId'
-import { getNickname, setNickname } from '../lib/nickname'
+import { getNickname, HOST_NICKNAME, setNickname } from '../lib/nickname'
 import type { AddTrackInput, QueueInsertMode } from '../lib/queue'
 import { clearPlaybackSession } from '../lib/playbackSession'
+import { announceSessionClearToExtension } from '../lib/extensionBridge'
 import {
   endLobby,
   fetchRoom,
@@ -335,7 +336,12 @@ export function Room() {
           return
         }
         setRoom(info)
-        const stored = getNickname(roomId)
+        // Hosts are always "HOST" — never prompt them for a name.
+        let stored = getNickname(roomId)
+        if (!stored && getHostToken(roomId)) {
+          stored = HOST_NICKNAME
+          setNickname(roomId, stored)
+        }
         setNicknameState(stored)
         setNeedsNickname(!stored)
 
@@ -465,6 +471,8 @@ export function Room() {
         sessionStorage.removeItem(`ytmq_host_${activeRoomId}`)
         sessionStorage.removeItem(`ytmq_ytm_connected_${activeRoomId}`)
         clearPlaybackSession(activeRoomId)
+        // Stop the extension from re-linking YouTube Music to a dead lobby.
+        announceSessionClearToExtension()
         navigate('/')
       })
       .catch((err: unknown) => {

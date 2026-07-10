@@ -21,13 +21,12 @@ test.describe('Full flow', () => {
     const guestPage = await guestContext.newPage()
 
     await gotoApp(hostPage)
-    await hostPage.getByPlaceholder('Your name on the queue').fill('TestHost')
     await hostPage.getByRole('button', { name: 'Create lobby' }).click()
-    await expect(hostPage).toHaveURL(/\/YTMQ\/host\/[0-9a-f-]{36}\/?$/, {
+    await expect(hostPage).toHaveURL(/\/YTMQ\/room\/[0-9a-f-]{36}\/?$/, {
       timeout: 15_000,
     })
 
-    const roomId = hostPage.url().match(/\/host\/([0-9a-f-]{36})/)?.[1]
+    const roomId = hostPage.url().match(/\/room\/([0-9a-f-]{36})/)?.[1]
     expect(roomId).toBeTruthy()
 
     const heading = await hostPage.getByRole('heading', { level: 1 }).textContent()

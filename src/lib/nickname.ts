@@ -1,3 +1,6 @@
+/** The host never picks a name — they always show up as HOST. */
+export const HOST_NICKNAME = 'HOST'
+
 function nicknameKey(roomId: string) {
   return `ytmq_nickname_${roomId}`
 }
