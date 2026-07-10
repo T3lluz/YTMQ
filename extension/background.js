@@ -34,6 +34,20 @@ function normalizeSession(session) {
   }
 }
 
+function bridgeParamsFromSession(session) {
+  return {
+    roomId: session.roomId,
+    sb: session.sb,
+    key: session.key,
+    since: session.since || new Date().toISOString(),
+  }
+}
+
+/** Most recently used first — focus the tab the user was actually using. */
+function byLastAccessed(a, b) {
+  return (b.lastAccessed || 0) - (a.lastAccessed || 0)
+}
+
 function isYtmSender(sender) {
   return Boolean(
     sender.tab &&
@@ -61,13 +75,26 @@ function ytmDeepLink(session) {
   return YTM_ORIGIN + '/?' + q.toString()
 }
 
+async function persistSessionInTab(tabId, session) {
+  await chrome.scripting
+    .executeScript({
+      target: { tabId },
+      world: 'MAIN',
+      func: (stored) => {
+        try {
+          localStorage.setItem('ytmq_session', JSON.stringify(stored))
+          sessionStorage.setItem('ytmq_url_capture', JSON.stringify(stored))
+        } catch (e) {
+          /* private mode */
+        }
+      },
+      args: [session],
+    })
+    .catch(() => {})
+}
+
 async function injectBridge(tabId, session) {
-  const params = {
-    roomId: session.roomId,
-    sb: session.sb,
-    key: session.key,
-    since: session.since || new Date().toISOString(),
-  }
+  const params = bridgeParamsFromSession(session)
 
   // Params must land in the page before the bridge IIFE reads them. The same
   // step marks the page as loading so repeated inject requests (SPA
@@ -79,9 +106,19 @@ async function injectBridge(tabId, session) {
     world: 'MAIN',
     injectImmediately: true,
     func: (bridgeParams) => {
+      function paramsMatch(target) {
+        if (!target) return false
+        return (
+          target.roomId === bridgeParams.roomId &&
+          target.sb === bridgeParams.sb &&
+          target.key === bridgeParams.key &&
+          (target.since || '') === (bridgeParams.since || '')
+        )
+      }
+
       const existing = window.__YTMQ_BRIDGE__
       if (existing) {
-        if (existing.roomId === bridgeParams.roomId) return true
+        if (paramsMatch(existing)) return true
         try {
           if (typeof existing.stop === 'function') existing.stop()
         } catch (e) {
@@ -90,7 +127,8 @@ async function injectBridge(tabId, session) {
         delete window.__YTMQ_BRIDGE__
         delete window.__YTMQ_BRIDGE_LOADING__
       } else if (window.__YTMQ_BRIDGE_LOADING__) {
-        return true
+        if (paramsMatch(window.__YTMQ_BRIDGE_PARAMS__)) return true
+        delete window.__YTMQ_BRIDGE_LOADING__
       }
       window.__YTMQ_BRIDGE_LOADING__ = true
       window.__YTMQ_BRIDGE_PARAMS__ = bridgeParams
@@ -99,7 +137,10 @@ async function injectBridge(tabId, session) {
     args: [params],
   })
 
-  if (alreadyRunning) return true
+  if (alreadyRunning) {
+    await persistSessionInTab(tabId, session)
+    return true
+  }
 
   try {
     await chrome.scripting.executeScript({
@@ -108,6 +149,7 @@ async function injectBridge(tabId, session) {
       injectImmediately: true,
       files: ['ytmusic-bridge.js'],
     })
+    await persistSessionInTab(tabId, session)
   } catch (err) {
     // Unblock future attempts (the loading flag would otherwise wedge this
     // document until a full page reload).
@@ -133,11 +175,15 @@ async function injectBridge(tabId, session) {
  */
 async function connectSession(session, options) {
   const opts = options || {}
-  await chrome.storage.local.set({ ytmq_session: session })
+  const normalized = normalizeSession(session)
+
+  await chrome.storage.local.set({ ytmq_session: normalized })
 
   const tabs = await chrome.tabs.query({ url: YTM_ORIGIN + '/*' })
+  tabs.sort(byLastAccessed)
+
   const results = await Promise.allSettled(
-    tabs.map((tab) => injectBridge(tab.id, session)),
+    tabs.map((tab) => injectBridge(tab.id, normalized)),
   )
   const linkedTabs = tabs.filter((tab, i) => results[i].status === 'fulfilled')
 
@@ -154,7 +200,10 @@ async function connectSession(session, options) {
 
   if (opts.openIfNone) {
     // content.js on the new tab captures the params and requests injection.
-    await chrome.tabs.create({ url: ytmDeepLink(session), active: !!opts.focus })
+    await chrome.tabs.create({
+      url: ytmDeepLink(normalized),
+      active: !!opts.focus,
+    })
     return { ok: true, hadTab: false, connectedTabs: 0 }
   }
 
@@ -190,6 +239,24 @@ async function disconnectEverywhere() {
     ),
   )
 }
+
+/** Auto-link new or reloaded YouTube Music tabs to the stored session. */
+async function linkTabIfSessionStored(tabId) {
+  const data = await chrome.storage.local.get('ytmq_session')
+  const session = data && data.ytmq_session
+  if (!isValidSession(session)) return
+  if (Date.now() - (session.at || 0) >= SESSION_MAX_AGE_MS) {
+    await chrome.storage.local.remove('ytmq_session')
+    return
+  }
+  await injectBridge(tabId, normalizeSession(session))
+}
+
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  if (changeInfo.status !== 'complete') return
+  if (!tab.url || !tab.url.startsWith(YTM_ORIGIN)) return
+  void linkTabIfSessionStored(tabId)
+})
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message && message.type === 'ytmq-inject' && isYtmSender(sender)) {

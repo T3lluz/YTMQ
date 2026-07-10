@@ -1184,10 +1184,23 @@ async function runBridge() {
     return
   }
 
-  const existing = window.__YTMQ_BRIDGE__ as { roomId?: string } | undefined
+  const existing = window.__YTMQ_BRIDGE__ as
+    | { roomId?: string; since?: string }
+    | undefined
   if (existing?.roomId) {
-    log('Bridge already running for room', existing.roomId)
-    return
+    const sameRoom =
+      existing.roomId === roomId &&
+      (existing.since || '') === (playbackSince || '')
+    if (sameRoom) {
+      log('Bridge already running for room', existing.roomId)
+      return
+    }
+    try {
+      if (typeof existing.stop === 'function') existing.stop()
+    } catch {
+      /* old bridge already broken */
+    }
+    delete window.__YTMQ_BRIDGE__
   }
 
   const syncedIds = new Set<string>()
@@ -1571,6 +1584,7 @@ async function runBridge() {
 
   window.__YTMQ_BRIDGE__ = {
     roomId,
+    since: playbackSince,
     syncedIds,
     addVideoPlayNext: (videoId: string) => addVideoToYtm(videoId, 'play_next'),
     addVideoToQueue: (videoId: string) => addVideoToYtm(videoId, 'queue'),

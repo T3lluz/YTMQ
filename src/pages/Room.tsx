@@ -23,7 +23,10 @@ import { getClientId } from '../lib/clientId'
 import { getNickname, HOST_NICKNAME, setNickname } from '../lib/nickname'
 import type { AddTrackInput, QueueInsertMode } from '../lib/queue'
 import { clearPlaybackSession } from '../lib/playbackSession'
-import { announceSessionClearToExtension } from '../lib/extensionBridge'
+import {
+  announceSessionClearToExtension,
+  announceSessionToExtension,
+} from '../lib/extensionBridge'
 import {
   endLobby,
   fetchRoom,
@@ -361,6 +364,22 @@ export function Room() {
       cancelled = true
     }
   }, [roomId])
+
+  // Keep the extension synced to this lobby whenever the host has the room
+  // open — not only when they visit the Admin tab (YtMusicConnect).
+  useEffect(() => {
+    if (!roomId || !isHost || roomLoading || roomError) return
+
+    announceSessionToExtension(roomId)
+
+    function onVisible() {
+      if (document.visibilityState === 'visible') {
+        announceSessionToExtension(roomId)
+      }
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => document.removeEventListener('visibilitychange', onVisible)
+  }, [roomId, isHost, roomLoading, roomError])
 
   if (!roomId) {
     return <RoomUnavailable message="Missing room id" />
