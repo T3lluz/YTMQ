@@ -6,13 +6,14 @@
     <style>
       :root {
         color-scheme: dark;
-        /* Chrome sizes the popup from document width — use a fixed base, not vw. */
-        --popup-w: 300px;
+        --popup-w: 320px;
         --space: 12px;
-        --radius: 10px;
+        --radius: 12px;
         --text: 13px;
-        --text-sm: 12px;
-        --btn-h: 36px;
+        --text-sm: 11px;
+        --btn-h: 38px;
+        --violet: #8b5cf6;
+        --yt-red: #ff0033;
       }
       *,
       *::before,
@@ -27,158 +28,389 @@
       body {
         margin: 0;
         width: var(--popup-w);
-        min-width: var(--popup-w);
-        max-width: var(--popup-w);
         background: #09090b;
         color: #fafafa;
         font: var(--text) / 1.45 system-ui, sans-serif;
-        -webkit-text-size-adjust: 100%;
-        text-size-adjust: 100%;
       }
       header {
         display: flex;
         align-items: center;
-        gap: 8px;
-        padding: var(--space) var(--space) 10px;
+        gap: 10px;
+        padding: 14px var(--space) 12px;
         border-bottom: 1px solid #27272a;
+        background: linear-gradient(180deg, rgba(139, 92, 246, 0.08), transparent);
       }
       header img {
-        width: 22px;
-        height: 22px;
+        width: 28px;
+        height: 28px;
         flex: none;
-        border-radius: 6px;
+        border-radius: 8px;
+      }
+      header .title-wrap {
+        min-width: 0;
+        flex: 1;
       }
       header strong {
-        font-size: 14px;
-        font-weight: 600;
+        display: block;
+        font-size: 15px;
+        font-weight: 700;
+        color: #ede9fe;
+      }
+      header span {
+        display: block;
+        font-size: 10px;
+        color: #a1a1aa;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
       }
       main {
         padding: var(--space);
-      }
-      .status {
         display: flex;
-        align-items: flex-start;
-        gap: 8px;
+        flex-direction: column;
+        gap: 10px;
+      }
+      .card {
         border-radius: var(--radius);
         border: 1px solid #27272a;
         background: #18181b;
         padding: 10px var(--space);
-        min-width: 0;
       }
-      .dot {
-        width: 8px;
-        height: 8px;
-        flex: none;
-        margin-top: 4px;
+      .card-label {
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: #a78bfa;
+        margin-bottom: 8px;
+      }
+      .status-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+      }
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        font-size: 10px;
+        font-weight: 600;
+        padding: 3px 8px;
+        border-radius: 999px;
+        background: rgba(52, 211, 153, 0.12);
+        color: #86efac;
+        border: 1px solid rgba(52, 211, 153, 0.25);
+      }
+      .badge.off {
+        background: rgba(113, 113, 122, 0.2);
+        color: #d4d4d8;
+        border-color: rgba(113, 113, 122, 0.35);
+      }
+      .badge-dot {
+        width: 6px;
+        height: 6px;
         border-radius: 50%;
-        background: #52525b;
+        background: currentColor;
       }
-      .dot.on {
-        background: #34d399;
+      .lobby-code {
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 22px;
+        font-weight: 700;
+        letter-spacing: 0.16em;
+        margin: 4px 0 2px;
       }
-      .status-copy {
-        min-width: 0;
-        flex: 1;
-      }
-      .status p {
-        margin: 0;
-      }
-      #status-text {
-        font-size: var(--text);
-        line-height: 1.35;
-      }
-      .status .room {
-        margin-top: 3px;
-        color: #a1a1aa;
+      .lobby-meta {
         font-size: var(--text-sm);
-        line-height: 1.3;
+        color: #a1a1aa;
+      }
+      .stats {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 6px;
+        margin-top: 8px;
+      }
+      .stat {
+        text-align: center;
+        padding: 6px 4px;
+        border-radius: 10px;
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+      }
+      .stat strong {
+        display: block;
+        font-size: 16px;
+        color: #e9d5ff;
+      }
+      .stat span {
+        font-size: 9px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: #71717a;
+      }
+      .track-title {
+        font-size: 14px;
+        font-weight: 600;
+        white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
-        white-space: nowrap;
       }
-      .hint {
-        margin: 10px 0 0;
+      .track-artist {
+        font-size: 12px;
         color: #a1a1aa;
-        font-size: var(--text-sm);
-        line-height: 1.4;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        margin-top: 2px;
+      }
+      .progress {
+        margin-top: 8px;
+        height: 4px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.08);
+        overflow: hidden;
+      }
+      .progress > span {
+        display: block;
+        height: 100%;
+        width: 0%;
+        background: linear-gradient(90deg, #8b5cf6, #d946ef);
+        transition: width 0.3s linear;
+      }
+      .times {
+        display: flex;
+        justify-content: space-between;
+        margin-top: 4px;
+        font-size: 10px;
+        color: #71717a;
+        font-variant-numeric: tabular-nums;
+      }
+      .controls {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        margin-top: 10px;
+      }
+      .ctl {
+        width: 34px;
+        height: 34px;
+        border-radius: 999px;
+        border: 1px solid #3f3f46;
+        background: #27272a;
+        color: #fafafa;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        padding: 0;
+      }
+      .ctl.primary {
+        width: 40px;
+        height: 40px;
+        border: 0;
+        background: linear-gradient(135deg, #7c3aed, #c026d3);
+      }
+      .ctl:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
       }
       .actions {
         display: grid;
         grid-template-columns: 1fr 1fr;
         gap: 8px;
-        margin-top: var(--space);
       }
-      button {
+      .btn {
         display: flex;
         align-items: center;
-        justify-content: center;
+        justify-content: flex-start;
+        gap: 8px;
         width: 100%;
         min-height: var(--btn-h);
-        border: 0;
-        border-radius: 9px;
-        padding: 7px 8px;
-        font: 500 var(--text-sm) / 1.25 system-ui, sans-serif;
-        text-align: center;
+        border-radius: 10px;
+        padding: 8px 10px;
+        font: 600 var(--text-sm) / 1.2 system-ui, sans-serif;
         cursor: pointer;
-        white-space: normal;
-        word-break: break-word;
+        text-align: left;
       }
-      .primary {
-        background: #7c3aed;
+      .btn-icon {
+        width: 22px;
+        height: 22px;
+        flex: none;
+        border-radius: 6px;
+        object-fit: cover;
+      }
+      .btn-icon svg {
+        display: block;
+        width: 22px;
+        height: 22px;
+      }
+      .btn-label {
+        min-width: 0;
+        flex: 1;
+      }
+      .btn-ytmq {
+        border: 1px solid rgba(139, 92, 246, 0.45);
+        background: linear-gradient(135deg, rgba(124, 58, 237, 0.22), rgba(192, 38, 211, 0.14));
+        color: #ede9fe;
+      }
+      .btn-ytmq:hover {
+        background: linear-gradient(135deg, rgba(124, 58, 237, 0.34), rgba(192, 38, 211, 0.22));
+      }
+      .btn-ytm {
+        border: 1px solid rgba(255, 0, 51, 0.35);
+        background: linear-gradient(135deg, rgba(255, 0, 51, 0.18), rgba(255, 0, 51, 0.08));
         color: #fff;
       }
-      .primary:hover {
-        background: #8b5cf6;
+      .btn-ytm:hover {
+        background: linear-gradient(135deg, rgba(255, 0, 51, 0.28), rgba(255, 0, 51, 0.14));
       }
-      .secondary {
+      .btn-muted {
+        border: 1px solid #3f3f46;
         background: #27272a;
         color: #e4e4e7;
       }
-      .secondary:hover {
+      .btn-muted:hover {
         background: #3f3f46;
       }
-      .outline {
-        background: transparent;
-        border: 1px solid #3f3f46;
-        color: #e4e4e7;
-      }
-      .outline:hover {
-        background: #18181b;
-        border-color: #52525b;
-      }
-      #disconnect {
+      .btn-danger {
         grid-column: 1 / -1;
+        justify-content: center;
+        border: 1px solid #52525b;
+        background: transparent;
+        color: #fca5a5;
+      }
+      .hint {
+        margin: 0;
+        color: #a1a1aa;
+        font-size: var(--text-sm);
+        line-height: 1.45;
+      }
+      .toast {
+        position: fixed;
+        left: 50%;
+        bottom: 10px;
+        transform: translateX(-50%);
+        background: #27272a;
+        border: 1px solid #3f3f46;
+        color: #fafafa;
+        font-size: 11px;
+        padding: 6px 10px;
+        border-radius: 8px;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.2s ease;
+        z-index: 10;
+        max-width: calc(100% - 20px);
+        text-align: center;
+      }
+      .toast.show {
+        opacity: 1;
       }
       .hidden {
         display: none !important;
+      }
+      .disabled-section {
+        opacity: 0.55;
+        pointer-events: none;
       }
     </style>
   </head>
   <body>
     <header>
       <img src="icons/icon32.png" alt="" />
-      <strong>YTMQ</strong>
+      <div class="title-wrap">
+        <strong>YTMQ</strong>
+        <span>Extension panel</span>
+      </div>
     </header>
     <main>
-      <div class="status">
-        <span id="dot" class="dot"></span>
-        <div class="status-copy">
-          <p id="status-text">Not linked to a room</p>
-          <p id="room" class="room hidden"></p>
-        </div>
-      </div>
       <p class="hint" id="hint">
         Open your YTMQ lobby as host — the extension picks up the room and
-        links every music.youtube.com tab automatically.
+        links every YouTube Music tab automatically.
       </p>
-      <div class="actions">
-        <button id="open-ytmq" class="outline" type="button">Open YTMQ</button>
-        <button id="open-ytm" class="primary" type="button">Open YT Music</button>
-        <button id="disconnect" class="secondary hidden" type="button">
-          Disconnect
+
+      <section id="linked" class="hidden">
+        <div class="card">
+          <div class="status-row">
+            <span class="card-label" style="margin: 0">Lobby</span>
+            <span id="badge" class="badge off"
+              ><span class="badge-dot"></span><span id="badge-text">Offline</span></span
+            >
+          </div>
+          <div id="lobby-code" class="lobby-code">····</div>
+          <div id="lobby-meta" class="lobby-meta">Room</div>
+          <div class="stats">
+            <div class="stat"><strong id="stat-queue">0</strong><span>Queue</span></div>
+            <div class="stat"><strong id="stat-pending">0</strong><span>Pending</span></div>
+            <div class="stat"><strong id="stat-synced">0</strong><span>Synced</span></div>
+          </div>
+        </div>
+
+        <div class="card" id="now-card">
+          <div class="card-label">Now playing</div>
+          <div id="track-title" class="track-title">—</div>
+          <div id="track-artist" class="track-artist">—</div>
+          <div class="progress"><span id="progress-bar"></span></div>
+          <div class="times">
+            <span id="time-cur">0:00</span>
+            <span id="time-dur">0:00</span>
+          </div>
+          <div class="controls">
+            <button id="ctl-prev" class="ctl" type="button" aria-label="Previous">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="m15 18-6-6 6-6"/><path d="M5 6v12"/></svg>
+            </button>
+            <button id="ctl-play" class="ctl primary" type="button" aria-label="Play">
+              <svg id="icon-play" viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+              <svg id="icon-pause" class="hidden" viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M7 5h4v14H7zm6 0h4v14h-4z"/></svg>
+            </button>
+            <button id="ctl-next" class="ctl" type="button" aria-label="Next">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/><path d="M19 6v12"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-label">Quick actions</div>
+          <div class="actions">
+            <button id="open-ytmq" class="btn btn-ytmq" type="button">
+              <img class="btn-icon" src="icons/icon32.png" alt="" />
+              <span class="btn-label">Open YTMQ</span>
+            </button>
+            <button id="open-ytm" class="btn btn-ytm" type="button">
+              <span class="btn-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none">
+                  <circle cx="12" cy="12" r="10" fill="#FF0033"/>
+                  <path d="M10 8.2v7.6l5.8-3.8L10 8.2z" fill="#fff"/>
+                </svg>
+              </span>
+              <span class="btn-label">YT Music</span>
+            </button>
+            <button id="sync-queue" class="btn btn-muted" type="button">Sync queue</button>
+            <button id="copy-link" class="btn btn-muted" type="button">Copy link</button>
+            <button id="open-queue" class="btn btn-muted" type="button">Open YT queue</button>
+            <button id="focus-ytmq" class="btn btn-muted" type="button">Switch to YTMQ</button>
+            <button id="disconnect" class="btn btn-danger" type="button">Disconnect</button>
+          </div>
+        </div>
+      </section>
+
+      <section id="unlinked" class="actions">
+        <button id="open-ytmq-idle" class="btn btn-ytmq" type="button" style="grid-column: 1 / -1">
+          <img class="btn-icon" src="icons/icon32.png" alt="" />
+          <span class="btn-label">Open YTMQ</span>
         </button>
-      </div>
+        <button id="open-ytm-idle" class="btn btn-ytm" type="button" style="grid-column: 1 / -1">
+          <span class="btn-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none">
+              <circle cx="12" cy="12" r="10" fill="#FF0033"/>
+              <path d="M10 8.2v7.6l5.8-3.8L10 8.2z" fill="#fff"/>
+            </svg>
+          </span>
+          <span class="btn-label">Open YouTube Music</span>
+        </button>
+      </section>
     </main>
+    <div id="toast" class="toast" role="status"></div>
     <script src="popup.js"></script>
   </body>
 </html>

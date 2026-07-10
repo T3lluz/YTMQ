@@ -106,6 +106,185 @@ async function openYtmqTab(roomId) {
   return true
 }
 
+async function supabaseRpc(session, fn, body) {
+  const res = await fetch(`${session.sb}/rest/v1/rpc/${fn}`, {
+    method: 'POST',
+    headers: {
+      apikey: session.key,
+      Authorization: `Bearer ${session.key}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) return null
+  return res.json()
+}
+
+async function fetchQueueCount(session) {
+  const url = new URL(`${session.sb}/rest/v1/queue_items`)
+  url.searchParams.set('room_id', `eq.${session.roomId}`)
+  url.searchParams.set('select', 'id')
+  const res = await fetch(url, {
+    method: 'HEAD',
+    headers: {
+      apikey: session.key,
+      Authorization: `Bearer ${session.key}`,
+      Prefer: 'count=exact',
+    },
+  })
+  if (!res.ok) return 0
+  const range = res.headers.get('content-range') || ''
+  const match = range.match(/\/(\d+)$/)
+  return match ? Number(match[1]) : 0
+}
+
+async function fetchRoomMeta(session) {
+  const data = await supabaseRpc(session, 'get_room', {
+    p_room_id: session.roomId,
+  })
+  if (!data || typeof data !== 'object') return { code: '', roomId: session.roomId }
+  return {
+    code: typeof data.code === 'string' ? data.code : '',
+    roomId: session.roomId,
+  }
+}
+
+async function queryLinkedYtmTabs() {
+  const tabs = await chrome.tabs.query({ url: `${YTM_ORIGIN}/*` })
+  tabs.sort(byLastAccessed)
+  return tabs
+}
+
+async function readYtmSnapshot() {
+  const tabs = await queryLinkedYtmTabs()
+  for (const tab of tabs) {
+    try {
+      const [{ result }] = await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        world: 'MAIN',
+        func: () => {
+          const bridge = window.__YTMQ_BRIDGE__
+          const bar = document.querySelector('ytmusic-player-bar')
+          const title =
+            bar?.querySelector('.title')?.textContent?.trim() ||
+            bar?.querySelector('[title]')?.textContent?.trim() ||
+            ''
+          const artist =
+            bar?.querySelector('.byline')?.textContent?.trim() ||
+            bar?.querySelector('.subtitle')?.textContent?.trim() ||
+            ''
+          let currentTime = 0
+          let duration = 0
+          let state = 'unknown'
+          try {
+            const api = bar?.playerApi
+            currentTime = api?.getCurrentTime?.() ?? 0
+            duration = api?.getDuration?.() ?? 0
+            const code = api?.getPlayerState?.()
+            if (code === 1 || code === 3) state = 'playing'
+            else if (code === 2 || code === 0 || code === 5) state = 'paused'
+          } catch (e) {
+            /* player not ready */
+          }
+          const status = bridge?.getStatus?.() || {
+            syncedCount: bridge?.syncedIds?.size ?? 0,
+            pendingCount: 0,
+            connected: Boolean(bridge),
+          }
+          return {
+            bridgeActive: Boolean(bridge),
+            title: title || 'Nothing playing',
+            artist,
+            currentTime,
+            duration,
+            state,
+            syncedCount: status.syncedCount ?? 0,
+            pendingCount: status.pendingCount ?? 0,
+            bridgeConnected: status.connected ?? Boolean(bridge),
+          }
+        },
+      })
+      if (result) return { ...result, ytmTabId: tab.id }
+    } catch (e) {
+      /* tab not injectable */
+    }
+  }
+  return {
+    bridgeActive: false,
+    title: 'No YouTube Music tab',
+    artist: '',
+    currentTime: 0,
+    duration: 0,
+    state: 'unknown',
+    syncedCount: 0,
+    pendingCount: 0,
+    bridgeConnected: false,
+    ytmTabId: null,
+  }
+}
+
+async function runYtmBridgeAction(action) {
+  const tabs = await queryLinkedYtmTabs()
+  for (const tab of tabs) {
+    try {
+      const [{ result }] = await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        world: 'MAIN',
+        func: async (kind) => {
+          const bridge = window.__YTMQ_BRIDGE__
+          if (!bridge) return { ok: false, reason: 'no_bridge' }
+          if (kind === 'syncAll' && typeof bridge.syncAll === 'function') {
+            const n = await bridge.syncAll()
+            return { ok: true, synced: n }
+          }
+          if (kind === 'next' && typeof bridge.next === 'function') {
+            return { ok: bridge.next() }
+          }
+          if (kind === 'prev' && typeof bridge.prev === 'function') {
+            return { ok: bridge.prev() }
+          }
+          if (kind === 'toggle' && typeof bridge.togglePlayPause === 'function') {
+            return { ok: bridge.togglePlayPause() }
+          }
+          if (kind === 'openQueue' && typeof bridge.openQueue === 'function') {
+            bridge.openQueue()
+            return { ok: true }
+          }
+          return { ok: false, reason: 'unsupported' }
+        },
+        args: [action],
+      })
+      if (result?.ok) return result
+    } catch (e) {
+      /* try next tab */
+    }
+  }
+  return { ok: false, reason: 'no_tab' }
+}
+
+async function buildPopupState() {
+  const data = await chrome.storage.local.get('ytmq_session')
+  const session = data?.ytmq_session
+  if (!isValidSession(session) || Date.now() - (session.at || 0) >= SESSION_MAX_AGE_MS) {
+    return { linked: false }
+  }
+  const [room, queueCount, ytm] = await Promise.all([
+    fetchRoomMeta(session),
+    fetchQueueCount(session),
+    readYtmSnapshot(),
+  ])
+  const ytmTabs = await queryLinkedYtmTabs()
+  return {
+    linked: true,
+    session,
+    room,
+    queueCount,
+    ytmTabs: ytmTabs.length,
+    ytm,
+    roomUrl: ytmqRoomUrl(session.roomId),
+  }
+}
+
 async function persistSessionInTab(tabId, session) {
   await chrome.scripting
     .executeScript({
@@ -149,14 +328,27 @@ async function injectBridge(tabId, session) {
 
       const existing = window.__YTMQ_BRIDGE__
       if (existing) {
-        if (paramsMatch(existing)) return true
-        try {
-          if (typeof existing.stop === 'function') existing.stop()
-        } catch (e) {
-          /* old bridge already broken */
+        if (paramsMatch(existing)) {
+          if (!document.getElementById('ytmq-ytm-panel')) {
+            try {
+              if (typeof existing.stop === 'function') existing.stop()
+            } catch (e) {
+              /* old bridge without panel */
+            }
+            delete window.__YTMQ_BRIDGE__
+            delete window.__YTMQ_BRIDGE_LOADING__
+          } else {
+            return true
+          }
+        } else {
+          try {
+            if (typeof existing.stop === 'function') existing.stop()
+          } catch (e) {
+            /* old bridge already broken */
+          }
+          delete window.__YTMQ_BRIDGE__
+          delete window.__YTMQ_BRIDGE_LOADING__
         }
-        delete window.__YTMQ_BRIDGE__
-        delete window.__YTMQ_BRIDGE_LOADING__
       } else if (window.__YTMQ_BRIDGE_LOADING__) {
         if (paramsMatch(window.__YTMQ_BRIDGE_PARAMS__)) return true
         delete window.__YTMQ_BRIDGE_LOADING__
@@ -367,6 +559,22 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message && message.type === 'ytmq-open-app') {
     openYtmqTab(message.roomId || '').then(
       (ok) => sendResponse({ ok }),
+      () => sendResponse({ ok: false }),
+    )
+    return true
+  }
+
+  if (message && message.type === 'ytmq-popup-state') {
+    buildPopupState().then(
+      (state) => sendResponse(state),
+      () => sendResponse({ linked: false }),
+    )
+    return true
+  }
+
+  if (message && message.type === 'ytmq-popup-action') {
+    runYtmBridgeAction(message.action || '').then(
+      (result) => sendResponse(result),
       () => sendResponse({ ok: false }),
     )
     return true

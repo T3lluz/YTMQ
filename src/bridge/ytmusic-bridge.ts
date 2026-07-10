@@ -7,7 +7,7 @@ import {
   tickNextSongToast,
   type NextSongInfo,
 } from './nextSongToast'
-import { createYtmPanel, defaultYtmqSiteBase } from './ytmPanel'
+import { createYtmPanel, defaultYtmqSiteBase, ensureYtmPanelMounted } from './ytmPanel'
 import {
   createPlayedQueueCleanup,
   type SharedQueueRow,
@@ -1194,6 +1194,7 @@ async function runBridge() {
       (existing.since || '') === (playbackSince || '')
     if (sameRoom) {
       log('Bridge already running for room', existing.roomId)
+      ensureYtmPanelMounted()
       return
     }
     try {
@@ -1592,6 +1593,7 @@ async function runBridge() {
     .subscribe((status) => {
       if (status === 'SUBSCRIBED') {
         queueJoined = true
+        ensureYtmPanelMounted()
         showToast('YTMQ connected')
         log('Subscribed to room', roomId)
         notifyHostConnected(roomId)
@@ -1655,6 +1657,25 @@ async function runBridge() {
     roomId,
     since: playbackSince,
     syncedIds,
+    getStatus() {
+      return {
+        syncedCount: syncedIds.size,
+        pendingCount: pendingRows.length,
+        connected: queueJoined,
+      }
+    },
+    next() {
+      return doNext()
+    },
+    prev() {
+      return doPrev()
+    },
+    togglePlayPause() {
+      return doToggle()
+    },
+    openQueue() {
+      nudgeQueueUi()
+    },
     addVideoPlayNext: (videoId: string) => addVideoToYtm(videoId, 'play_next'),
     addVideoToQueue: (videoId: string) => addVideoToYtm(videoId, 'queue'),
     removeVideoFromQueue: removeVideoFromQueueWithRetry,

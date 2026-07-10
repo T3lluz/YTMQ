@@ -5,6 +5,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { NextSongInfo } from './nextSongToast'
+import { appendStyleToHead, mountOverlayOnBody, type OverlayMountHandle } from './overlayMount'
 
 export type YtmPanelPlayback = {
   videoId: string
@@ -58,6 +59,7 @@ const state: PanelState = {
 }
 
 let deps: YtmPanelDeps | null = null
+let mountHandle: OverlayMountHandle | null = null
 
 function roomUrl(roomId: string, siteBase: string): string {
   const base = siteBase.replace(/\/$/, '')
@@ -109,13 +111,14 @@ function openYtmqTab(roomId: string, siteBase: string) {
 }
 
 function ensureStyles(): void {
-  if (document.getElementById(STYLE_ID)) return
-  const style = document.createElement('style')
-  style.id = STYLE_ID
-  style.textContent = `
+  appendStyleToHead(STYLE_ID, `
     @keyframes ytmq-yp-in {
       0% { opacity: 0; transform: translateY(12px) scale(0.94); filter: blur(6px); }
       100% { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+    }
+    @keyframes ytmq-yp-pill-in {
+      0% { opacity: 0; transform: translateY(16px) scale(0.9); }
+      100% { opacity: 1; transform: translateY(0) scale(1); }
     }
     @keyframes ytmq-yp-pulse {
       0%, 100% { box-shadow: 0 0 0 0 rgba(139,92,246,.45); }
@@ -123,15 +126,22 @@ function ensureStyles(): void {
     }
   #${PANEL_ID} {
     position: fixed;
-    right: 16px;
-    bottom: 92px;
-    z-index: 99998;
+    right: 20px;
+    bottom: 96px;
+    z-index: 99999;
     font: 13px/1.4 'YouTube Sans', 'Roboto', system-ui, sans-serif;
     color: #fafafa;
     pointer-events: auto;
     max-width: min(360px, calc(100vw - 24px));
+    animation: ytmq-yp-pill-in 420ms cubic-bezier(.22,1.3,.36,1) both;
+    isolation: isolate;
   }
   #${PANEL_ID} .ytmq-yp-shell {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: stretch;
+    width: max-content;
+    max-width: min(360px, calc(100vw - 24px));
     border-radius: 999px;
     border: 1px solid rgba(139,92,246,.35);
     background: linear-gradient(145deg, rgba(24,24,27,.94), rgba(39,39,42,.92));
@@ -143,8 +153,7 @@ function ensureStyles(): void {
       border-radius 360ms cubic-bezier(.22,1.2,.36,1),
       width 360ms cubic-bezier(.22,1.2,.36,1),
       max-height 420ms cubic-bezier(.22,1.2,.36,1);
-    width: auto;
-    max-height: 44px;
+    max-height: 48px;
   }
   #${PANEL_ID}.is-expanded .ytmq-yp-shell {
     border-radius: 18px;
@@ -410,7 +419,20 @@ function ensureStyles(): void {
     text-overflow: ellipsis;
   }
   `
-  document.head.appendChild(style)
+  )
+}
+
+function applyRootLayout(root: HTMLElement): void {
+  root.style.cssText = [
+    'position:fixed',
+    'right:20px',
+    'bottom:96px',
+    'z-index:99999',
+    'pointer-events:auto',
+    'max-width:min(360px,calc(100vw - 24px))',
+    'font:13px/1.4 system-ui,sans-serif',
+    'color:#fafafa',
+  ].join(';')
 }
 
 function iconSvg(paths: string): string {
@@ -492,7 +514,7 @@ async function refreshPanelData(root: HTMLElement) {
   const progressEl = root.querySelector<HTMLElement>('[data-ytmq-progress]')
   const curEl = root.querySelector<HTMLElement>('[data-ytmq-cur]')
   const durEl = root.querySelector<HTMLElement>('[data-ytmq-dur]')
-  const nextEl = root.querySelector<HTMLElement>('[data-ytmq-next]')
+  const nextEl = root.querySelector<HTMLElement>('[data-ytmq-upnext]')
   const playBtn = root.querySelector<HTMLButtonElement>('[data-ytmq-play]')
 
   if (!state.roomCode) {
@@ -571,15 +593,22 @@ function tickRefresh(root: HTMLElement) {
   void refreshPanelData(root)
 }
 
+export function ensureYtmPanelMounted(): void {
+  mountHandle?.ensure()
+}
+
 export function createYtmPanel(panelDeps: YtmPanelDeps): { destroy: () => void } {
   deps = panelDeps
   ensureStyles()
+  mountHandle?.destroy()
+  mountHandle = null
   document.getElementById(PANEL_ID)?.remove()
 
   const root = document.createElement('div')
   root.id = PANEL_ID
   root.setAttribute('role', 'region')
   root.setAttribute('aria-label', 'YTMQ controls')
+  applyRootLayout(root)
 
   root.innerHTML = `
     <div class="ytmq-yp-shell">
@@ -617,7 +646,7 @@ export function createYtmPanel(panelDeps: YtmPanelDeps): { destroy: () => void }
               <button type="button" class="ytmq-yp-ctl is-primary" data-ytmq-play aria-label="Play">${iconSvg('<path d="M8 5v14l11-7z"/>')}</button>
               <button type="button" class="ytmq-yp-ctl" data-ytmq-next aria-label="Next">${iconSvg('<path d="m9 18 6-6-6-6"/><path d="M19 6v12"/>')}</button>
             </div>
-            <div class="ytmq-yp-next" data-ytmq-next><span>Up next</span><strong>—</strong></div>
+            <div class="ytmq-yp-next" data-ytmq-upnext><span>Up next</span><strong>—</strong></div>
           </div>
           <div class="ytmq-yp-section">
             <div class="ytmq-yp-label">Quick actions</div>
@@ -681,7 +710,8 @@ export function createYtmPanel(panelDeps: YtmPanelDeps): { destroy: () => void }
     toggle.setAttribute('aria-expanded', 'false')
   })
 
-  document.body.appendChild(root)
+  mountHandle = mountOverlayOnBody(root)
+  mountHandle.ensure()
 
   void fetchRoomCode(panelDeps).then((code) => {
     state.roomCode = code
@@ -695,7 +725,8 @@ export function createYtmPanel(panelDeps: YtmPanelDeps): { destroy: () => void }
       window.clearInterval(state.refreshTimer)
       state.refreshTimer = 0
       unbindOutsideClose()
-      root.remove()
+      mountHandle?.destroy()
+      mountHandle = null
       document.getElementById(STYLE_ID)?.remove()
       deps = null
       state.expanded = false

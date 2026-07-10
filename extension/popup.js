@@ -2,45 +2,48 @@ var SESSION_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000
 var YTMQ_SITE = 'https://t3lluz.github.io/YTMQ'
 var YTM_ORIGIN = 'https://music.youtube.com'
 
-var currentSession = null
+var popupState = { linked: false }
+var refreshTimer = 0
+var toastTimer = 0
 
-function isActiveSession(session) {
-  return Boolean(
-    session &&
-      session.roomId &&
-      session.sb &&
-      session.key &&
-      Date.now() - (session.at || 0) < SESSION_MAX_AGE_MS,
-  )
+function $(id) {
+  return document.getElementById(id)
 }
 
-function render(session) {
-  currentSession = isActiveSession(session) ? session : null
-  var active = Boolean(currentSession)
-
-  document.getElementById('dot').classList.toggle('on', active)
-  document.getElementById('status-text').textContent = active
-    ? 'Linked — YT Music tabs auto-connect'
-    : 'Not linked to a room'
-
-  var room = document.getElementById('room')
-  room.classList.toggle('hidden', !active)
-  if (active) room.textContent = 'Room ' + currentSession.roomId
-
-  document.getElementById('hint').classList.toggle('hidden', active)
-  document.getElementById('disconnect').classList.toggle('hidden', !active)
+function send(message) {
+  return new Promise(function (resolve) {
+    try {
+      chrome.runtime.sendMessage(message, function (response) {
+        void chrome.runtime.lastError
+        resolve(response)
+      })
+    } catch (e) {
+      resolve(null)
+    }
+  })
 }
 
-chrome.storage.local.get('ytmq_session', function (data) {
-  render(data && data.ytmq_session)
-})
+function showToast(message) {
+  var el = $('toast')
+  el.textContent = message
+  el.classList.add('show')
+  window.clearTimeout(toastTimer)
+  toastTimer = window.setTimeout(function () {
+    el.classList.remove('show')
+  }, 2200)
+}
 
-// Keep the popup live if the app updates the session while it's open.
-chrome.storage.onChanged.addListener(function (changes, area) {
-  if (area === 'local' && changes.ytmq_session) {
-    render(changes.ytmq_session.newValue)
-  }
-})
+function formatTime(seconds) {
+  if (!Number.isFinite(seconds) || seconds < 0) return '0:00'
+  var total = Math.floor(seconds)
+  var m = Math.floor(total / 60)
+  var s = total % 60
+  return m + ':' + (s < 10 ? '0' : '') + s
+}
+
+function shortRoomId(roomId) {
+  return roomId.length > 8 ? roomId.slice(0, 8) + '…' : roomId
+}
 
 function focusTab(tab) {
   chrome.tabs.update(tab.id, { active: true }, function () {
@@ -51,28 +54,20 @@ function focusTab(tab) {
   })
 }
 
-/** Most recently used first, so we reopen what the user was looking at. */
 function byLastAccessed(a, b) {
   return (b.lastAccessed || 0) - (a.lastAccessed || 0)
 }
 
-/**
- * Open YTMQ: focus the app tab that's already open (that IS the current
- * lobby) instead of spawning a new tab pointing at a possibly stale room.
- * Only when no app tab exists do we fall back to the stored session's room,
- * then to the landing page.
- */
-document.getElementById('open-ytmq').addEventListener('click', function () {
+function openYtmqTab(roomId) {
   chrome.tabs.query({ url: YTMQ_SITE + '/*' }, function (tabs) {
     void chrome.runtime.lastError
     tabs = tabs || []
     if (tabs.length > 0) {
       tabs.sort(byLastAccessed)
-      // Prefer the tab already showing the linked room, if any.
       var target = tabs[0]
-      if (currentSession) {
+      if (roomId) {
         for (var i = 0; i < tabs.length; i += 1) {
-          if (tabs[i].url && tabs[i].url.indexOf(currentSession.roomId) !== -1) {
+          if (tabs[i].url && tabs[i].url.indexOf(roomId) !== -1) {
             target = tabs[i]
             break
           }
@@ -82,16 +77,14 @@ document.getElementById('open-ytmq').addEventListener('click', function () {
       window.close()
       return
     }
-
-    var url = currentSession
-      ? YTMQ_SITE + '/room/' + encodeURIComponent(currentSession.roomId)
+    var url = roomId
+      ? YTMQ_SITE + '/room/' + encodeURIComponent(roomId)
       : YTMQ_SITE + '/'
     chrome.tabs.create({ url: url })
   })
-})
+}
 
-/** Open YT Music: focus an existing tab instead of always opening another. */
-document.getElementById('open-ytm').addEventListener('click', function () {
+function openYtmTab() {
   chrome.tabs.query({ url: YTM_ORIGIN + '/*' }, function (tabs) {
     void chrome.runtime.lastError
     tabs = tabs || []
@@ -103,11 +96,151 @@ document.getElementById('open-ytm').addEventListener('click', function () {
     }
     chrome.tabs.create({ url: YTM_ORIGIN })
   })
+}
+
+function setPlaybackControlsEnabled(enabled) {
+  $('ctl-prev').disabled = !enabled
+  $('ctl-play').disabled = !enabled
+  $('ctl-next').disabled = !enabled
+  $('sync-queue').disabled = !enabled
+  $('open-queue').disabled = !enabled
+  if (enabled) {
+    $('now-card').classList.remove('disabled-section')
+  } else {
+    $('now-card').classList.add('disabled-section')
+  }
+}
+
+function render(state) {
+  popupState = state || { linked: false }
+  var linked = Boolean(state && state.linked)
+
+  $('hint').classList.toggle('hidden', linked)
+  $('linked').classList.toggle('hidden', !linked)
+  $('unlinked').classList.toggle('hidden', linked)
+
+  if (!linked) {
+    setPlaybackControlsEnabled(false)
+    return
+  }
+
+  var room = state.room || {}
+  var ytm = state.ytm || {}
+  var live = Boolean(ytm.bridgeActive && ytm.bridgeConnected)
+
+  $('badge').classList.toggle('off', !live)
+  $('badge-text').textContent = live ? 'Live' : ytm.bridgeActive ? 'Bridge only' : 'No bridge'
+  $('lobby-code').textContent = room.code || shortRoomId(room.roomId || state.session.roomId)
+  $('lobby-meta').textContent =
+    'Room ' + shortRoomId(state.session.roomId) + ' · ' + (state.ytmTabs || 0) + ' YT tab(s)'
+
+  $('stat-queue').textContent = String(state.queueCount || 0)
+  $('stat-pending').textContent = String(ytm.pendingCount || 0)
+  $('stat-synced').textContent = String(ytm.syncedCount || 0)
+
+  $('track-title').textContent = ytm.title || '—'
+  $('track-artist').textContent = ytm.artist || '—'
+
+  var pct = 0
+  if (ytm.duration > 0) {
+    pct = Math.min(100, Math.max(0, (ytm.currentTime / ytm.duration) * 100))
+  }
+  $('progress-bar').style.width = pct + '%'
+  $('time-cur').textContent = formatTime(ytm.currentTime || 0)
+  $('time-dur').textContent = formatTime(ytm.duration || 0)
+
+  var playing = ytm.state === 'playing'
+  $('icon-play').classList.toggle('hidden', playing)
+  $('icon-pause').classList.toggle('hidden', !playing)
+  $('ctl-play').setAttribute('aria-label', playing ? 'Pause' : 'Play')
+
+  setPlaybackControlsEnabled(ytm.bridgeActive)
+}
+
+async function refresh() {
+  var state = await send({ type: 'ytmq-popup-state' })
+  render(state)
+}
+
+function runAction(action) {
+  return send({ type: 'ytmq-popup-action', action: action })
+}
+
+$('open-ytmq').addEventListener('click', function () {
+  openYtmqTab(popupState.session && popupState.session.roomId)
+})
+$('open-ytmq-idle').addEventListener('click', function () {
+  openYtmqTab(null)
+})
+$('focus-ytmq').addEventListener('click', function () {
+  openYtmqTab(popupState.session && popupState.session.roomId)
+  showToast('Switching to YTMQ…')
 })
 
-document.getElementById('disconnect').addEventListener('click', function () {
-  chrome.runtime.sendMessage({ type: 'ytmq-disconnect' }, function () {
-    void chrome.runtime.lastError
-    render(null)
+$('open-ytm').addEventListener('click', openYtmTab)
+$('open-ytm-idle').addEventListener('click', openYtmTab)
+
+$('sync-queue').addEventListener('click', function () {
+  void runAction('syncAll').then(function (res) {
+    if (res && res.ok) showToast('Synced ' + (res.synced || 0) + ' track(s)')
+    else showToast('Could not sync — open YouTube Music')
+    void refresh()
   })
+})
+
+$('copy-link').addEventListener('click', function () {
+  var link = popupState.roomUrl || YTMQ_SITE + '/'
+  void navigator.clipboard.writeText(link).then(
+    function () {
+      showToast('Room link copied')
+    },
+    function () {
+      showToast('Could not copy link')
+    },
+  )
+})
+
+$('open-queue').addEventListener('click', function () {
+  void runAction('openQueue').then(function (res) {
+    if (res && res.ok) {
+      showToast('Opening YT queue')
+      openYtmTab()
+    } else showToast('Open YouTube Music first')
+  })
+})
+
+$('ctl-prev').addEventListener('click', function () {
+  void runAction('prev').then(function () {
+    window.setTimeout(refresh, 400)
+  })
+})
+$('ctl-next').addEventListener('click', function () {
+  void runAction('next').then(function () {
+    window.setTimeout(refresh, 400)
+  })
+})
+$('ctl-play').addEventListener('click', function () {
+  void runAction('toggle').then(function () {
+    window.setTimeout(refresh, 400)
+  })
+})
+
+$('disconnect').addEventListener('click', function () {
+  void send({ type: 'ytmq-disconnect' }).then(function () {
+    showToast('Disconnected')
+    void refresh()
+  })
+})
+
+chrome.storage.onChanged.addListener(function (changes, area) {
+  if (area === 'local' && changes.ytmq_session) void refresh()
+})
+
+void refresh()
+refreshTimer = window.setInterval(function () {
+  void refresh()
+}, 2500)
+
+window.addEventListener('unload', function () {
+  window.clearInterval(refreshTimer)
 })

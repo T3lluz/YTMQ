@@ -169,6 +169,7 @@ document.addEventListener(
   'yt-navigate-finish',
   function () {
     captureUrlParamsNow()
+    injectRequested = false
     scheduleTry()
   },
   true,
