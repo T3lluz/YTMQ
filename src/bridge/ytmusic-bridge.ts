@@ -7,7 +7,7 @@ import {
   tickNextSongToast,
   type NextSongInfo,
 } from './nextSongToast'
-import { createYtmPanel, defaultYtmqSiteBase, ensureYtmPanelMounted } from './ytmPanel'
+import { startPanelBridge, defaultYtmqSiteBase, ensurePanelMounted } from './panelBridge'
 import {
   createPlayedQueueCleanup,
   type SharedQueueRow,
@@ -1194,7 +1194,7 @@ async function runBridge() {
       (existing.since || '') === (playbackSince || '')
     if (sameRoom) {
       log('Bridge already running for room', existing.roomId)
-      ensureYtmPanelMounted()
+      ensurePanelMounted()
       return
     }
     try {
@@ -1593,7 +1593,7 @@ async function runBridge() {
     .subscribe((status) => {
       if (status === 'SUBSCRIBED') {
         queueJoined = true
-        ensureYtmPanelMounted()
+        ensurePanelMounted()
         showToast('YTMQ connected')
         log('Subscribed to room', roomId)
         notifyHostConnected(roomId)
@@ -1632,17 +1632,13 @@ async function runBridge() {
     return added
   }
 
-  const ytmPanel = createYtmPanel({
+  const panelBridge = startPanelBridge({
     roomId,
     siteBase: defaultYtmqSiteBase(),
     supabase,
     isConnected: () => queueJoined,
     readNowPlaying: () => readNowPlaying(),
     readNextSong: getNextSongInfo,
-    getPendingCount: () => pendingRows.length,
-    getSyncedCount: () => syncedIds.size,
-    syncAll: syncAllTracks,
-    nudgeQueueUi,
     onPlayPause: doToggle,
     onNext: () => {
       doNext()
@@ -1689,7 +1685,7 @@ async function runBridge() {
         window.clearTimeout(playbackReconnectTimer)
       }
       hideNextSongToast({ immediate: true })
-      ytmPanel.destroy()
+      panelBridge.destroy()
       void supabase.removeChannel(channel)
       void supabase.removeChannel(playbackChannel)
       delete window.__YTMQ_BRIDGE__

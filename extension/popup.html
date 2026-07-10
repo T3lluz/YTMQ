@@ -125,7 +125,7 @@
       }
       .stats {
         display: grid;
-        grid-template-columns: repeat(3, 1fr);
+        grid-template-columns: 1fr 1fr;
         gap: 6px;
         margin-top: 8px;
       }
@@ -311,7 +311,6 @@
       }
       .disabled-section {
         opacity: 0.55;
-        pointer-events: none;
       }
     </style>
   </head>
@@ -340,9 +339,8 @@
           <div id="lobby-code" class="lobby-code">····</div>
           <div id="lobby-meta" class="lobby-meta">Room</div>
           <div class="stats">
-            <div class="stat"><strong id="stat-queue">0</strong><span>Queue</span></div>
-            <div class="stat"><strong id="stat-pending">0</strong><span>Pending</span></div>
-            <div class="stat"><strong id="stat-synced">0</strong><span>Synced</span></div>
+            <div class="stat"><strong id="stat-queue">0</strong><span>In queue</span></div>
+            <div class="stat"><strong id="stat-participants">0</strong><span>Participants</span></div>
           </div>
         </div>
 
@@ -385,9 +383,7 @@
               </span>
               <span class="btn-label">YT Music</span>
             </button>
-            <button id="sync-queue" class="btn btn-muted" type="button">Sync queue</button>
             <button id="copy-link" class="btn btn-muted" type="button">Copy link</button>
-            <button id="open-queue" class="btn btn-muted" type="button">Open YT queue</button>
             <button id="focus-ytmq" class="btn btn-muted" type="button">Switch to YTMQ</button>
             <button id="disconnect" class="btn btn-danger" type="button">Disconnect</button>
           </div>

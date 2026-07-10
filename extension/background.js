@@ -138,6 +138,25 @@ async function fetchQueueCount(session) {
   return match ? Number(match[1]) : 0
 }
 
+async function fetchParticipantCount(session) {
+  const url = new URL(`${session.sb}/rest/v1/participants`)
+  url.searchParams.set('room_id', `eq.${session.roomId}`)
+  url.searchParams.set('kicked', 'eq.false')
+  url.searchParams.set('select', 'client_id')
+  const res = await fetch(url, {
+    method: 'HEAD',
+    headers: {
+      apikey: session.key,
+      Authorization: `Bearer ${session.key}`,
+      Prefer: 'count=exact',
+    },
+  })
+  if (!res.ok) return 0
+  const range = res.headers.get('content-range') || ''
+  const match = range.match(/\/(\d+)$/)
+  return match ? Number(match[1]) : 0
+}
+
 async function fetchRoomMeta(session) {
   const data = await supabaseRpc(session, 'get_room', {
     p_room_id: session.roomId,
@@ -164,6 +183,17 @@ async function readYtmSnapshot() {
         world: 'MAIN',
         func: () => {
           const bridge = window.__YTMQ_BRIDGE__
+          const bridgeActive = Boolean(bridge)
+          let bridgeConnected = bridgeActive
+          if (bridge && typeof bridge.getStatus === 'function') {
+            try {
+              const status = bridge.getStatus()
+              bridgeConnected = status.connected !== false
+            } catch (e) {
+              bridgeConnected = bridgeActive
+            }
+          }
+
           const bar = document.querySelector('ytmusic-player-bar')
           const title =
             bar?.querySelector('.title')?.textContent?.trim() ||
@@ -186,21 +216,15 @@ async function readYtmSnapshot() {
           } catch (e) {
             /* player not ready */
           }
-          const status = bridge?.getStatus?.() || {
-            syncedCount: bridge?.syncedIds?.size ?? 0,
-            pendingCount: 0,
-            connected: Boolean(bridge),
-          }
           return {
-            bridgeActive: Boolean(bridge),
+            bridgeActive,
+            bridgeConnected,
+            hasPlayer: Boolean(bar),
             title: title || 'Nothing playing',
             artist,
             currentTime,
             duration,
             state,
-            syncedCount: status.syncedCount ?? 0,
-            pendingCount: status.pendingCount ?? 0,
-            bridgeConnected: status.connected ?? Boolean(bridge),
           }
         },
       })
@@ -211,16 +235,87 @@ async function readYtmSnapshot() {
   }
   return {
     bridgeActive: false,
+    bridgeConnected: false,
+    hasPlayer: false,
     title: 'No YouTube Music tab',
     artist: '',
     currentTime: 0,
     duration: 0,
     state: 'unknown',
-    syncedCount: 0,
-    pendingCount: 0,
-    bridgeConnected: false,
     ytmTabId: null,
   }
+}
+
+async function runYtmDomPlayback(action) {
+  const tabs = await queryLinkedYtmTabs()
+  for (const tab of tabs) {
+    try {
+      const [{ result }] = await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        world: 'MAIN',
+        func: (kind) => {
+          const bar = document.querySelector('ytmusic-player-bar')
+          if (!bar) return { ok: false, reason: 'no_player' }
+          const click = (selector) => {
+            const btn = bar.querySelector(selector)
+            if (btn) {
+              btn.click()
+              return true
+            }
+            return false
+          }
+          if (kind === 'toggle') {
+            if (click('#play-pause-button')) return { ok: true }
+            if (click('button[aria-label*="Pause" i]')) return { ok: true }
+            if (click('button[aria-label*="Play" i]')) return { ok: true }
+            const api = bar.playerApi
+            if (api) {
+              const code = api.getPlayerState?.()
+              if (code === 1 || code === 3) {
+                api.pauseVideo?.()
+                return { ok: true }
+              }
+              api.playVideo?.()
+              return { ok: true }
+            }
+          }
+          if (kind === 'next') {
+            if (bar.playerApi?.nextVideo) {
+              bar.playerApi.nextVideo()
+              return { ok: true }
+            }
+            if (click('.next-button, tp-yt-paper-icon-button.next-button, button[aria-label*="Next" i]')) {
+              return { ok: true }
+            }
+          }
+          if (kind === 'prev') {
+            if (bar.playerApi?.previousVideo) {
+              bar.playerApi.previousVideo()
+              return { ok: true }
+            }
+            if (click('.previous-button, tp-yt-paper-icon-button.previous-button, button[aria-label*="Previous" i]')) {
+              return { ok: true }
+            }
+          }
+          return { ok: false, reason: 'control_failed' }
+        },
+        args: [action],
+      })
+      if (result?.ok) return result
+    } catch (e) {
+      /* try next tab */
+    }
+  }
+  return { ok: false, reason: 'no_tab' }
+}
+
+async function runYtmPlayback(action) {
+  if (action === 'syncAll' || action === 'openQueue') {
+    return runYtmBridgeAction(action)
+  }
+  const bridgeResult = await runYtmBridgeAction(action)
+  if (bridgeResult?.ok) return bridgeResult
+  return runYtmDomPlayback(action)
 }
 
 async function runYtmBridgeAction(action) {
@@ -268,9 +363,10 @@ async function buildPopupState() {
   if (!isValidSession(session) || Date.now() - (session.at || 0) >= SESSION_MAX_AGE_MS) {
     return { linked: false }
   }
-  const [room, queueCount, ytm] = await Promise.all([
+  const [room, queueCount, participantCount, ytm] = await Promise.all([
     fetchRoomMeta(session),
     fetchQueueCount(session),
+    fetchParticipantCount(session),
     readYtmSnapshot(),
   ])
   const ytmTabs = await queryLinkedYtmTabs()
@@ -279,6 +375,7 @@ async function buildPopupState() {
     session,
     room,
     queueCount,
+    participantCount,
     ytmTabs: ytmTabs.length,
     ytm,
     roomUrl: ytmqRoomUrl(session.roomId),
@@ -329,7 +426,7 @@ async function injectBridge(tabId, session) {
       const existing = window.__YTMQ_BRIDGE__
       if (existing) {
         if (paramsMatch(existing)) {
-          if (!document.getElementById('ytmq-ytm-panel')) {
+          if (!document.getElementById('ytmq-ytm-panel') && !document.getElementById('ytmq-ext-host')) {
             try {
               if (typeof existing.stop === 'function') existing.stop()
             } catch (e) {
@@ -573,7 +670,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message && message.type === 'ytmq-popup-action') {
-    runYtmBridgeAction(message.action || '').then(
+    runYtmPlayback(message.action || '').then(
       (result) => sendResponse(result),
       () => sendResponse({ ok: false }),
     )

@@ -188,11 +188,13 @@ function sendToBackground(message) {
 window.addEventListener('message', function (event) {
   if (event.source !== window) return
   var data = event.data
-  if (!data || data.source !== UI_SOURCE) return
-  if (data.type === 'ytmq:focus-app') {
-    sendToBackground({ type: 'ytmq-focus-app', roomId: data.roomId || '' })
-  }
-  if (data.type === 'ytmq:open-app') {
-    sendToBackground({ type: 'ytmq-open-app', roomId: data.roomId || '' })
+  if (!data) return
+  if (data.source === UI_SOURCE || data.source === 'ytmq-panel-ui') {
+    if (data.type === 'ytmq:focus-app') {
+      sendToBackground({ type: 'ytmq-focus-app', roomId: data.roomId || '' })
+    }
+    if (data.type === 'ytmq:open-app') {
+      sendToBackground({ type: 'ytmq-open-app', roomId: data.roomId || '' })
+    }
   }
 })

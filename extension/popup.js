@@ -102,13 +102,6 @@ function setPlaybackControlsEnabled(enabled) {
   $('ctl-prev').disabled = !enabled
   $('ctl-play').disabled = !enabled
   $('ctl-next').disabled = !enabled
-  $('sync-queue').disabled = !enabled
-  $('open-queue').disabled = !enabled
-  if (enabled) {
-    $('now-card').classList.remove('disabled-section')
-  } else {
-    $('now-card').classList.add('disabled-section')
-  }
 }
 
 function render(state) {
@@ -126,17 +119,24 @@ function render(state) {
 
   var room = state.room || {}
   var ytm = state.ytm || {}
-  var live = Boolean(ytm.bridgeActive && ytm.bridgeConnected)
+  var hasYtm = (state.ytmTabs || 0) > 0
+  var live = Boolean(ytm.bridgeConnected || (ytm.bridgeActive && hasYtm) || (hasYtm && ytm.hasPlayer))
 
   $('badge').classList.toggle('off', !live)
-  $('badge-text').textContent = live ? 'Live' : ytm.bridgeActive ? 'Bridge only' : 'No bridge'
+  $('badge-text').textContent = live
+    ? 'Live'
+    : hasYtm
+      ? ytm.bridgeActive
+        ? 'Connected'
+        : 'YT Music open'
+      : 'No YT tab'
+
   $('lobby-code').textContent = room.code || shortRoomId(room.roomId || state.session.roomId)
   $('lobby-meta').textContent =
     'Room ' + shortRoomId(state.session.roomId) + ' · ' + (state.ytmTabs || 0) + ' YT tab(s)'
 
   $('stat-queue').textContent = String(state.queueCount || 0)
-  $('stat-pending').textContent = String(ytm.pendingCount || 0)
-  $('stat-synced').textContent = String(ytm.syncedCount || 0)
+  $('stat-participants').textContent = String(state.participantCount || 0)
 
   $('track-title').textContent = ytm.title || '—'
   $('track-artist').textContent = ytm.artist || '—'
@@ -154,7 +154,8 @@ function render(state) {
   $('icon-pause').classList.toggle('hidden', !playing)
   $('ctl-play').setAttribute('aria-label', playing ? 'Pause' : 'Play')
 
-  setPlaybackControlsEnabled(ytm.bridgeActive)
+  setPlaybackControlsEnabled(hasYtm)
+  $('now-card').classList.toggle('disabled-section', !hasYtm)
 }
 
 async function refresh() {
@@ -180,14 +181,6 @@ $('focus-ytmq').addEventListener('click', function () {
 $('open-ytm').addEventListener('click', openYtmTab)
 $('open-ytm-idle').addEventListener('click', openYtmTab)
 
-$('sync-queue').addEventListener('click', function () {
-  void runAction('syncAll').then(function (res) {
-    if (res && res.ok) showToast('Synced ' + (res.synced || 0) + ' track(s)')
-    else showToast('Could not sync — open YouTube Music')
-    void refresh()
-  })
-})
-
 $('copy-link').addEventListener('click', function () {
   var link = popupState.roomUrl || YTMQ_SITE + '/'
   void navigator.clipboard.writeText(link).then(
@@ -200,27 +193,21 @@ $('copy-link').addEventListener('click', function () {
   )
 })
 
-$('open-queue').addEventListener('click', function () {
-  void runAction('openQueue').then(function (res) {
-    if (res && res.ok) {
-      showToast('Opening YT queue')
-      openYtmTab()
-    } else showToast('Open YouTube Music first')
-  })
-})
-
 $('ctl-prev').addEventListener('click', function () {
-  void runAction('prev').then(function () {
+  void runAction('prev').then(function (res) {
+    if (!res || !res.ok) showToast('Could not skip back')
     window.setTimeout(refresh, 400)
   })
 })
 $('ctl-next').addEventListener('click', function () {
-  void runAction('next').then(function () {
+  void runAction('next').then(function (res) {
+    if (!res || !res.ok) showToast('Could not skip forward')
     window.setTimeout(refresh, 400)
   })
 })
 $('ctl-play').addEventListener('click', function () {
-  void runAction('toggle').then(function () {
+  void runAction('toggle').then(function (res) {
+    if (!res || !res.ok) showToast('Could not toggle playback')
     window.setTimeout(refresh, 400)
   })
 })
