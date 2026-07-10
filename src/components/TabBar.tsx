@@ -257,7 +257,9 @@ export function TabBar({
   const tabs = showAdmin ? [...baseTabs, adminTab] : baseTabs
   const [shareOpen, setShareOpen] = useState(false)
 
-  const iconWrapRefs = useRef<Partial<Record<RoomTab, HTMLSpanElement>>>({})
+  const iconWrapRefs = useRef<Partial<Record<RoomTab, HTMLSpanElement | null>>>(
+    {},
+  )
 
   const replayIconAnimation = (id: RoomTab) => {
     const el = iconWrapRefs.current[id]
