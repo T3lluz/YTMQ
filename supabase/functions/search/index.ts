@@ -1,5 +1,6 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts'
 import {
+  ARTIST_TRACKS_LIMIT,
   fetchYtmAlbumTracks,
   fetchYtmArtistDetail,
   fetchYtmArtistTracks,
@@ -7,6 +8,9 @@ import {
   fetchYtmDiscover,
   fetchYtmMoodPlaylists,
   fetchYtmPlaylistTracks,
+  SEARCH_ALL_LIMIT,
+  SEARCH_ARTIST_LIMIT,
+  SEARCH_SONG_LIMIT,
   searchYtmAll,
   searchYtmArtists,
   searchYtmSongs,
@@ -67,6 +71,7 @@ async function parseBody(req: Request): Promise<{
   browseId?: string
   country?: string
   params?: string
+  limit?: number
 }> {
   if (req.method === 'GET') {
     return parseRequest(req)
@@ -80,6 +85,7 @@ async function parseBody(req: Request): Promise<{
       browseId?: string
       country?: string
       params?: string
+      limit?: number
     }
     return {
       q: body.q?.trim() ?? '',
@@ -88,6 +94,10 @@ async function parseBody(req: Request): Promise<{
       browseId: body.browseId,
       country: body.country,
       params: body.params,
+      limit:
+        typeof body.limit === 'number' && body.limit > 0
+          ? Math.min(body.limit, 100)
+          : undefined,
     }
   } catch {
     return parseRequest(req)
@@ -100,7 +110,8 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { q, type, channelId, browseId, country, params } = await parseBody(req)
+    const { q, type, channelId, browseId, country, params, limit } =
+      await parseBody(req)
 
     if (type === 'discover') {
       const discover = await fetchYtmDiscover(country ?? 'ZZ')
@@ -132,7 +143,10 @@ Deno.serve(async (req) => {
       if (!channelId) {
         return jsonResponse({ error: 'channelId is required' }, 400)
       }
-      const results = await fetchYtmArtistTracks(channelId)
+      const results = await fetchYtmArtistTracks(
+        channelId,
+        limit ?? ARTIST_TRACKS_LIMIT,
+      )
       return jsonResponse({ results })
     }
 
@@ -159,11 +173,11 @@ Deno.serve(async (req) => {
 
     let results: YtmSearchResult[] = []
     if (type === 'artist') {
-      results = await searchYtmArtists(q)
+      results = await searchYtmArtists(q, limit ?? SEARCH_ARTIST_LIMIT)
     } else if (type === 'song') {
-      results = await searchYtmSongs(q)
+      results = await searchYtmSongs(q, limit ?? SEARCH_SONG_LIMIT)
     } else {
-      results = await searchYtmAll(q)
+      results = await searchYtmAll(q, limit ?? SEARCH_ALL_LIMIT)
     }
 
     return jsonResponse({ results })

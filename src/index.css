@@ -416,11 +416,17 @@ textarea,
 
 /* ----------------------------------------------------------------------------
    Tab bar icon entrance animations
-   The wrapper span (.ytmq-tab-icon-anim-{id}) remounts via React key on each
-   tap, restarting the one-shot CSS animation on the targeted sub-element.
+   Replay via classList toggle on the wrapper (see TabBar.tsx) — never remount
+   the icon node, or stacked SVG layers flash during tab switches.
    SVG sub-elements use transform-box: fill-box so transform-origin is
    relative to the element's own bounding box, not the SVG viewport.
    --------------------------------------------------------------------------- */
+
+.ytmq-tab-icon-wrap {
+  display: inline-block;
+  isolation: isolate;
+  contain: layout style paint;
+}
 
 /* Search — whole icon flips on vertical axis */
 @keyframes ytmq-tab-spin-y {

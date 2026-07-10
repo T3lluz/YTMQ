@@ -82,19 +82,48 @@ function songArtistLine(
 }
 
 function pickMusicThumbnail(thumbnail: unknown): string {
-  if (!thumbnail || typeof thumbnail !== 'object') return ''
-  const renderer = thumbnail as {
-    musicThumbnailRenderer?: {
-      thumbnail?: { thumbnails?: Array<{ url?: string }> }
+  if (!thumbnail) return ''
+  if (typeof thumbnail === 'string') return thumbnail
+
+  function extract(node: unknown, depth = 0): string {
+    if (!node || typeof node !== 'object' || depth > 5) return ''
+    const obj = node as Record<string, unknown>
+
+    const thumbs = obj.thumbnails as Array<{ url?: string }> | undefined
+    if (thumbs?.length) {
+      const best = thumbs[thumbs.length - 1] ?? thumbs[0]
+      if (best?.url) return best.url
     }
-    thumbnails?: Array<{ url?: string }>
+
+    const nested = [
+      obj.musicThumbnailRenderer,
+      obj.croppedSquareImageRenderer,
+      obj.thumbnail,
+      obj.content,
+    ]
+    for (const child of nested) {
+      const url = extract(child, depth + 1)
+      if (url) return url
+    }
+
+    for (const key of Object.keys(obj)) {
+      if (key.endsWith('Renderer') || key === 'thumbnail') {
+        const url = extract(obj[key], depth + 1)
+        if (url) return url
+      }
+    }
+    return ''
   }
-  const thumbs =
-    renderer.musicThumbnailRenderer?.thumbnail?.thumbnails ??
-    renderer.thumbnails
-  const list = thumbs ?? []
-  const best = list[list.length - 1] ?? list[0]
-  return best?.url ?? ''
+
+  return extract(thumbnail)
+}
+
+function artistThumbnailSource(item: JsonObject): unknown {
+  return (
+    (item.thumbnailRenderer as { musicThumbnailRenderer?: unknown })
+      ?.musicThumbnailRenderer ??
+    item.thumbnail ??
+  )
 }
 
 function watchVideoId(endpoint: unknown): string | null {
@@ -241,7 +270,7 @@ function parseArtistItem(item: JsonObject): YtmSearchResult | null {
     id,
     title,
     channelTitle: channelTitle || title,
-    thumbnail: pickMusicThumbnail(item.thumbnail),
+    thumbnail: pickMusicThumbnail(artistThumbnailSource(item)),
     type: 'artist',
   }
 }
@@ -590,6 +619,14 @@ function parseAudience(text: string): number {
  * is a song, we keep that song on top (e.g. "rolling in the deep"). Without a
  * usable card we fall back to name-match heuristics.
  */
+function withThumbnail(
+  item: YtmSearchResult,
+  fallback?: string,
+): YtmSearchResult {
+  if (item.thumbnail || !fallback) return item
+  return { ...item, thumbnail: fallback }
+}
+
 function chooseTopResult(
   query: string,
   songs: YtmSearchResult[],
@@ -608,7 +645,8 @@ function chooseTopResult(
       .sort((a, b) => b.pop - a.pop || b.score - a.score)[0]?.item ?? null
 
   if (header?.type === 'artist') {
-    return bestArtist ?? header
+    const picked = bestArtist ?? header
+    return withThumbnail(picked, header.thumbnail)
   }
   if (header?.type === 'song') {
     return header
@@ -1249,9 +1287,15 @@ export async function fetchYtmDiscover(country = 'ZZ'): Promise<YtmDiscover> {
   }
 }
 
+export const SEARCH_SONG_LIMIT = 40
+export const SEARCH_ARTIST_LIMIT = 30
+export const SEARCH_ALL_LIMIT = 60
+export const SEARCH_ALL_ARTIST_SLOTS = 10
+export const ARTIST_TRACKS_LIMIT = 80
+
 export async function searchYtmSongs(
   query: string,
-  limit = 20,
+  limit = SEARCH_SONG_LIMIT,
 ): Promise<YtmSearchResult[]> {
   const data = await ytmusicRequest('search', {
     query,
@@ -1262,7 +1306,7 @@ export async function searchYtmSongs(
 
 export async function searchYtmArtists(
   query: string,
-  limit = 15,
+  limit = SEARCH_ARTIST_LIMIT,
 ): Promise<YtmSearchResult[]> {
   const data = await ytmusicRequest('search', {
     query,
@@ -1273,11 +1317,11 @@ export async function searchYtmArtists(
 
 export async function searchYtmAll(
   query: string,
-  limit = 25,
+  limit = SEARCH_ALL_LIMIT,
 ): Promise<YtmSearchResult[]> {
   // Up to this many artist slots are reserved so artists are never crowded
   // out by the (typically far more numerous) song results.
-  const ARTIST_SLOTS = 4
+  const ARTIST_SLOTS = SEARCH_ALL_ARTIST_SLOTS
 
   const [mixedData, songData, artistData] = await Promise.all([
     ytmusicRequest('search', { query }),
@@ -1341,8 +1385,10 @@ export async function searchYtmAll(
 
 export async function fetchYtmArtistTracks(
   browseId: string,
+  limit = ARTIST_TRACKS_LIMIT,
 ): Promise<YtmSearchResult[]> {
-  return fetchAllArtistSongs(browseId)
+  const songs = await fetchAllArtistSongs(browseId)
+  return songs.slice(0, limit)
 }
 
 export async function fetchYtmArtistDetail(

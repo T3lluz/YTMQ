@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import {
+  searchArtistTracks,
   searchByFilter,
   type SearchFilter,
   type SearchResultItem,
@@ -7,6 +8,7 @@ import {
 import { TrackRow } from './TrackRow'
 import { useQueueAdder } from '../hooks/useQueueAdder'
 import {
+  defaultArtistThumbnail,
   defaultThumbnail,
   type AddTrackInput,
   type QueueInsertMode,
@@ -26,6 +28,8 @@ const FILTERS: { id: SearchFilter; label: string }[] = [
   { id: 'song', label: 'Songs' },
   { id: 'artist', label: 'Artists' },
 ]
+
+const SEARCH_DEBOUNCE_MS = 180
 
 function FilterPills({
   value,
@@ -59,14 +63,14 @@ function FilterPills({
   )
 }
 
-function SearchSkeleton() {
+function SearchSkeleton({ rows = 10 }: { rows?: number }) {
   return (
     <ul className="flex flex-col gap-1.5 pt-1">
-      {Array.from({ length: 6 }).map((_, index) => (
+      {Array.from({ length: rows }).map((_, index) => (
         <li
           key={index}
           className="ytmq-anim-fade flex items-center gap-3 rounded-xl border border-zinc-800/80 bg-zinc-900/50 px-3 py-2.5"
-          style={{ animationDelay: `${index * 60}ms` }}
+          style={{ animationDelay: `${index * 40}ms` }}
         >
           <div className="ytmq-skeleton h-12 w-12 shrink-0 rounded-lg" />
           <div className="flex min-w-0 flex-1 flex-col gap-2">
@@ -76,6 +80,31 @@ function SearchSkeleton() {
         </li>
       ))}
     </ul>
+  )
+}
+
+function ArtistAvatar({
+  item,
+  className,
+}: {
+  item: SearchResultItem
+  className: string
+}) {
+  const fallback = defaultArtistThumbnail(item.title)
+  const [src, setSrc] = useState(item.thumbnail || fallback)
+
+  useEffect(() => {
+    setSrc(item.thumbnail || fallback)
+  }, [item.thumbnail, item.title, fallback])
+
+  return (
+    <img
+      src={src}
+      alt=""
+      loading="lazy"
+      className={className}
+      onError={() => setSrc(fallback)}
+    />
   )
 }
 
@@ -92,7 +121,12 @@ export function SearchTab({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [focused, setFocused] = useState(false)
+  const [artistBrowseId, setArtistBrowseId] = useState<string | null>(null)
+  const [selectedArtist, setSelectedArtist] = useState<SearchResultItem | null>(
+    null,
+  )
   const inputRef = useRef<HTMLInputElement>(null)
+  const requestGen = useRef(0)
   const { pending, add } = useQueueAdder(nickname, onAdd, onAdded)
 
   const trimmed = query.trim()
@@ -103,6 +137,7 @@ export function SearchTab({
 
   useEffect(() => {
     let cancelled = false
+    const gen = ++requestGen.current
 
     const timer = window.setTimeout(
       () => {
@@ -115,28 +150,34 @@ export function SearchTab({
 
         setLoading(true)
         setError(null)
-        void searchByFilter(trimmed, filter)
+
+        const run =
+          artistBrowseId && filter === 'song'
+            ? searchArtistTracks(artistBrowseId)
+            : searchByFilter(trimmed, filter)
+
+        void run
           .then((items) => {
-            if (!cancelled) setResults(items)
+            if (cancelled || requestGen.current !== gen) return
+            setResults(items)
           })
           .catch((err: unknown) => {
-            if (!cancelled) {
-              setResults([])
-              setError(err instanceof Error ? err.message : 'Search failed')
-            }
+            if (cancelled || requestGen.current !== gen) return
+            setResults([])
+            setError(err instanceof Error ? err.message : 'Search failed')
           })
           .finally(() => {
-            if (!cancelled) setLoading(false)
+            if (!cancelled && requestGen.current === gen) setLoading(false)
           })
       },
-      trimmed.length < 2 ? 0 : 300,
+      trimmed.length < 2 ? 0 : SEARCH_DEBOUNCE_MS,
     )
 
     return () => {
       cancelled = true
       window.clearTimeout(timer)
     }
-  }, [trimmed, filter])
+  }, [trimmed, filter, artistBrowseId])
 
   function addSong(item: SearchResultItem, mode: QueueInsertMode) {
     void add(
@@ -150,10 +191,25 @@ export function SearchTab({
     )
   }
 
-  // Tapping an artist filters the view to that artist's songs (no detail page).
   function filterByArtist(artist: SearchResultItem) {
+    setSelectedArtist(artist)
+    setArtistBrowseId(artist.id)
     setQuery(artist.title)
     setFilter('song')
+  }
+
+  function handleQueryChange(value: string) {
+    setQuery(value)
+    setArtistBrowseId(null)
+    setSelectedArtist(null)
+  }
+
+  function handleFilterChange(next: SearchFilter) {
+    setFilter(next)
+    if (next !== 'song') {
+      setArtistBrowseId(null)
+      setSelectedArtist(null)
+    }
   }
 
   const songs = results.filter((item) => item.type === 'song')
@@ -183,10 +239,8 @@ export function SearchTab({
           onClick={() => filterByArtist(item)}
           className="ytmq-press flex w-full items-center gap-3 rounded-xl border border-zinc-800/80 bg-zinc-900/60 px-3 py-2.5 text-left transition-colors hover:border-zinc-700"
         >
-          <img
-            src={item.thumbnail || defaultThumbnail(item.id)}
-            alt=""
-            loading="lazy"
+          <ArtistAvatar
+            item={item}
             className="h-12 w-12 shrink-0 rounded-full object-cover"
           />
           <div className="min-w-0 flex-1">
@@ -202,7 +256,9 @@ export function SearchTab({
   }
 
   function renderResults() {
-    if (loading) {
+    const showSkeleton = loading && results.length === 0
+
+    if (showSkeleton) {
       return <SearchSkeleton />
     }
     if (error) {
@@ -220,129 +276,163 @@ export function SearchTab({
       )
     }
 
-    if (filter === 'artist') {
-      return (
+    const resultsBody =
+      filter === 'artist' ? (
         <ul className="grid grid-cols-1 gap-2 pb-4 xl:grid-cols-2">
           {artists.map((item) => renderArtistRow(item))}
         </ul>
-      )
-    }
-
-    if (filter === 'song') {
-      return (
-        <ul className="grid grid-cols-1 gap-1.5 pb-4 xl:grid-cols-2">
-          {songs.map((item, index) => renderSong(item, index + 1))}
-        </ul>
-      )
-    }
-
-    // filter === 'all' — Spotify-style: top result, songs, then artists.
-    const top = results[0]
-    const restSongs =
-      top.type === 'song' ? songs.filter((s) => s.id !== top.id) : songs
-    const restArtists =
-      top.type === 'artist' ? artists.filter((a) => a.id !== top.id) : artists
-
-    return (
-      <div className="ytmq-anim-fade-up flex flex-col gap-6 pb-4">
-        {top && (
-          <section className="space-y-2">
-            <h3 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">
-              Top result
-            </h3>
-            {top.type === 'song' ? (
-              <div className="ytmq-anim-pop flex items-center gap-4 rounded-2xl border border-zinc-800 bg-gradient-to-br from-zinc-900 to-zinc-950 p-4 transition-colors hover:border-zinc-700">
-                <img
-                  src={top.thumbnail || defaultThumbnail(top.id)}
-                  alt=""
-                  className="h-20 w-20 shrink-0 rounded-xl object-cover"
-                />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-lg font-semibold">{top.title}</p>
-                  <p className="truncate text-sm text-zinc-400">
-                    {top.subtitle || top.channelTitle}
-                  </p>
-                  <div className="mt-2 flex gap-2">
-                    <button
-                      type="button"
-                      disabled={pending !== null || !canAdd}
-                      onClick={() => addSong(top, 'play_next')}
-                      className="ytmq-press inline-flex items-center gap-1.5 rounded-full bg-violet-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-violet-500 disabled:opacity-60"
-                    >
-                      {pending?.id === top.id && pending.mode === 'play_next' && (
-                        <span className="ytmq-spinner h-3.5 w-3.5" aria-hidden />
-                      )}
-                      {pending?.id === top.id && pending.mode === 'play_next'
-                        ? 'Adding…'
-                        : 'Play next'}
-                    </button>
-                    <button
-                      type="button"
-                      disabled={pending !== null || !canAdd}
-                      onClick={() => addSong(top, 'queue')}
-                      className="ytmq-press inline-flex items-center gap-1.5 rounded-full border border-violet-500/70 px-4 py-1.5 text-sm font-medium text-violet-200 hover:bg-violet-500/10 disabled:opacity-60"
-                    >
-                      {pending?.id === top.id && pending.mode === 'queue' && (
-                        <span className="ytmq-spinner h-3.5 w-3.5" aria-hidden />
-                      )}
-                      {pending?.id === top.id && pending.mode === 'queue'
-                        ? 'Adding…'
-                        : 'Queue'}
-                    </button>
-                  </div>
-                </div>
+      ) : filter === 'song' ? (
+        <div className="flex flex-col gap-4 pb-4">
+          {selectedArtist && artistBrowseId && (
+            <div className="flex items-center gap-3 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-3">
+              <ArtistAvatar
+                item={selectedArtist}
+                className="h-14 w-14 shrink-0 rounded-full object-cover ring-2 ring-violet-500/30"
+              />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-lg font-semibold">{selectedArtist.title}</p>
+                <p className="text-sm text-zinc-400">
+                  {songs.length} song{songs.length === 1 ? '' : 's'}
+                </p>
               </div>
-            ) : (
               <button
                 type="button"
-                onClick={() => filterByArtist(top)}
-                className="ytmq-press ytmq-anim-pop flex w-full items-center gap-4 rounded-2xl border border-zinc-800 bg-gradient-to-br from-zinc-900 to-zinc-950 p-4 text-left transition-colors hover:border-zinc-700"
+                onClick={() => {
+                  setArtistBrowseId(null)
+                  setSelectedArtist(null)
+                }}
+                className="shrink-0 text-xs text-zinc-500 underline"
               >
-                <img
-                  src={top.thumbnail || defaultThumbnail(top.id)}
-                  alt=""
-                  className="h-20 w-20 shrink-0 rounded-full object-cover ring-2 ring-zinc-700"
-                />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-lg font-semibold">{top.title}</p>
-                  <p className="text-sm text-zinc-400">Artist</p>
-                  <span className="mt-2 inline-block rounded-full bg-violet-600 px-4 py-1.5 text-sm font-medium text-white">
-                    Show songs
-                  </span>
-                </div>
+                Back to search
               </button>
-            )}
-          </section>
-        )}
+            </div>
+          )}
+          <ul className="grid grid-cols-1 gap-1.5 xl:grid-cols-2">
+            {songs.map((item, index) => renderSong(item, index + 1))}
+          </ul>
+        </div>
+      ) : (
+        (() => {
+          const top = results[0]
+          const restSongs =
+            top.type === 'song' ? songs.filter((s) => s.id !== top.id) : songs
+          const restArtists =
+            top.type === 'artist'
+              ? artists.filter((a) => a.id !== top.id)
+              : artists
 
-        {restSongs.length > 0 && (
-          <section className="space-y-2">
-            <h3 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">
-              Songs
-            </h3>
-            <ul className="grid grid-cols-1 gap-1.5 xl:grid-cols-2">
-              {restSongs.map((item) => renderSong(item))}
-            </ul>
-          </section>
-        )}
+          return (
+            <div className="ytmq-anim-fade-up flex flex-col gap-6 pb-4">
+              {top && (
+                <section className="space-y-2">
+                  <h3 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">
+                    Top result
+                  </h3>
+                  {top.type === 'song' ? (
+                    <div className="ytmq-anim-pop flex items-center gap-4 rounded-2xl border border-zinc-800 bg-gradient-to-br from-zinc-900 to-zinc-950 p-4 transition-colors hover:border-zinc-700">
+                      <img
+                        src={top.thumbnail || defaultThumbnail(top.id)}
+                        alt=""
+                        className="h-20 w-20 shrink-0 rounded-xl object-cover"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-lg font-semibold">{top.title}</p>
+                        <p className="truncate text-sm text-zinc-400">
+                          {top.subtitle || top.channelTitle}
+                        </p>
+                        <div className="mt-2 flex gap-2">
+                          <button
+                            type="button"
+                            disabled={pending !== null || !canAdd}
+                            onClick={() => addSong(top, 'play_next')}
+                            className="ytmq-press inline-flex items-center gap-1.5 rounded-full bg-violet-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-violet-500 disabled:opacity-60"
+                          >
+                            {pending?.id === top.id && pending.mode === 'play_next' && (
+                              <span className="ytmq-spinner h-3.5 w-3.5" aria-hidden />
+                            )}
+                            {pending?.id === top.id && pending.mode === 'play_next'
+                              ? 'Adding…'
+                              : 'Play next'}
+                          </button>
+                          <button
+                            type="button"
+                            disabled={pending !== null || !canAdd}
+                            onClick={() => addSong(top, 'queue')}
+                            className="ytmq-press inline-flex items-center gap-1.5 rounded-full border border-violet-500/70 px-4 py-1.5 text-sm font-medium text-violet-200 hover:bg-violet-500/10 disabled:opacity-60"
+                          >
+                            {pending?.id === top.id && pending.mode === 'queue' && (
+                              <span className="ytmq-spinner h-3.5 w-3.5" aria-hidden />
+                            )}
+                            {pending?.id === top.id && pending.mode === 'queue'
+                              ? 'Adding…'
+                              : 'Queue'}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => filterByArtist(top)}
+                      className="ytmq-press ytmq-anim-pop flex w-full items-center gap-4 rounded-2xl border border-zinc-800 bg-gradient-to-br from-zinc-900 to-zinc-950 p-4 text-left transition-colors hover:border-zinc-700"
+                    >
+                      <ArtistAvatar
+                        item={top}
+                        className="h-20 w-20 shrink-0 rounded-full object-cover ring-2 ring-zinc-700"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-lg font-semibold">{top.title}</p>
+                        <p className="text-sm text-zinc-400">Artist</p>
+                        <span className="mt-2 inline-block rounded-full bg-violet-600 px-4 py-1.5 text-sm font-medium text-white">
+                          Show songs
+                        </span>
+                      </div>
+                    </button>
+                  )}
+                </section>
+              )}
 
-        {restArtists.length > 0 && (
-          <section className="space-y-2">
-            <h3 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">
-              Artists
-            </h3>
-            <ul className="grid grid-cols-1 gap-2 xl:grid-cols-2">
-              {restArtists.map((item) => renderArtistRow(item))}
-            </ul>
-          </section>
-        )}
+              {restSongs.length > 0 && (
+                <section className="space-y-2">
+                  <h3 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">
+                    Songs
+                  </h3>
+                  <ul className="grid grid-cols-1 gap-1.5 xl:grid-cols-2">
+                    {restSongs.map((item) => renderSong(item))}
+                  </ul>
+                </section>
+              )}
+
+              {restArtists.length > 0 && (
+                <section className="space-y-2">
+                  <h3 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">
+                    Artists
+                  </h3>
+                  <ul className="grid grid-cols-1 gap-2 xl:grid-cols-2">
+                    {restArtists.map((item) => renderArtistRow(item))}
+                  </ul>
+                </section>
+              )}
+            </div>
+          )
+        })()
+      )
+
+    return (
+      <div
+        className={`transition-opacity duration-200 ${
+          loading && results.length > 0 ? 'opacity-80' : 'opacity-100'
+        }`}
+      >
+        {resultsBody}
       </div>
     )
   }
 
   function clearSearch() {
     setQuery('')
-    // Keep the bar pinned to the top so the user can keep typing right away.
+    setArtistBrowseId(null)
+    setSelectedArtist(null)
     inputRef.current?.focus()
   }
 
@@ -370,7 +460,6 @@ export function SearchTab({
           className="shrink-0 transition-[padding-top] duration-[480ms] [transition-timing-function:var(--ease-out-soft)]"
           style={{ paddingTop: active ? 0 : 'clamp(1.5rem, 24vh, 13rem)' }}
         >
-          {/* "Search songs" hero — collapses up and out as the bar takes over. */}
           <div
             className={`grid overflow-hidden text-center transition-all duration-[420ms] [transition-timing-function:var(--ease-out-soft)] ${
               active
@@ -407,7 +496,7 @@ export function SearchTab({
               ref={inputRef}
               type="text"
               value={query}
-              onChange={(e) => setQuery(e.target.value)}
+              onChange={(e) => handleQueryChange(e.target.value)}
               onFocus={() => setFocused(true)}
               onBlur={() => setFocused(false)}
               placeholder="Songs, artists…"
@@ -415,6 +504,14 @@ export function SearchTab({
               enterKeyHint="search"
               className="min-h-14 w-full rounded-full border border-zinc-700 bg-zinc-900 pl-12 pr-11 text-base shadow-lg shadow-black/20 outline-none transition-colors focus:border-violet-500"
             />
+            {loading && (
+              <span
+                className="pointer-events-none absolute right-11 top-1/2 -translate-y-1/2"
+                aria-hidden
+              >
+                <span className="ytmq-spinner h-4 w-4 text-violet-400" />
+              </span>
+            )}
             {query && (
               <button
                 type="button"
@@ -430,8 +527,11 @@ export function SearchTab({
           </div>
 
           {trimmed.length >= 2 && (
-            <div className="ytmq-anim-fade mt-3">
-              <FilterPills value={filter} onChange={setFilter} />
+            <div className="ytmq-anim-fade mt-3 flex items-center justify-between gap-3">
+              <FilterPills value={filter} onChange={handleFilterChange} />
+              {loading && (
+                <span className="shrink-0 text-xs text-zinc-500">Searching…</span>
+              )}
             </div>
           )}
         </div>

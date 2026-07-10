@@ -129,6 +129,13 @@ export function defaultThumbnail(videoId: string) {
   return `https://i.ytimg.com/vi/${videoId}/mqdefault.jpg`
 }
 
+/** Placeholder avatar for artists when YT Music omits thumbnail art. */
+export function defaultArtistThumbnail(name = '?'): string {
+  const initial = (name.trim()[0] ?? '?').toUpperCase()
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128"><rect fill="#3f3f46" width="128" height="128"/><text x="50%" y="54%" dominant-baseline="middle" text-anchor="middle" fill="#a78bfa" font-family="system-ui,sans-serif" font-size="52" font-weight="600">${initial}</text></svg>`
+  return `data:image/svg+xml,${encodeURIComponent(svg)}`
+}
+
 /** High-res album art for immersive views (lyrics, now playing). */
 export function hqThumbnail(videoId: string) {
   return `https://i.ytimg.com/vi/${videoId}/maxresdefault.jpg`

@@ -257,12 +257,19 @@ export function TabBar({
   const tabs = showAdmin ? [...baseTabs, adminTab] : baseTabs
   const [shareOpen, setShareOpen] = useState(false)
 
-  // Each tab gets a counter; incrementing it remounts the animation wrapper,
-  // which restarts the CSS entrance animation for that icon.
-  const [activationKeys, setActivationKeys] = useState<Record<string, number>>({})
+  const iconWrapRefs = useRef<Partial<Record<RoomTab, HTMLSpanElement>>>({})
+
+  const replayIconAnimation = (id: RoomTab) => {
+    const el = iconWrapRefs.current[id]
+    if (!el) return
+    const cls = `ytmq-tab-icon-anim-${id}`
+    el.classList.remove(cls)
+    void el.offsetWidth
+    el.classList.add(cls)
+  }
 
   const handleChange = (id: RoomTab) => {
-    setActivationKeys((prev) => ({ ...prev, [id]: (prev[id] ?? 0) + 1 }))
+    replayIconAnimation(id)
     onChange(id)
   }
 
@@ -358,7 +365,6 @@ export function TabBar({
           {tabs.map((tab) => {
             const isActive = active === tab.id
             const { Icon } = tab
-            const animKey = activationKeys[tab.id] ?? 0
             return (
               <button
                 key={tab.id}
@@ -373,10 +379,11 @@ export function TabBar({
                 aria-current={isActive ? 'page' : undefined}
               >
                 <span className="relative">
-                  {/* Remount this span on each activation to replay the CSS animation */}
                   <span
-                    key={animKey}
-                    className={`inline-block${animKey > 0 ? ` ytmq-tab-icon-anim-${tab.id}` : ''}`}
+                    ref={(el) => {
+                      iconWrapRefs.current[tab.id] = el
+                    }}
+                    className="ytmq-tab-icon-wrap inline-block"
                   >
                     <Icon
                       className={`h-5 w-5 transition-transform duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] group-active:scale-90 ${
@@ -386,7 +393,6 @@ export function TabBar({
                   </span>
                   {tab.id === 'queue' && queueCount > 0 && (
                     <span
-                      key={queueCount}
                       className="ytmq-anim-pop absolute -right-2.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-violet-500 px-1 text-[10px] font-bold leading-none text-white"
                     >
                       {queueCount > 99 ? '99+' : queueCount}
