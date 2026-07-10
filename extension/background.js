@@ -75,6 +75,37 @@ function ytmDeepLink(session) {
   return YTM_ORIGIN + '/?' + q.toString()
 }
 
+function ytmqRoomUrl(roomId) {
+  return roomId
+    ? `${YTMQ_SITE_ORIGIN}/YTMQ/room/${encodeURIComponent(roomId)}`
+    : `${YTMQ_SITE_ORIGIN}/YTMQ/`
+}
+
+async function focusYtmqTab(roomId) {
+  const tabs = await chrome.tabs.query({ url: `${YTMQ_SITE_ORIGIN}/YTMQ/*` })
+  if (tabs.length === 0) return false
+  tabs.sort(byLastAccessed)
+  let target = tabs[0]
+  if (roomId) {
+    for (const tab of tabs) {
+      if (tab.url && tab.url.includes(roomId)) {
+        target = tab
+        break
+      }
+    }
+  }
+  await chrome.tabs.update(target.id, { active: true }).catch(() => {})
+  await chrome.windows.update(target.windowId, { focused: true }).catch(() => {})
+  return true
+}
+
+async function openYtmqTab(roomId) {
+  const focused = await focusYtmqTab(roomId)
+  if (focused) return true
+  await chrome.tabs.create({ url: ytmqRoomUrl(roomId) })
+  return true
+}
+
 async function persistSessionInTab(tabId, session) {
   await chrome.scripting
     .executeScript({
@@ -320,6 +351,22 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message && message.type === 'ytmq-disconnect') {
     disconnectEverywhere().then(
       () => sendResponse({ ok: true }),
+      () => sendResponse({ ok: false }),
+    )
+    return true
+  }
+
+  if (message && message.type === 'ytmq-focus-app') {
+    focusYtmqTab(message.roomId || '').then(
+      (ok) => sendResponse({ ok }),
+      () => sendResponse({ ok: false }),
+    )
+    return true
+  }
+
+  if (message && message.type === 'ytmq-open-app') {
+    openYtmqTab(message.roomId || '').then(
+      (ok) => sendResponse({ ok }),
       () => sendResponse({ ok: false }),
     )
     return true

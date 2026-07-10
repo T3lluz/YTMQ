@@ -11,8 +11,15 @@
 var SESSION_KEY = 'ytmq_session'
 var CAPTURE_KEY = 'ytmq_url_capture'
 var SESSION_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000
+var UI_SOURCE = 'ytmq-bridge-ui'
 
 var injectRequested = false
+
+try {
+  document.documentElement.dataset.ytmqExtension = '1'
+} catch (e) {
+  /* ignore */
+}
 
 function readQueryParams() {
   var q = new URLSearchParams(location.search)
@@ -166,3 +173,25 @@ document.addEventListener(
   },
   true,
 )
+
+function sendToBackground(message) {
+  try {
+    chrome.runtime.sendMessage(message, function () {
+      void chrome.runtime.lastError
+    })
+  } catch (e) {
+    /* extension context invalidated */
+  }
+}
+
+window.addEventListener('message', function (event) {
+  if (event.source !== window) return
+  var data = event.data
+  if (!data || data.source !== UI_SOURCE) return
+  if (data.type === 'ytmq:focus-app') {
+    sendToBackground({ type: 'ytmq-focus-app', roomId: data.roomId || '' })
+  }
+  if (data.type === 'ytmq:open-app') {
+    sendToBackground({ type: 'ytmq-open-app', roomId: data.roomId || '' })
+  }
+})

@@ -42,6 +42,11 @@ body {
     transform 600ms cubic-bezier(0.34, 1.56, 0.64, 1),
     opacity 400ms ease-out;
   will-change: transform;
+  overflow: visible;
+}
+
+.ytmq-dock {
+  overflow: visible;
 }
 
 @media (min-width: 768px) and (hover: hover) {
@@ -423,9 +428,9 @@ textarea,
    --------------------------------------------------------------------------- */
 
 .ytmq-tab-icon-wrap {
-  display: inline-block;
+  display: inline-flex;
   isolation: isolate;
-  contain: layout style paint;
+  overflow: visible;
 }
 
 /* Search — whole icon flips on vertical axis */

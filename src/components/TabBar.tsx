@@ -328,7 +328,7 @@ export function TabBar({
 
   return (
     <div
-      className="pointer-events-none fixed inset-x-0 bottom-0 z-50 flex justify-center px-2 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:px-3 sm:pb-[calc(1rem+env(safe-area-inset-bottom))]"
+      className="pointer-events-none fixed inset-x-0 bottom-0 z-50 flex justify-center overflow-visible px-2 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:px-3 sm:pb-[calc(1rem+env(safe-area-inset-bottom))]"
       aria-label="Room navigation"
     >
       <div ref={dockRef} className="ytmq-dock pointer-events-auto relative max-w-full">
@@ -347,7 +347,7 @@ export function TabBar({
           />
         )}
 
-        <nav className="ytmq-dock-nav relative flex max-w-full transform-gpu items-center gap-0.5 overflow-x-auto rounded-full border border-white/10 bg-zinc-950/70 p-1 shadow-[0_12px_40px_rgba(0,0,0,0.5)] backdrop-blur-2xl backdrop-saturate-150 ytmq-hide-scrollbar sm:p-1.5">
+        <nav className="ytmq-dock-nav relative flex max-w-full transform-gpu items-center gap-0.5 overflow-visible rounded-full border border-white/10 bg-zinc-950/70 p-1 shadow-[0_12px_40px_rgba(0,0,0,0.5)] backdrop-blur-2xl backdrop-saturate-150 ytmq-hide-scrollbar sm:p-1.5">
           {indicator && (
             <span
               aria-hidden
@@ -375,17 +375,17 @@ export function TabBar({
                 }}
                 type="button"
                 onClick={() => handleChange(tab.id)}
-                className={`group relative z-10 flex min-h-11 w-[3.1rem] shrink-0 flex-col items-center justify-center gap-0.5 rounded-full px-0.5 text-[10px] font-medium transition-colors sm:min-h-12 sm:w-[3.75rem] sm:px-1 sm:text-[11px] ${
+                className={`group relative z-10 flex min-h-11 w-[3.1rem] shrink-0 flex-col items-center justify-center gap-0.5 overflow-visible rounded-full px-0.5 text-[10px] font-medium transition-colors sm:min-h-12 sm:w-[3.75rem] sm:px-1 sm:text-[11px] ${
                   isActive ? 'text-violet-300' : 'text-zinc-500 hover:text-zinc-200'
                 }`}
                 aria-current={isActive ? 'page' : undefined}
               >
-                <span className="relative">
+                <span className="relative overflow-visible py-1">
                   <span
                     ref={(el) => {
                       iconWrapRefs.current[tab.id] = el
                     }}
-                    className="ytmq-tab-icon-wrap inline-block"
+                    className="ytmq-tab-icon-wrap inline-flex items-center justify-center p-0.5"
                   >
                     <Icon
                       className={`h-5 w-5 transition-transform duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] group-active:scale-90 ${

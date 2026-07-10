@@ -7,6 +7,7 @@ import {
   tickNextSongToast,
   type NextSongInfo,
 } from './nextSongToast'
+import { createYtmPanel, defaultYtmqSiteBase } from './ytmPanel'
 import {
   createPlayedQueueCleanup,
   type SharedQueueRow,
@@ -1304,6 +1305,7 @@ async function runBridge() {
   let lastPlaybackKey = ''
   let lastPublishedVideoId = ''
   let playbackJoined = false
+  let queueJoined = false
   let playbackChannel = supabase.channel(`ytmq-playback:${roomId}`)
   let playbackReconnectTimer: number | undefined
 
@@ -1589,6 +1591,7 @@ async function runBridge() {
     )
     .subscribe((status) => {
       if (status === 'SUBSCRIBED') {
+        queueJoined = true
         showToast('YTMQ connected')
         log('Subscribed to room', roomId)
         notifyHostConnected(roomId)
@@ -1596,12 +1599,57 @@ async function runBridge() {
           await syncExistingQueue()
           await processPending()
         })
+      } else if (
+        status === 'CLOSED' ||
+        status === 'CHANNEL_ERROR' ||
+        status === 'TIMED_OUT'
+      ) {
+        queueJoined = false
       }
     })
 
   window.setInterval(() => {
     if (pendingRows.length > 0) void processPending()
   }, 1500)
+
+  async function syncAllTracks(): Promise<number> {
+    const rows = await loadInitialQueue()
+
+    let added = 0
+    // Reverse so "play next" inserts retain shared-queue order on YT Music.
+    for (const row of [...rows].reverse()) {
+      if (!isInPlaybackSession(row.created_at, playbackSince)) continue
+      if (syncedIds.has(row.id)) continue
+      const mode = normalizeMode(row.insert_mode)
+      if (await addVideoToYtmWithRetry(row.video_id, mode, 2)) {
+        syncedIds.add(row.id)
+        added += 1
+      }
+    }
+    showToast(`YTMQ: synced ${added} track(s)`)
+    return added
+  }
+
+  const ytmPanel = createYtmPanel({
+    roomId,
+    siteBase: defaultYtmqSiteBase(),
+    supabase,
+    isConnected: () => queueJoined,
+    readNowPlaying: () => readNowPlaying(),
+    readNextSong: getNextSongInfo,
+    getPendingCount: () => pendingRows.length,
+    getSyncedCount: () => syncedIds.size,
+    syncAll: syncAllTracks,
+    nudgeQueueUi,
+    onPlayPause: doToggle,
+    onNext: () => {
+      doNext()
+    },
+    onPrev: () => {
+      doPrev()
+    },
+    showToast,
+  })
 
   window.__YTMQ_BRIDGE__ = {
     roomId,
@@ -1611,21 +1659,7 @@ async function runBridge() {
     addVideoToQueue: (videoId: string) => addVideoToYtm(videoId, 'queue'),
     removeVideoFromQueue: removeVideoFromQueueWithRetry,
     async syncAll() {
-      const rows = await loadInitialQueue()
-
-      let added = 0
-      // Reverse so "play next" inserts retain shared-queue order on YT Music.
-      for (const row of [...rows].reverse()) {
-        if (!isInPlaybackSession(row.created_at, playbackSince)) continue
-        if (syncedIds.has(row.id)) continue
-        const mode = normalizeMode(row.insert_mode)
-        if (await addVideoToYtmWithRetry(row.video_id, mode, 2)) {
-          syncedIds.add(row.id)
-          added += 1
-        }
-      }
-      showToast(`YTMQ: synced ${added} track(s)`)
-      return added
+      return syncAllTracks()
     },
     stop() {
       window.clearInterval(playbackTimer)
@@ -1634,6 +1668,7 @@ async function runBridge() {
         window.clearTimeout(playbackReconnectTimer)
       }
       hideNextSongToast({ immediate: true })
+      ytmPanel.destroy()
       void supabase.removeChannel(channel)
       void supabase.removeChannel(playbackChannel)
       delete window.__YTMQ_BRIDGE__
