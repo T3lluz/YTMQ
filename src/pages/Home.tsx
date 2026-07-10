@@ -1,28 +1,21 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { YtmqLogo } from '../components/YtmqLogo'
-import { setNickname } from '../lib/nickname'
+import { HOST_NICKNAME, setNickname } from '../lib/nickname'
 import { createLobby, roomPath, setHostToken } from '../lib/room'
 
 export function Home() {
   const navigate = useNavigate()
-  const [nickname, setNicknameInput] = useState('')
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   async function handleCreate() {
-    const trimmedNickname = nickname.trim()
-    if (!trimmedNickname) {
-      setError('Enter a nickname')
-      return
-    }
-
     setError(null)
     setCreating(true)
     try {
       const { room_id, host_token } = await createLobby()
       setHostToken(room_id, host_token)
-      setNickname(room_id, trimmedNickname)
+      setNickname(room_id, HOST_NICKNAME)
       navigate(roomPath(room_id))
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Could not create lobby')
@@ -50,18 +43,6 @@ export function Home() {
         className="ytmq-anim-fade-up flex flex-col gap-3"
         style={{ animationDelay: '120ms' }}
       >
-        <label className="block space-y-1">
-          <span className="text-sm text-zinc-500">Nickname</span>
-          <input
-            type="text"
-            value={nickname}
-            onChange={(e) => setNicknameInput(e.target.value)}
-            placeholder="Your name on the queue"
-            autoComplete="nickname"
-            maxLength={32}
-            className="min-h-12 w-full rounded-xl border border-zinc-700 bg-zinc-900 px-4 outline-none transition-colors focus:border-violet-500"
-          />
-        </label>
         <button
           type="submit"
           disabled={creating}

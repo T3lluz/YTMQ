@@ -22,18 +22,13 @@ test.describe('Home', () => {
     await expect(page.getByRole('heading', { name: 'Join lobby' })).toBeVisible()
   })
 
-  test('requires a nickname to create', async ({ page }) => {
+  test('create lobby opens host view without asking for a name', async ({
+    page,
+  }) => {
     await gotoApp(page)
     await page.getByRole('button', { name: 'Create lobby' }).click()
-    await expect(page.getByRole('alert')).toHaveText('Enter a nickname')
-  })
 
-  test('create lobby opens host view', async ({ page }) => {
-    await gotoApp(page)
-    await page.getByPlaceholder('Your name on the queue').fill('TestHost')
-    await page.getByRole('button', { name: 'Create lobby' }).click()
-
-    await expect(page).toHaveURL(/\/YTMQ\/host\/[0-9a-f-]{36}\/?$/, {
+    await expect(page).toHaveURL(/\/YTMQ\/room\/[0-9a-f-]{36}\/?$/, {
       timeout: 15_000,
     })
     await expect(page.getByText('Queue mirror')).toBeVisible()
