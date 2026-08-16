@@ -66,3 +66,10 @@ export type PlaybackAction =
   | 'toggle'
   | 'seek'
   | 'volume'
+
+/**
+ * Previous-track threshold in seconds. If the current song has played at
+ * least this long, "previous" restarts it; a second press (or a press in
+ * the first three seconds) goes to the prior song.
+ */
+export const PREV_RESTART_SECONDS = 3
