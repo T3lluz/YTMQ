@@ -48,10 +48,13 @@ export function usePlaybackKeybinds({
   const sendRef = useRef(sendCommand)
   const positionOverrideRef = useRef(getPosition)
   const positionRef = useRef(position)
-  enabledRef.current = enabled
-  sendRef.current = sendCommand
-  positionOverrideRef.current = getPosition
-  positionRef.current = position
+
+  useEffect(() => {
+    enabledRef.current = enabled
+    sendRef.current = sendCommand
+    positionOverrideRef.current = getPosition
+    positionRef.current = position
+  }, [enabled, sendCommand, getPosition, position])
 
   useEffect(() => {
     if (!roomId) return
