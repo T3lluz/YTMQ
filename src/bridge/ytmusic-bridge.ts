@@ -12,7 +12,7 @@ import {
   createPlayedQueueCleanup,
   type SharedQueueRow,
 } from './playedQueueCleanup'
-import { parsePlaybackTimeLabel } from '../lib/playback'
+import { parsePlaybackTimeLabel, PREV_RESTART_SECONDS } from '../lib/playback'
 
 type BridgeParams = {
   roomId: string
@@ -438,7 +438,7 @@ function doPrev(): boolean {
   const bar = getPlayerBar()
   const t = bar?.playerApi?.getCurrentTime?.() ?? 0
 
-  if (t >= 3 && bar?.playerApi?.seekTo) {
+  if (t >= PREV_RESTART_SECONDS && bar?.playerApi?.seekTo) {
     try {
       bar.playerApi.seekTo(0, true)
       return true

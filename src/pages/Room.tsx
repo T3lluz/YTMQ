@@ -19,6 +19,7 @@ import { useIsDesktop } from '../hooks/useMediaQuery'
 import { useToast } from '../hooks/useToast'
 import { useRoomSettings } from '../hooks/useRoomSettings'
 import { useRoomPresence } from '../hooks/useRoomPresence'
+import { usePlaybackKeybinds } from '../hooks/usePlaybackKeybinds'
 import { getClientId } from '../lib/clientId'
 import { getNickname, HOST_NICKNAME, setNickname } from '../lib/nickname'
 import type { AddTrackInput, QueueInsertMode } from '../lib/queue'
@@ -307,6 +308,11 @@ export function Room() {
   const isHost = Boolean(hostToken)
 
   const settings = useRoomSettings(roomId ?? '', room ?? undefined)
+  const canControl = isHost || settings.allow_guest_controls
+  usePlaybackKeybinds({
+    roomId: roomId ?? '',
+    enabled: Boolean(roomId) && canControl,
+  })
 
   const { participants, onlineCount, status } = useRoomPresence(roomId ?? '', {
     clientId,
@@ -508,7 +514,6 @@ export function Room() {
   // on top as a fullscreen overlay. Mobile keeps Lyrics inline as a tall panel.
   const showSidebar = isDesktop
   const lyricsPanelHeight = !isDesktop && tab === 'lyrics'
-  const canControl = isHost || settings.allow_guest_controls
 
   // Desktop is a fixed-height app shell: the page itself never scrolls; each tab
   // owns its own internal scroll regions and lays content out to fill the space.
