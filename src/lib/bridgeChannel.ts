@@ -55,16 +55,23 @@ export function sendPlaybackVolume(roomId: string, volume: number): void {
 type SenderState = {
   channel: RealtimeChannel
   ready: Promise<boolean>
+  playbackBound: boolean
 }
 
 const senders = new Map<string, SenderState>()
 const JOIN_TIMEOUT_MS = 5000
+const playbackControlListeners = new Map<
+  string,
+  Set<(payload: PlaybackControlPayload) => void>
+>()
 
 function getSender(roomId: string): SenderState {
   const existing = senders.get(roomId)
   if (existing) return existing
 
-  const channel = supabase.channel(bridgeChannelName(roomId))
+  const channel = supabase.channel(bridgeChannelName(roomId), {
+    config: { broadcast: { self: true } },
+  })
   const ready = new Promise<boolean>((resolve) => {
     let settled = false
     const timer = window.setTimeout(() => {
@@ -92,9 +99,46 @@ function getSender(roomId: string): SenderState {
     })
   })
 
-  const state: SenderState = { channel, ready }
+  const state: SenderState = { channel, ready, playbackBound: false }
   senders.set(roomId, state)
+  bindPlaybackControl(state, roomId)
   return state
+}
+
+function bindPlaybackControl(state: SenderState, roomId: string) {
+  if (state.playbackBound) return
+  state.playbackBound = true
+  state.channel.on('broadcast', { event: 'playback_control' }, ({ payload }) => {
+    if (!payload || typeof payload !== 'object') return
+    const action = (payload as { action?: PlaybackControlPayload['action'] }).action
+    if (!action) return
+    const next: PlaybackControlPayload = {
+      action,
+      position: (payload as { position?: number }).position,
+      volume: (payload as { volume?: number }).volume,
+    }
+    for (const listener of playbackControlListeners.get(roomId) ?? []) {
+      listener(next)
+    }
+  })
+}
+
+/** Receive playback_control events, including ones sent from this same tab. */
+export function subscribePlaybackControl(
+  roomId: string,
+  listener: (payload: PlaybackControlPayload) => void,
+): () => void {
+  getSender(roomId)
+  let set = playbackControlListeners.get(roomId)
+  if (!set) {
+    set = new Set()
+    playbackControlListeners.set(roomId, set)
+  }
+  set.add(listener)
+  return () => {
+    set.delete(listener)
+    if (set.size === 0) playbackControlListeners.delete(roomId)
+  }
 }
 
 async function sendBridgeBroadcast(
@@ -127,5 +171,6 @@ export function disposeBridgeSender(roomId: string): void {
   const existing = senders.get(roomId)
   if (!existing) return
   senders.delete(roomId)
+  playbackControlListeners.delete(roomId)
   void supabase.removeChannel(existing.channel)
 }

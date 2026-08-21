@@ -1,6 +1,6 @@
 # YTMQ
 
-Shared queue for **YouTube Music**: guests use this web app to search and manage the queue in realtime; the host connects [YouTube Music](https://music.youtube.com) in the browser so new tracks are added to their player queue automatically.
+Shared queue for **YouTube Music** and **Spotify**: guests use this web app to search and manage the queue in realtime; the host connects [YouTube Music](https://music.youtube.com) and/or Spotify so new tracks play on their player automatically.
 
 **Live app (after deploy):** `https://<your-github-user>.github.io/YTMQ/`
 
@@ -9,6 +9,7 @@ Shared queue for **YouTube Music**: guests use this web app to search and manage
 1. Copy `.env.example` → `.env.local` and set:
    - `VITE_SUPABASE_URL`
    - `VITE_SUPABASE_ANON_KEY`
+   - `VITE_SPOTIFY_CLIENT_ID` (optional — needed to Connect Spotify)
 2. `npm install`
 3. `npm run dev` → open `http://localhost:5173/YTMQ/`
 
@@ -37,6 +38,7 @@ Shared queue for **YouTube Music**: guests use this web app to search and manage
 1. In [Settings → Secrets and variables → Actions](https://github.com/T3lluz/YTMQ/settings/secrets/actions), add:
    - `VITE_SUPABASE_URL`
    - `VITE_SUPABASE_ANON_KEY`
+   - `VITE_SPOTIFY_CLIENT_ID` (optional — Spotify host player)
 2. To run a workflow manually: **Actions → Deploy to GitHub Pages → Run workflow**, and choose branch **`main`** (not `gh-pages` — that branch has no workflow files).
 
 3. Open [Settings → Pages](https://github.com/T3lluz/YTMQ/settings/pages). Under **Source**, pick **exactly one** (mixing both causes “in progress deployment” errors):
@@ -49,6 +51,19 @@ Shared queue for **YouTube Music**: guests use this web app to search and manage
 5. If the site still loads `/src/main.tsx`, the wrong source is selected — fix step 3 and hard-refresh.
 
 Live site: `https://t3lluz.github.io/YTMQ/` (includes `ytmusic-bridge.js` for host connect and `ytmq-extension.zip` for the Chrome extension).
+
+## Spotify (optional host player)
+
+Spotify uses the official Web API (PKCE) from the host's YTMQ tab — no extension. Guest picks are matched by title + artist and played on the host's Spotify Connect device.
+
+1. Create an app at [developer.spotify.com/dashboard](https://developer.spotify.com/dashboard).
+2. Add redirect URIs (exact, including trailing slash):
+   - `http://localhost:5173/YTMQ/`
+   - `https://t3lluz.github.io/YTMQ/`
+3. Copy the Client ID into `.env.local` as `VITE_SPOTIFY_CLIENT_ID`, and the same GitHub Actions secret for Pages deploys.
+4. Spotify **Premium** is required for playback control. Keep the YTMQ host tab open.
+
+You can connect YouTube Music and Spotify at the same time; now-playing prefers Spotify while it is actively publishing.
 
 Guest links and QR codes point at `/YTMQ/room/<id>`. GitHub Pages needs `public/404.html` (copied to `dist/404.html`) plus the redirect script in `index.html` so those deep links load the app instead of a static 404.
 
@@ -82,6 +97,7 @@ npx playwright test tests/queue.spec.ts   # one suite
 - [ ] **Search** → add 3 tracks → Queue tab updates within ~1s
 - [ ] **Remove** and **reorder** (↑/↓) on Queue tab
 - [ ] **Host** connects YouTube Music (console on music.youtube.com); guest add appears in YT Music queue
+- [ ] **Host** connects Spotify (Premium) from Admin; guest add plays on the selected Spotify device
 - [ ] **Host** “Open” opens `https://music.youtube.com/watch?v=…`
 - [ ] Built bundle has no `YOUTUBE_API_KEY` or `service_role` (grep `dist/`)
 

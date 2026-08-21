@@ -37,6 +37,8 @@ export default defineConfig({
         process.env.VITE_SUPABASE_ANON_KEY ?? 'stub-anon-key',
       VITE_PUBLIC_SITE_URL:
         process.env.VITE_PUBLIC_SITE_URL ?? 'https://stub.github.io/YTMQ',
+      VITE_SPOTIFY_CLIENT_ID:
+        process.env.VITE_SPOTIFY_CLIENT_ID ?? 'stub-spotify-client-id',
     },
   },
 })

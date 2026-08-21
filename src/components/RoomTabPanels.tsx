@@ -7,8 +7,10 @@ import { QueueList } from './QueueList'
 import { RecentlyPlayed } from './RecentlyPlayed'
 import { ParticipantList } from './ParticipantList'
 import { YtMusicConnect } from './YtMusicConnect'
+import { SpotifyConnect } from './SpotifyConnect'
 import { HostAdminPanel } from './HostAdminPanel'
 import type { RoomSettings } from '../lib/room'
+import type { SpotifyPlayerStatus } from '../lib/spotifyPlayer'
 
 type QueueTabProps = {
   roomId: string
@@ -188,6 +190,7 @@ type AdminTabProps = {
   onlineCount: number
   ending: boolean
   deskScroll?: string
+  spotifyStatus: SpotifyPlayerStatus
   onToast: (message: string, variant?: ToastVariant) => void
   onEndLobby: () => void
 }
@@ -200,6 +203,7 @@ export function AdminTabContent({
   onlineCount,
   ending,
   deskScroll,
+  spotifyStatus,
   onToast,
   onEndLobby,
 }: AdminTabProps) {
@@ -219,7 +223,11 @@ export function AdminTabContent({
     return (
       <section className="ytmq-tab-panel grid min-h-0 flex-1 grid-cols-1 grid-rows-2 gap-6 lg:grid-cols-2 lg:grid-rows-1">
         <div className={`${deskScroll} flex flex-col gap-6 pr-1`}>
-          <YtMusicConnect roomId={roomId} />
+          <div className="space-y-3">
+            <h2 className="text-lg font-semibold">Players</h2>
+            <YtMusicConnect roomId={roomId} />
+            <SpotifyConnect roomId={roomId} playerStatus={spotifyStatus} />
+          </div>
           <HostAdminPanel
             section="controls"
             roomId={roomId}
@@ -249,7 +257,11 @@ export function AdminTabContent({
 
   return (
     <section className="ytmq-tab-panel flex flex-1 flex-col gap-6">
-      <YtMusicConnect roomId={roomId} />
+      <div className="space-y-3">
+        <h2 className="text-lg font-semibold">Players</h2>
+        <YtMusicConnect roomId={roomId} />
+        <SpotifyConnect roomId={roomId} playerStatus={spotifyStatus} />
+      </div>
       <HostAdminPanel
         roomId={roomId}
         hostToken={hostToken}

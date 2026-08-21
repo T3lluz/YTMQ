@@ -2,6 +2,7 @@ import type { RealtimeChannel } from '@supabase/supabase-js'
 import {
   playbackChannelName,
   type NowPlaying,
+  type NowPlayingSource,
   type PlaybackState,
 } from './playback'
 import { recordPlayed } from './recentlyPlayed'
@@ -11,6 +12,8 @@ const HEALTH_CHECK_MS = 5_000
 /** ~4 missed bridge broadcasts before we try to rejoin the channel. */
 const RECONNECT_AFTER_MS = 8_000
 export const PLAYBACK_STALE_MS = 30_000
+/** Ignore YouTube Music now-playing while Spotify has published recently. */
+const SPOTIFY_HOLD_MS = 8_000
 
 type Listener = (nowPlaying: NowPlaying) => void
 
@@ -25,6 +28,7 @@ type RoomPlayback = {
 
 const rooms = new Map<string, RoomPlayback>()
 const lastNowPlaying = new Map<string, NowPlaying>()
+const spotifyHoldUntil = new Map<string, number>()
 
 let healthInterval: number | undefined
 let visibilityBound = false
@@ -62,7 +66,40 @@ function parseNowPlayingPayload(payload: unknown): NowPlaying | null {
             thumbnailUrl: p.nextUp.thumbnailUrl ?? '',
           }
         : undefined,
+    source: p.source === 'spotify' || p.source === 'ytm' ? p.source : undefined,
+    thumbnailUrl:
+      typeof p.thumbnailUrl === 'string' && p.thumbnailUrl
+        ? p.thumbnailUrl
+        : undefined,
   }
+}
+
+function shouldAcceptNowPlaying(
+  roomId: string,
+  source: NowPlayingSource | undefined,
+): boolean {
+  if (source === 'spotify') {
+    spotifyHoldUntil.set(roomId, Date.now() + SPOTIFY_HOLD_MS)
+    return true
+  }
+  const hold = spotifyHoldUntil.get(roomId) ?? 0
+  return Date.now() >= hold
+}
+
+function applyNowPlaying(roomId: string, next: NowPlaying) {
+  if (!shouldAcceptNowPlaying(roomId, next.source)) return
+  recordPlayed(roomId, {
+    videoId: next.videoId,
+    title: next.title,
+    artist: next.artist,
+  })
+  lastNowPlaying.set(roomId, next)
+  const room = rooms.get(roomId)
+  if (room) {
+    room.lastReceivedAt = Date.now()
+    room.reconnecting = false
+  }
+  notifyListeners(roomId)
 }
 
 function notifyListeners(roomId: string) {
@@ -114,15 +151,7 @@ function attachChannel(roomId: string, room: RoomPlayback) {
   room.channel.on('broadcast', { event: 'now_playing' }, ({ payload }) => {
     const next = parseNowPlayingPayload(payload)
     if (!next) return
-    recordPlayed(roomId, {
-      videoId: next.videoId,
-      title: next.title,
-      artist: next.artist,
-    })
-    lastNowPlaying.set(roomId, next)
-    room.lastReceivedAt = Date.now()
-    room.reconnecting = false
-    notifyListeners(roomId)
+    applyNowPlaying(roomId, next)
   })
 
   room.channel.subscribe((status) => {
@@ -183,6 +212,25 @@ export function getCachedNowPlaying(roomId: string): NowPlaying | null {
 
 export function getPlaybackLastReceivedAt(roomId: string): number {
   return rooms.get(roomId)?.lastReceivedAt ?? 0
+}
+
+/**
+ * Publish a now-playing snapshot from a player running in this tab (Spotify).
+ * Updates local listeners immediately, then broadcasts to the rest of the room.
+ */
+export function publishNowPlaying(roomId: string, payload: NowPlaying): void {
+  applyNowPlaying(roomId, payload)
+  const room = ensureRoom(roomId)
+  if (!room.subscribed) return
+  void room.channel.send({
+    type: 'broadcast',
+    event: 'now_playing',
+    payload,
+  })
+}
+
+export function clearSpotifyNowPlayingHold(roomId: string): void {
+  spotifyHoldUntil.delete(roomId)
 }
 
 /** One shared realtime channel per room; components only register listeners. */

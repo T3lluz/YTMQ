@@ -20,10 +20,12 @@ import { useToast } from '../hooks/useToast'
 import { useRoomSettings } from '../hooks/useRoomSettings'
 import { useRoomPresence } from '../hooks/useRoomPresence'
 import { usePlaybackKeybinds } from '../hooks/usePlaybackKeybinds'
+import { useSpotifyPlayer } from '../hooks/useSpotifyPlayer'
 import { getClientId } from '../lib/clientId'
 import { getNickname, HOST_NICKNAME, setNickname } from '../lib/nickname'
 import type { AddTrackInput, QueueInsertMode } from '../lib/queue'
 import { clearPlaybackSession } from '../lib/playbackSession'
+import { RESTORE_TAB_KEY } from '../lib/spotifyAuth'
 import {
   announceSessionClearToExtension,
   announceSessionToExtension,
@@ -40,6 +42,18 @@ import {
 // slide in: tapping a tab further right slides in from the right, and vice
 // versa. Kept in sync with the tab order in `TabBar`.
 const TAB_ORDER: RoomTab[] = ['search', 'queue', 'lyrics', 'room', 'admin']
+
+function consumeRestoreTab(): RoomTab | null {
+  try {
+    const raw = sessionStorage.getItem(RESTORE_TAB_KEY)
+    if (!raw) return null
+    sessionStorage.removeItem(RESTORE_TAB_KEY)
+    if (TAB_ORDER.includes(raw as RoomTab)) return raw as RoomTab
+  } catch {
+    /* private mode */
+  }
+  return null
+}
 
 // Desktop now-playing rail sizing. The user can drag the rail wider/narrower
 // within these bounds; the choice (and the collapsed flag) persists globally so
@@ -214,7 +228,7 @@ export function Room() {
   const [room, setRoom] = useState<RoomInfo | null>(null)
   const [roomLoading, setRoomLoading] = useState(true)
   const [roomError, setRoomError] = useState<string | null>(null)
-  const [tab, setTab] = useState<RoomTab>('search')
+  const [tab, setTab] = useState<RoomTab>(() => consumeRestoreTab() ?? 'search')
   const [tabDir, setTabDir] = useState<'fwd' | 'back'>('fwd')
 
   const changeTab = (next: RoomTab) => {
@@ -322,6 +336,11 @@ export function Room() {
 
   const { items, loading, error, busyId, addTrack, removeItem } = useQueue(
     roomId ?? '',
+  )
+  const { status: spotifyStatus } = useSpotifyPlayer(
+    roomId ?? '',
+    isHost,
+    items,
   )
 
   const lastError = useRef<string | null>(null)
@@ -617,6 +636,7 @@ export function Room() {
             onlineCount={onlineCount}
             ending={ending}
             deskScroll={showSidebar ? deskScroll : undefined}
+            spotifyStatus={spotifyStatus}
             onToast={showToast}
             onEndLobby={handleEndLobby}
           />
