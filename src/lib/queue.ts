@@ -1,3 +1,4 @@
+import { isYoutubeVideoId, type NowPlaying } from './playback'
 import { supabase } from './supabase'
 
 export type QueueInsertMode = 'play_next' | 'queue'
@@ -148,4 +149,16 @@ export function hqThumbnail(videoId: string) {
  */
 export function fallbackThumbnail(videoId: string) {
   return `https://i.ytimg.com/vi/${videoId}/mqdefault.jpg`
+}
+
+/** Cover art for a now-playing snapshot (Spotify album art or YouTube thumb). */
+export function nowPlayingArtwork(
+  track: Pick<NowPlaying, 'videoId' | 'title' | 'thumbnailUrl'>,
+  quality: 'default' | 'hq' = 'default',
+): string {
+  if (track.thumbnailUrl) return track.thumbnailUrl
+  if (isYoutubeVideoId(track.videoId)) {
+    return quality === 'hq' ? hqThumbnail(track.videoId) : defaultThumbnail(track.videoId)
+  }
+  return defaultArtistThumbnail(track.title)
 }

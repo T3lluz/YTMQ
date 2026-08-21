@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { defaultThumbnail } from '../lib/queue'
+import { nowPlayingArtwork } from '../lib/queue'
 import { useNowPlaying } from '../hooks/useNowPlaying'
 import { usePlaybackPosition } from '../hooks/usePlaybackPosition'
 import { useImagePalette } from '../hooks/useImagePalette'
@@ -55,7 +55,7 @@ export function NowPlaying({
     nowPlaying,
     Boolean(nowPlaying && isPlaying && !stale),
   )
-  const thumb = nowPlaying ? defaultThumbnail(nowPlaying.videoId) : undefined
+  const thumb = nowPlaying ? nowPlayingArtwork(nowPlaying) : undefined
   const { palette, ready: paletteReady } = useImagePalette(thumb)
   const themeStyle = paletteCssVars(palette)
   const live = isPlaying && !stale && Boolean(nowPlaying)
@@ -70,7 +70,7 @@ export function NowPlaying({
           <p className="text-sm font-medium text-zinc-300">Now playing</p>
         </div>
         <p className="mt-1 text-sm text-zinc-500">
-          Waiting for playback from the connected YouTube Music tab…
+          Waiting for playback from a connected player…
         </p>
       </section>
     )
@@ -98,7 +98,7 @@ export function NowPlaying({
         ...themeStyle,
         borderColor: stale ? undefined : 'var(--np-accent-border)',
       }}
-      aria-label="Now playing in YouTube Music"
+      aria-label="Now playing"
     >
       <div
         aria-hidden

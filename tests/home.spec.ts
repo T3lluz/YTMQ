@@ -7,7 +7,7 @@ test.describe('Home', () => {
 
     await expect(page.getByRole('heading', { name: 'YTMQ' })).toBeVisible()
     await expect(
-      page.getByText('Shared queue for YouTube Music'),
+      page.getByText('Shared queue for YouTube Music and Spotify'),
     ).toBeVisible()
     await expect(
       page.getByRole('button', { name: 'Create lobby' }),

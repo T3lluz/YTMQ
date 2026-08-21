@@ -33,7 +33,7 @@ export function Home() {
         <h1 className="bg-gradient-to-br from-white to-zinc-400 bg-clip-text text-3xl font-bold tracking-tight text-transparent sm:text-4xl">
           YTMQ
         </h1>
-        <p className="text-zinc-400">Shared queue for YouTube Music</p>
+        <p className="text-zinc-400">Shared queue for YouTube Music and Spotify</p>
       </header>
       <form
         onSubmit={(e) => {

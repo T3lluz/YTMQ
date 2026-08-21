@@ -8,6 +8,8 @@ export type NowPlayingNextUp = {
   thumbnailUrl: string
 }
 
+export type NowPlayingSource = 'ytm' | 'spotify'
+
 export type NowPlaying = {
   videoId: string
   title: string
@@ -26,6 +28,10 @@ export type NowPlaying = {
    * empty (e.g. playing an album/radio directly in YT Music).
    */
   nextUp?: NowPlayingNextUp
+  /** Which connected player published this snapshot. */
+  source?: NowPlayingSource
+  /** Album art when the player is not YouTube Music. */
+  thumbnailUrl?: string
 }
 
 /** Formats seconds as m:ss for playback UI. */
@@ -73,3 +79,8 @@ export type PlaybackAction =
  * the first three seconds) goes to the prior song.
  */
 export const PREV_RESTART_SECONDS = 3
+
+/** YouTube video ids are 11 characters from [A-Za-z0-9_-]. */
+export function isYoutubeVideoId(id: string): boolean {
+  return /^[\w-]{11}$/.test(id)
+}

@@ -41,4 +41,6 @@ npm run test:e2e:report
 | `room-tab.spec.ts` | QR, copy link, nickname |
 | `host.spec.ts` | Host mirror, YT Music links, realtime |
 | `full-flow.spec.ts` | Full host+guest journey + API sync |
+| `smoke/spotify-match.spec.ts` | YouTube title/artist → Spotify track matching |
+| `smoke/spotify-connect.spec.ts` | Host Admin Connect Spotify button |
 | `helpers/` | Supabase API + UI navigation (`gotoApp` for `/YTMQ/` base) |

@@ -7,7 +7,7 @@ import {
   useState,
   type CSSProperties,
 } from 'react'
-import { hqThumbnail, type QueueItem } from '../lib/queue'
+import { hqThumbnail, nowPlayingArtwork, type QueueItem } from '../lib/queue'
 import { useNowPlaying } from '../hooks/useNowPlaying'
 import { usePlaybackPosition } from '../hooks/usePlaybackPosition'
 import { useImagePalette } from '../hooks/useImagePalette'
@@ -135,7 +135,7 @@ export function LyricsView({
     [roomId],
   )
 
-  const art = nowPlaying ? hqThumbnail(nowPlaying.videoId) : undefined
+  const art = nowPlaying ? nowPlayingArtwork(nowPlaying, 'hq') : undefined
   const { palette, ready: paletteReady } = useImagePalette(art)
 
   const { lyrics, status } = useLyrics(

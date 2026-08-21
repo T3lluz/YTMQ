@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { hqThumbnail } from '../lib/queue'
+import { nowPlayingArtwork } from '../lib/queue'
 import { useNowPlaying } from '../hooks/useNowPlaying'
 import { usePlaybackPosition } from '../hooks/usePlaybackPosition'
 import { useImagePalette } from '../hooks/useImagePalette'
@@ -56,7 +56,7 @@ export function NowPlayingSidebar({
   const live = Boolean(isPlaying && !stale && nowPlaying)
   const position = usePlaybackPosition(nowPlaying ?? null, live)
 
-  const art = nowPlaying ? hqThumbnail(nowPlaying.videoId) : undefined
+  const art = nowPlaying ? nowPlayingArtwork(nowPlaying, 'hq') : undefined
   const { palette, ready: paletteReady } = useImagePalette(art)
 
   const { lyrics, status } = useLyrics(
@@ -124,7 +124,7 @@ export function NowPlayingSidebar({
           <p className="max-w-[14rem] text-sm text-zinc-500">
             {connected
               ? 'Album art and lyrics will appear here once a song starts.'
-              : 'Keep music.youtube.com open and playing to follow along here.'}
+              : 'Connect YouTube Music or Spotify as host to follow along here.'}
           </p>
         </div>
       </aside>

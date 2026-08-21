@@ -53,6 +53,8 @@ export default defineConfig({
       // Lets the host "Connect" UI build an HTTPS bridge URL during http://localhost e2e
       VITE_PUBLIC_SITE_URL:
         process.env.VITE_PUBLIC_SITE_URL ?? 'https://e2e-placeholder.github.io/YTMQ',
+      VITE_SPOTIFY_CLIENT_ID:
+        process.env.VITE_SPOTIFY_CLIENT_ID ?? 'e2e-spotify-client-id',
     },
   },
 })
