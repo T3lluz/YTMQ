@@ -77,9 +77,9 @@ async function gotoRoom(page: Page, nickname = 'SmokeGuest') {
     await dialog.getByPlaceholder('Your name on the queue').fill(nickname)
     await dialog.getByRole('button', { name: 'Continue' }).click()
   }
-  await page
-    .getByRole('navigation', { name: 'Room navigation' })
-    .waitFor({ timeout: 15_000 })
+  await page.getByRole('heading', { name: 'Search songs' }).waitFor({
+    timeout: 15_000,
+  })
 }
 
 test.use({ viewport: { width: 390, height: 844 } })
