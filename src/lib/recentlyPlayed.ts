@@ -1,8 +1,8 @@
 /**
- * Per-room "recently played" history, derived entirely from the YouTube Music
- * bridge's `now_playing` broadcasts (no extra API calls). Persisted in
- * localStorage so it survives reloads, and shared in spirit across clients
- * since every connected guest receives the same playback broadcasts.
+ * Per-room "recently played" history, derived from now-playing broadcasts
+ * (YouTube Music bridge or the Spotify follower). Persisted in localStorage
+ * so it survives reloads. Every connected guest sees the same list because
+ * they all receive the same broadcasts.
  */
 
 export type PlayedTrack = {
@@ -11,6 +11,8 @@ export type PlayedTrack = {
   artist: string
   /** Epoch ms when this track became the active track. */
   playedAt: number
+  /** Album art when the track is not a YouTube video. */
+  thumbnailUrl?: string
 }
 
 const MAX_ITEMS = 60
@@ -51,11 +53,15 @@ export function subscribeRecentlyPlayed(
 function isPlayedTrack(value: unknown): value is PlayedTrack {
   if (!value || typeof value !== 'object') return false
   const t = value as Record<string, unknown>
-  return (
-    typeof t.videoId === 'string' &&
-    typeof t.title === 'string' &&
-    typeof t.playedAt === 'number'
-  )
+  if (
+    typeof t.videoId !== 'string' ||
+    typeof t.title !== 'string' ||
+    typeof t.playedAt !== 'number'
+  ) {
+    return false
+  }
+  if (t.thumbnailUrl != null && typeof t.thumbnailUrl !== 'string') return false
+  return true
 }
 
 export function getRecentlyPlayed(roomId: string): PlayedTrack[] {
@@ -85,7 +91,12 @@ function save(roomId: string, list: PlayedTrack[]) {
  */
 export function recordPlayed(
   roomId: string,
-  track: { videoId: string; title: string; artist?: string },
+  track: {
+    videoId: string
+    title: string
+    artist?: string
+    thumbnailUrl?: string
+  },
 ): void {
   if (!roomId || !track.videoId || !track.title) return
 
@@ -98,6 +109,7 @@ export function recordPlayed(
       title: track.title,
       artist: track.artist ?? '',
       playedAt: Date.now(),
+      thumbnailUrl: track.thumbnailUrl,
     },
     ...list.filter((t) => t.videoId !== track.videoId),
   ].slice(0, MAX_ITEMS)

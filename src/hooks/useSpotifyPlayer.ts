@@ -1,6 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
-import { getOrStartPlaybackSince } from '../lib/playbackSession'
-import type { QueueItem } from '../lib/queue'
+import { useEffect, useState } from 'react'
 import {
   isSpotifyLinked,
   subscribeSpotifyAuth,
@@ -12,19 +10,10 @@ import {
 
 const IDLE: SpotifyPlayerStatus = { state: 'idle' }
 
-export function useSpotifyPlayer(
-  roomId: string,
-  enabled: boolean,
-  queueItems: QueueItem[],
-) {
+export function useSpotifyPlayer(roomId: string, enabled: boolean) {
   const [linked, setLinked] = useState(() => isSpotifyLinked())
   const [liveStatus, setLiveStatus] = useState<SpotifyPlayerStatus>(IDLE)
-  const itemsRef = useRef(queueItems)
   const active = Boolean(enabled && linked && roomId)
-
-  useEffect(() => {
-    itemsRef.current = queueItems
-  }, [queueItems])
 
   useEffect(() => {
     return subscribeSpotifyAuth(() => setLinked(isSpotifyLinked()))
@@ -35,8 +24,6 @@ export function useSpotifyPlayer(
 
     const stop = startSpotifyPlayer({
       roomId,
-      getQueueItems: () => itemsRef.current,
-      getPlaybackSince: () => getOrStartPlaybackSince(roomId),
       onStatus: setLiveStatus,
     })
     return stop

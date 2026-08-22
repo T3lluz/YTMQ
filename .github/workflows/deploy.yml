@@ -46,6 +46,7 @@ jobs:
           set -euo pipefail
           OWNER_LC=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
           export VITE_PUBLIC_SITE_URL="https://${OWNER_LC}.github.io/YTMQ"
+          export VITE_SPOTIFY_CLIENT_ID="${VITE_SPOTIFY_CLIENT_ID:-431fa658f06e4078b3b79f20b41083f1}"
           echo "VITE_PUBLIC_SITE_URL=${VITE_PUBLIC_SITE_URL}"
           node scripts/verify-bridge-urls.mjs
           npm run build

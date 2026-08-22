@@ -7,6 +7,9 @@ const TOKENS_KEY = 'ytmq_spotify_tokens'
 const DEVICE_KEY = 'ytmq_spotify_device_id'
 const PKCE_KEY = 'ytmq_spotify_pkce'
 const RETURN_ROOM_KEY = 'ytmq_spotify_return_room'
+
+/** Public Spotify app for this YTMQ install. Safe to ship in the frontend. */
+export const DEFAULT_SPOTIFY_CLIENT_ID = '431fa658f06e4078b3b79f20b41083f1'
 export const RESTORE_TAB_KEY = 'ytmq_restore_tab'
 
 const SCOPES = [
@@ -48,8 +51,14 @@ export function subscribeSpotifyAuth(listener: () => void): () => void {
 }
 
 export function spotifyClientId(): string {
-  const value = import.meta.env.VITE_SPOTIFY_CLIENT_ID
-  return typeof value === 'string' ? value.trim() : ''
+  const env = import.meta.env.VITE_SPOTIFY_CLIENT_ID
+  if (typeof env === 'string' && env.trim()) return env.trim()
+  return DEFAULT_SPOTIFY_CLIENT_ID
+}
+
+export function spotifyClientSecret(): string {
+  const env = import.meta.env.VITE_SPOTIFY_CLIENT_SECRET
+  return typeof env === 'string' ? env.trim() : ''
 }
 
 export function isSpotifyConfigured(): boolean {
@@ -119,24 +128,6 @@ export function clearSpotifyAuth() {
   emitAuth()
 }
 
-export function getSpotifyDeviceId(): string | null {
-  try {
-    return localStorage.getItem(DEVICE_KEY)
-  } catch {
-    return null
-  }
-}
-
-export function setSpotifyDeviceId(id: string | null) {
-  try {
-    if (id) localStorage.setItem(DEVICE_KEY, id)
-    else localStorage.removeItem(DEVICE_KEY)
-  } catch {
-    /* private mode */
-  }
-  emitAuth()
-}
-
 export function isSpotifyCallback(): boolean {
   if (typeof window === 'undefined') return false
   const params = new URLSearchParams(window.location.search)
@@ -175,6 +166,8 @@ type TokenResponse = {
 }
 
 async function tokenRequest(body: Record<string, string>): Promise<TokenResponse> {
+  const secret = spotifyClientSecret()
+  if (secret) body.client_secret = secret
   const response = await fetch('https://accounts.spotify.com/api/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },

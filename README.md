@@ -1,6 +1,6 @@
 # YTMQ
 
-Shared queue for **YouTube Music** and **Spotify**: guests use this web app to search and manage the queue in realtime; the host connects [YouTube Music](https://music.youtube.com) and/or Spotify so new tracks play on their player automatically.
+Shared queue for **YouTube Music**, plus a Spotify follower for lyrics: guests use this web app to search and manage the queue in realtime; the host connects [YouTube Music](https://music.youtube.com) so new tracks play there, and/or links Spotify so the lobby shows whatever is already playing.
 
 **Live app (after deploy):** `https://<your-github-user>.github.io/YTMQ/`
 
@@ -9,7 +9,7 @@ Shared queue for **YouTube Music** and **Spotify**: guests use this web app to s
 1. Copy `.env.example` → `.env.local` and set:
    - `VITE_SUPABASE_URL`
    - `VITE_SUPABASE_ANON_KEY`
-   - `VITE_SPOTIFY_CLIENT_ID` (optional — needed to Connect Spotify)
+   - `VITE_SPOTIFY_CLIENT_ID` (optional override — the app already has one)
 2. `npm install`
 3. `npm run dev` → open `http://localhost:5173/YTMQ/`
 
@@ -38,7 +38,7 @@ Shared queue for **YouTube Music** and **Spotify**: guests use this web app to s
 1. In [Settings → Secrets and variables → Actions](https://github.com/T3lluz/YTMQ/settings/secrets/actions), add:
    - `VITE_SUPABASE_URL`
    - `VITE_SUPABASE_ANON_KEY`
-   - `VITE_SPOTIFY_CLIENT_ID` (optional — Spotify host player)
+   - `VITE_SPOTIFY_CLIENT_ID` (optional — Spotify follower)
 2. To run a workflow manually: **Actions → Deploy to GitHub Pages → Run workflow**, and choose branch **`main`** (not `gh-pages` — that branch has no workflow files).
 
 3. Open [Settings → Pages](https://github.com/T3lluz/YTMQ/settings/pages). Under **Source**, pick **exactly one** (mixing both causes “in progress deployment” errors):
@@ -52,16 +52,17 @@ Shared queue for **YouTube Music** and **Spotify**: guests use this web app to s
 
 Live site: `https://t3lluz.github.io/YTMQ/` (includes `ytmusic-bridge.js` for host connect and `ytmq-extension.zip` for the Chrome extension).
 
-## Spotify (optional host player)
+## Spotify (optional host follower)
 
-Spotify uses the official Web API (PKCE) from the host's YTMQ tab — no extension. Guest picks are matched by title + artist and played on the host's Spotify Connect device.
+Spotify uses the official Web API (PKCE) from the host's YTMQ tab. No extension, no Client ID prompt. After login, YTMQ reads the active Spotify player and shows that track on lyrics, now playing, and recently played. It does not push the shared queue onto Spotify.
 
-1. Create an app at [developer.spotify.com/dashboard](https://developer.spotify.com/dashboard).
-2. Add redirect URIs (exact, including trailing slash):
-   - `http://localhost:5173/YTMQ/`
-   - `https://t3lluz.github.io/YTMQ/`
-3. Copy the Client ID into `.env.local` as `VITE_SPOTIFY_CLIENT_ID`, and the same GitHub Actions secret for Pages deploys.
-4. Spotify **Premium** is required for playback control. Keep the YTMQ host tab open.
+The app already ships a public Client ID. On the Spotify dashboard, add these exact redirect URIs (trailing slash included):
+- `http://localhost:5173/YTMQ/`
+- `https://t3lluz.github.io/YTMQ/`
+
+Then play something in the Spotify app, click **Connect Spotify** in Admin, and approve access. Keep the YTMQ host tab open.
+
+Skip / pause / seek from YTMQ need Spotify Premium. Following what is playing works on Free.
 
 You can connect YouTube Music and Spotify at the same time; now-playing prefers Spotify while it is actively publishing.
 
@@ -97,7 +98,7 @@ npx playwright test tests/queue.spec.ts   # one suite
 - [ ] **Search** → add 3 tracks → Queue tab updates within ~1s
 - [ ] **Remove** and **reorder** (↑/↓) on Queue tab
 - [ ] **Host** connects YouTube Music (console on music.youtube.com); guest add appears in YT Music queue
-- [ ] **Host** connects Spotify (Premium) from Admin; guest add plays on the selected Spotify device
+- [ ] **Host** connects Spotify from Admin; play a song in the Spotify app and lyrics / now playing update
 - [ ] **Host** “Open” opens `https://music.youtube.com/watch?v=…`
 - [ ] Built bundle has no `YOUTUBE_API_KEY` or `service_role` (grep `dist/`)
 

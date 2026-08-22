@@ -1,7 +1,9 @@
 import { useRecentlyPlayed } from '../hooks/useRecentlyPlayed'
 import { useQueueAdder } from '../hooks/useQueueAdder'
 import { clearRecentlyPlayed, formatPlayedAgo } from '../lib/recentlyPlayed'
+import { isYoutubeVideoId } from '../lib/playback'
 import {
+  defaultArtistThumbnail,
   defaultThumbnail,
   type AddTrackInput,
   type QueueInsertMode,
@@ -51,8 +53,8 @@ export function RecentlyPlayed({
         <HistoryIcon />
         <p className="text-sm font-medium text-zinc-300">No history yet</p>
         <p className="max-w-xs text-sm text-zinc-500">
-          Songs appear here as they play in YouTube Music. Search above to add
-          the first track, then come back to replay favourites in one tap.
+          Songs appear here as they play. Search above to add the first track,
+          then come back to replay favourites in one tap.
         </p>
       </div>
     )
@@ -74,21 +76,27 @@ export function RecentlyPlayed({
       </div>
       <ul className="flex flex-col gap-1.5">
         {items.map((track) => {
+          const fromYoutube = isYoutubeVideoId(track.videoId)
+          const thumb =
+            track.thumbnailUrl ||
+            (fromYoutube
+              ? defaultThumbnail(track.videoId)
+              : defaultArtistThumbnail(track.title))
           const addable = {
             videoId: track.videoId,
             title: track.title,
             channelTitle: track.artist,
-            thumbnail: defaultThumbnail(track.videoId),
+            thumbnail: thumb,
           }
           return (
             <TrackRow
               key={`${track.videoId}:${track.playedAt}`}
-              thumbnail={defaultThumbnail(track.videoId)}
+              thumbnail={thumb}
               title={track.title}
               subtitle={track.artist || 'Unknown artist'}
               meta={formatPlayedAgo(track.playedAt)}
               pendingMode={pending?.id === track.videoId ? pending.mode : null}
-              disabled={pending !== null || !canAdd}
+              disabled={pending !== null || !canAdd || !fromYoutube}
               onPlayNext={() => void add(addable, 'play_next')}
               onQueue={() => void add(addable, 'queue')}
             />

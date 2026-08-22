@@ -337,11 +337,7 @@ export function Room() {
   const { items, loading, error, busyId, addTrack, removeItem } = useQueue(
     roomId ?? '',
   )
-  const { status: spotifyStatus } = useSpotifyPlayer(
-    roomId ?? '',
-    isHost,
-    items,
-  )
+  const { status: spotifyStatus } = useSpotifyPlayer(roomId ?? '', isHost)
 
   const lastError = useRef<string | null>(null)
   useEffect(() => {

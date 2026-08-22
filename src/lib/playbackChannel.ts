@@ -92,6 +92,7 @@ function applyNowPlaying(roomId: string, next: NowPlaying) {
     videoId: next.videoId,
     title: next.title,
     artist: next.artist,
+    thumbnailUrl: next.thumbnailUrl,
   })
   lastNowPlaying.set(roomId, next)
   const room = rooms.get(roomId)

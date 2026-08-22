@@ -167,6 +167,10 @@ export function LyricsView({
       }
     }
 
+    // Spotify next-up is whatever the player already has queued. Don't fall
+    // back to the shared YTMQ list — those tracks are for YouTube Music.
+    if (nowPlaying?.source === 'spotify') return null
+
     const next = queueItems.find((item) => item.video_id !== currentId)
     if (!next) return null
     return {
@@ -175,7 +179,7 @@ export function LyricsView({
       artist: next.channel_title ?? '',
       thumbnailUrl: next.thumbnail_url || hqThumbnail(next.video_id),
     }
-  }, [queueItems, nowPlaying?.videoId, ytmNextUp])
+  }, [queueItems, nowPlaying?.videoId, nowPlaying?.source, ytmNextUp])
 
   // Warm the lyrics cache for the upcoming track so it renders instantly the
   // moment it becomes the now-playing song.
@@ -396,8 +400,8 @@ export function LyricsScreen({
             </h2>
             <p className="mx-auto max-w-sm text-sm text-zinc-300/90">
               {connected
-                ? 'Press play in YouTube Music and the lyrics will light up here.'
-                : 'Keep music.youtube.com open and playing to follow along with synced lyrics.'}
+                ? 'Press play in YouTube Music or Spotify and the lyrics will light up here.'
+                : 'Connect YouTube Music or Spotify as host to follow along with synced lyrics.'}
             </p>
           </div>
 

@@ -1,13 +1,5 @@
-import {
-  getSpotifyDeviceId,
-  getValidSpotifyAccessToken,
-  setSpotifyDisplayName,
-} from './spotifyAuth'
-import {
-  buildSpotifySearchQueries,
-  pickSpotifyMatch,
-  type SpotifyTrackCandidate,
-} from './spotifyMatch'
+import { getValidSpotifyAccessToken, setSpotifyDisplayName } from './spotifyAuth'
+import type { NowPlayingNextUp } from './playback'
 
 const API = 'https://api.spotify.com/v1'
 
@@ -114,106 +106,61 @@ export async function fetchSpotifyProfile(): Promise<{ displayName: string } | n
   }
 }
 
-export async function fetchSpotifyDevices(): Promise<SpotifyDevice[]> {
-  const data = await spotifyJson<{ devices?: SpotifyDevice[] }>('/me/player/devices')
-  return (data.devices ?? []).filter((device) => Boolean(device.id))
-}
-
 export async function fetchSpotifyPlayback(): Promise<SpotifyPlayback | null> {
   const response = await spotifyFetch('/me/player')
   if (response.status === 204) return null
   return (await response.json()) as SpotifyPlayback
 }
 
-function deviceQuery(): string {
-  const id = getSpotifyDeviceId()
-  return id ? `?device_id=${encodeURIComponent(id)}` : ''
-}
-
-export async function transferSpotifyPlayback(deviceId: string, play = false) {
-  await spotifyFetch('/me/player', {
-    method: 'PUT',
-    body: JSON.stringify({ device_ids: [deviceId], play }),
-  })
-}
-
-export async function playSpotifyTrack(uri: string, deviceId?: string) {
-  const id = deviceId || getSpotifyDeviceId()
-  const query = id ? `?device_id=${encodeURIComponent(id)}` : ''
-  await spotifyFetch(`/me/player/play${query}`, {
-    method: 'PUT',
-    body: JSON.stringify({ uris: [uri] }),
-  })
-}
-
-export async function pauseSpotifyPlayback() {
-  await spotifyFetch(`/me/player/pause${deviceQuery()}`, { method: 'PUT' })
-}
-
-export async function resumeSpotifyPlayback() {
-  await spotifyFetch(`/me/player/play${deviceQuery()}`, { method: 'PUT' })
-}
-
-export async function skipSpotifyNext() {
-  await spotifyFetch(`/me/player/next${deviceQuery()}`, { method: 'POST' })
-}
-
-export async function skipSpotifyPrevious() {
-  await spotifyFetch(`/me/player/previous${deviceQuery()}`, { method: 'POST' })
-}
-
-export async function seekSpotifyPlayback(positionSec: number) {
-  const ms = Math.max(0, Math.round(positionSec * 1000))
-  const join = deviceQuery() ? '&' : '?'
-  await spotifyFetch(
-    `/me/player/seek${deviceQuery()}${join}position_ms=${ms}`,
-    { method: 'PUT' },
-  )
-}
-
-export async function setSpotifyVolume(volume: number) {
-  const pct = Math.min(100, Math.max(0, Math.round(volume)))
-  const join = deviceQuery() ? '&' : '?'
-  await spotifyFetch(
-    `/me/player/volume${deviceQuery()}${join}volume_percent=${pct}`,
-    { method: 'PUT' },
-  )
-}
-
-type SearchTrack = {
-  id: string
-  uri: string
+type QueueTrack = {
+  type?: string
+  id: string | null
   name: string
-  duration_ms: number
   artists?: { name: string }[]
   album?: { images?: { url: string }[] }
 }
 
-function candidateFromTrack(track: SearchTrack): SpotifyTrackCandidate {
-  return {
-    id: track.id,
-    uri: track.uri,
-    name: track.name,
-    artist: (track.artists ?? []).map((artist) => artist.name).join(', '),
-    albumArt: track.album?.images?.[0]?.url ?? '',
-    durationMs: track.duration_ms,
+/** First upcoming track on the host's Spotify player, if the API has one. */
+export async function fetchSpotifyNextUp(): Promise<NowPlayingNextUp | null> {
+  try {
+    const data = await spotifyJson<{ queue?: QueueTrack[] }>('/me/player/queue')
+    const next = (data.queue ?? []).find(
+      (item) => item?.id && item.name && item.type !== 'episode',
+    )
+    if (!next?.id) return null
+    return {
+      videoId: `spotify:${next.id}`,
+      title: next.name,
+      artist: (next.artists ?? []).map((artist) => artist.name).join(', '),
+      thumbnailUrl: next.album?.images?.[0]?.url ?? '',
+    }
+  } catch {
+    return null
   }
 }
 
-export async function searchSpotifyTrack(
-  title: string,
-  artist: string,
-): Promise<SpotifyTrackCandidate | null> {
-  const queries = buildSpotifySearchQueries(title, artist)
-  for (const query of queries) {
-    const data = await spotifyJson<{
-      tracks?: { items?: SearchTrack[] }
-    }>(`/search?type=track&limit=5&q=${encodeURIComponent(query)}`)
-    const candidates = (data.tracks?.items ?? [])
-      .filter((track) => track?.id && track.uri)
-      .map(candidateFromTrack)
-    const match = pickSpotifyMatch(title, artist, candidates)
-    if (match) return match
-  }
-  return null
+export async function pauseSpotifyPlayback() {
+  await spotifyFetch('/me/player/pause', { method: 'PUT' })
+}
+
+export async function resumeSpotifyPlayback() {
+  await spotifyFetch('/me/player/play', { method: 'PUT' })
+}
+
+export async function skipSpotifyNext() {
+  await spotifyFetch('/me/player/next', { method: 'POST' })
+}
+
+export async function skipSpotifyPrevious() {
+  await spotifyFetch('/me/player/previous', { method: 'POST' })
+}
+
+export async function seekSpotifyPlayback(positionSec: number) {
+  const ms = Math.max(0, Math.round(positionSec * 1000))
+  await spotifyFetch(`/me/player/seek?position_ms=${ms}`, { method: 'PUT' })
+}
+
+export async function setSpotifyVolume(volume: number) {
+  const pct = Math.min(100, Math.max(0, Math.round(volume)))
+  await spotifyFetch(`/me/player/volume?volume_percent=${pct}`, { method: 'PUT' })
 }
