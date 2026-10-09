@@ -21,11 +21,17 @@ jobs:
 
       - run: npm ci
 
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.9.6
+
+      - name: Typecheck server
+        working-directory: server
+        run: deno check main.ts
+
       - name: Typecheck and build
         env:
-          VITE_SUPABASE_URL: https://example.supabase.co
-          VITE_SUPABASE_ANON_KEY: example-anon-key
-          VITE_PUBLIC_SITE_URL: https://example.github.io/YTMQ
+          VITE_PUBLIC_SITE_URL: https://t3lluz.com/ytmq
           VITE_SPOTIFY_CLIENT_ID: example-spotify-client-id
         run: |
           set -euo pipefail

@@ -8,7 +8,7 @@ import {
   type QueueItem,
 } from '../lib/queue'
 import { notifyBridgeQueueRemove } from '../lib/bridgeChannel'
-import { supabase } from '../lib/supabase'
+import { ytmq } from '../lib/api'
 
 function sortByPosition(items: QueueItem[]) {
   return [...items].sort((a, b) => a.position - b.position)
@@ -27,6 +27,7 @@ export function useQueue(roomId: string) {
 
   useEffect(() => {
     let cancelled = false
+    let joinedOnce = false
 
     void fetchQueueItems(roomId)
       .then((next) => {
@@ -41,34 +42,24 @@ export function useQueue(roomId: string) {
         if (!cancelled) setLoading(false)
       })
 
-    const channel = supabase
+    const channel = ytmq
       .channel(`queue:${roomId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'queue_items',
-          filter: `room_id=eq.${roomId}`,
-        },
+      .on<QueueItem>(
+        'changes',
+        { event: 'INSERT', table: 'queue_items', roomId },
         (payload) => {
-          const row = payload.new as QueueItem | null
+          const row = payload.new
           if (!row?.id) return
           setItems((prev) =>
             sortByPosition([...prev.filter((item) => item.id !== row.id), row]),
           )
         },
       )
-      .on(
-        'postgres_changes',
-        {
-          event: 'DELETE',
-          schema: 'public',
-          table: 'queue_items',
-          filter: `room_id=eq.${roomId}`,
-        },
+      .on<QueueItem>(
+        'changes',
+        { event: 'DELETE', table: 'queue_items', roomId },
         (payload) => {
-          const old = payload.old as Pick<QueueItem, 'id'> | null
+          const old = payload.old
           if (!old?.id) {
             void fetchQueueItems(roomId)
               .then((next) => {
@@ -80,11 +71,21 @@ export function useQueue(roomId: string) {
           setItems((prev) => prev.filter((item) => item.id !== old.id))
         },
       )
-      .subscribe()
+      .subscribe((status) => {
+        // Changes made while the socket was down were never sent; catch up.
+        if (status === 'SUBSCRIBED' && joinedOnce) {
+          void fetchQueueItems(roomId)
+            .then((next) => {
+              if (!cancelled) setItems(next)
+            })
+            .catch(() => {})
+        }
+        if (status === 'SUBSCRIBED') joinedOnce = true
+      })
 
     return () => {
       cancelled = true
-      void supabase.removeChannel(channel)
+      void ytmq.removeChannel(channel)
     }
   }, [roomId])
 

@@ -261,10 +261,6 @@ export function YtMusicConnect({ roomId }: YtMusicConnectProps) {
     openYtmMusicWindow(roomId)
   }, [roomId])
 
-  if (!import.meta.env.VITE_SUPABASE_URL || !import.meta.env.VITE_SUPABASE_ANON_KEY) {
-    return null
-  }
-
   if (httpsRequired || !bridgeSiteRoot()) {
     return (
       <section className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-100">
@@ -273,7 +269,7 @@ export function YtMusicConnect({ roomId }: YtMusicConnectProps) {
           Add to <code className="text-xs">.env.local</code>:
         </p>
         <pre className="mt-2 overflow-x-auto rounded-lg bg-black/30 p-2 text-xs text-zinc-200">
-          VITE_PUBLIC_SITE_URL=https://YOUR_USER.github.io/YTMQ
+          VITE_PUBLIC_SITE_URL=https://t3lluz.com/ytmq
         </pre>
       </section>
     )

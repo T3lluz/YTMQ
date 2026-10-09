@@ -1,8 +1,8 @@
 /// <reference types="vite/client" />
 
 interface ImportMetaEnv {
-  readonly VITE_SUPABASE_URL: string
-  readonly VITE_SUPABASE_ANON_KEY: string
+  /** Optional absolute API URL; defaults to `<origin><base>api`. */
+  readonly VITE_API_URL?: string
   readonly VITE_PUBLIC_SITE_URL?: string
   readonly VITE_SPOTIFY_CLIENT_ID?: string
   readonly VITE_SPOTIFY_CLIENT_SECRET?: string
@@ -15,8 +15,7 @@ interface ImportMeta {
 interface Window {
   __YTMQ_BRIDGE_PARAMS__?: {
     roomId: string
-    sb: string
-    key: string
+    api: string
     since?: string
   }
   __YTMQ_BRIDGE__?: unknown

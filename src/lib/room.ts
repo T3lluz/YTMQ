@@ -1,4 +1,4 @@
-import { supabase } from './supabase'
+import { ytmq } from './api'
 
 export type CreateRoomResult = {
   room_id: string
@@ -58,8 +58,7 @@ export function getHostToken(roomId: string): string | null {
 }
 
 export async function createLobby(): Promise<CreateRoomResult> {
-  const { data, error } = await supabase.rpc('create_room')
-  if (error) throw error
+  const data = await ytmq.rpc('create_room')
   if (!data || typeof data !== 'object') {
     throw new Error('Failed to create lobby')
   }
@@ -74,11 +73,10 @@ export async function joinLobby(
   code: string,
   password?: string,
 ): Promise<JoinResult> {
-  const { data, error } = await supabase.rpc('join_room', {
+  const data = await ytmq.rpc('join_room', {
     p_code: code.trim(),
     p_password: password ?? null,
   })
-  if (error) throw error
   if (!data || typeof data !== 'object') {
     return { status: 'not_found' }
   }
@@ -92,8 +90,7 @@ export async function joinLobby(
 }
 
 export async function fetchRoom(roomId: string): Promise<RoomInfo | null> {
-  const { data, error } = await supabase.rpc('get_room', { p_room_id: roomId })
-  if (error) throw error
+  const data = await ytmq.rpc('get_room', { p_room_id: roomId })
   if (!data || typeof data !== 'object') return null
   const obj = data as Record<string, unknown>
   if (typeof obj.room_id !== 'string') return null
@@ -110,11 +107,10 @@ export async function verifyRoomPassword(
   roomId: string,
   password: string,
 ): Promise<boolean> {
-  const { data, error } = await supabase.rpc('verify_room_password', {
+  const data = await ytmq.rpc('verify_room_password', {
     p_room_id: roomId,
     p_password: password,
   })
-  if (error) throw error
   return data === true
 }
 
@@ -128,7 +124,7 @@ export async function setRoomSettings(
     allow_guest_controls: boolean
   },
 ): Promise<boolean> {
-  const { data, error } = await supabase.rpc('set_room_settings', {
+  const data = await ytmq.rpc('set_room_settings', {
     p_room_id: roomId,
     p_host_token: hostToken,
     p_locked: settings.locked,
@@ -136,7 +132,6 @@ export async function setRoomSettings(
     p_allow_guest_remove: settings.allow_guest_remove,
     p_allow_guest_controls: settings.allow_guest_controls,
   })
-  if (error) throw error
   return data === true
 }
 
@@ -145,12 +140,11 @@ export async function setRoomPassword(
   hostToken: string,
   password: string,
 ): Promise<boolean> {
-  const { data, error } = await supabase.rpc('set_room_password', {
+  const data = await ytmq.rpc('set_room_password', {
     p_room_id: roomId,
     p_host_token: hostToken,
     p_password: password,
   })
-  if (error) throw error
   return data === true
 }
 
@@ -168,10 +162,9 @@ export function shareUrl(roomId: string) {
 }
 
 export async function endLobby(roomId: string, hostToken: string): Promise<boolean> {
-  const { data, error } = await supabase.rpc('end_room', {
+  const data = await ytmq.rpc('end_room', {
     p_room_id: roomId,
     p_host_token: hostToken,
   })
-  if (error) throw error
   return data === true
 }

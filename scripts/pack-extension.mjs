@@ -42,9 +42,18 @@ for (const file of requiredFiles) {
 mkdirSync(distDir, { recursive: true })
 rmSync(zipPath, { force: true })
 
-execFileSync('zip', ['-r', '-q', zipPath, ...requiredFiles], {
-  cwd: extensionDir,
-  stdio: 'inherit',
-})
+// `zip` where it exists (CI), Python's zipfile where it doesn't (t3lluz).
+try {
+  execFileSync('zip', ['-r', '-q', zipPath, ...requiredFiles], {
+    cwd: extensionDir,
+    stdio: 'inherit',
+  })
+} catch (err) {
+  if (err?.code !== 'ENOENT') throw err
+  execFileSync('python3', ['-m', 'zipfile', '-c', zipPath, ...requiredFiles], {
+    cwd: extensionDir,
+    stdio: 'inherit',
+  })
+}
 
 console.log('OK: packed dist/ytmq-extension.zip')

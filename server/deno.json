@@ -1,0 +1,8 @@
+{
+  "nodeModulesDir": "none",
+  "compilerOptions": { "types": [] },
+  "tasks": {
+    "dev": "PORT=8787 SITE_DIR=../dist DATA_DIR=../.data deno run --watch --allow-net --allow-env --allow-read --allow-write=../.data main.ts",
+    "check": "deno check main.ts"
+  }
+}

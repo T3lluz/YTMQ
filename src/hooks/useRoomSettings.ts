@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { supabase } from '../lib/supabase'
+import { ytmq } from '../lib/api'
 import { DEFAULT_ROOM_SETTINGS, type RoomSettings } from '../lib/room'
 
 function settingsKey(s: RoomSettings): string {
@@ -38,18 +38,13 @@ export function useRoomSettings(
   useEffect(() => {
     if (!roomId) return
 
-    const channel = supabase
+    const channel = ytmq
       .channel(`room_settings:${roomId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'room_settings',
-          filter: `room_id=eq.${roomId}`,
-        },
+      .on<Partial<RoomSettings>>(
+        'changes',
+        { event: '*', table: 'room_settings', roomId },
         (payload) => {
-          const row = payload.new as Partial<RoomSettings> | null
+          const row = payload.new
           if (!row) return
           setSettings({
             locked: row.locked === true,
@@ -63,7 +58,7 @@ export function useRoomSettings(
       .subscribe()
 
     return () => {
-      void supabase.removeChannel(channel)
+      void ytmq.removeChannel(channel)
     }
   }, [roomId])
 

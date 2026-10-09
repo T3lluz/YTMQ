@@ -1,7 +1,7 @@
 /**
  * Runs on https://music.youtube.com — bundled (no external script imports).
  */
-import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import { createYtmqClient, type YtmqClient } from '../lib/ytmqClient'
 import {
   hideNextSongToast,
   tickNextSongToast,
@@ -16,8 +16,8 @@ import { parsePlaybackTimeLabel, PREV_RESTART_SECONDS } from '../lib/playback'
 
 type BridgeParams = {
   roomId: string
-  sb: string
-  key: string
+  /** Absolute API URL, e.g. https://t3lluz.com/ytmq/api */
+  api: string
   since: string
 }
 
@@ -146,12 +146,11 @@ function readStoredSession(): BridgeParams | null {
     const raw = localStorage.getItem(SESSION_KEY)
     if (!raw) return null
     const stored = JSON.parse(raw) as BridgeParams & { at?: number }
-    if (!stored.roomId || !stored.sb || !stored.key) return null
+    if (!stored.roomId || !stored.api) return null
     if (stored.at && Date.now() - stored.at >= SESSION_MAX_AGE_MS) return null
     return {
       roomId: stored.roomId,
-      sb: stored.sb,
-      key: stored.key,
+      api: stored.api,
       since: stored.since || new Date().toISOString(),
     }
   } catch {
@@ -169,12 +168,11 @@ function readParams(): BridgeParams | null {
   )
 
   const roomId = inline?.roomId ?? fromQuery.get('roomId')
-  const sb = inline?.sb ?? fromQuery.get('sb')
-  const key = inline?.key ?? fromQuery.get('key')
+  const api = inline?.api ?? fromQuery.get('api')
   const since =
     inline?.since ?? fromQuery.get('since') ?? new Date().toISOString()
 
-  if (roomId && sb && key) return { roomId, sb, key, since }
+  if (roomId && api) return { roomId, api, since }
   return readStoredSession()
 }
 
@@ -1173,12 +1171,12 @@ async function runBridge() {
   const params = readParams()
   if (!params) {
     console.error(
-      '[YTMQ] Missing roomId, sb, or key. Connect from the YTMQ host page.',
+      '[YTMQ] Missing roomId or api. Connect from the YTMQ host page.',
     )
     return
   }
 
-  const { roomId, sb, key, since: playbackSince } = params
+  const { roomId, api, since: playbackSince } = params
 
   if (!location.hostname.includes('music.youtube.com')) {
     console.error('[YTMQ] Open music.youtube.com and run this script there.')
@@ -1210,7 +1208,18 @@ async function runBridge() {
   const rowVideoById = new Map<string, string>()
   const pendingRemoveVideoIds = new Set<string>()
   const pendingRows: QueueRow[] = []
-  const supabase: SupabaseClient = createClient(sb, key)
+  const ytmq: YtmqClient = createYtmqClient(api)
+  const siteBase = api.replace(/\/api\/?$/, '') || defaultYtmqSiteBase()
+
+  /** The shared queue in order, or null when the server can't be reached. */
+  async function loadQueue(): Promise<(QueueRow & SharedQueueRow)[] | null> {
+    try {
+      return await ytmq.get(`/rooms/${encodeURIComponent(roomId)}/queue`)
+    } catch (err) {
+      log('Queue load failed', err)
+      return null
+    }
+  }
 
   function trackRowVideo(row: QueueRow) {
     if (row.id && row.video_id) {
@@ -1307,7 +1316,7 @@ async function runBridge() {
   let lastPublishedVideoId = ''
   let playbackJoined = false
   let queueJoined = false
-  let playbackChannel = supabase.channel(`ytmq-playback:${roomId}`)
+  let playbackChannel = ytmq.channel(`ytmq-playback:${roomId}`)
   let playbackReconnectTimer: number | undefined
 
   function attachPlaybackChannel() {
@@ -1330,8 +1339,8 @@ async function runBridge() {
     if (playbackReconnectTimer !== undefined) return
     playbackReconnectTimer = window.setTimeout(() => {
       playbackReconnectTimer = undefined
-      void supabase.removeChannel(playbackChannel).finally(() => {
-        playbackChannel = supabase.channel(`ytmq-playback:${roomId}`)
+      void ytmq.removeChannel(playbackChannel).finally(() => {
+        playbackChannel = ytmq.channel(`ytmq-playback:${roomId}`)
         attachPlaybackChannel()
       })
     }, 1500)
@@ -1341,33 +1350,19 @@ async function runBridge() {
 
   const removePlayedFromSharedQueue = createPlayedQueueCleanup({
     findByVideoId: async (videoId) => {
-      const { data, error } = await supabase
-        .from('queue_items')
-        .select('id, created_at, title, video_id, insert_mode')
-        .eq('room_id', roomId)
-        .eq('video_id', videoId)
-        .order('position', { ascending: true })
-        .limit(1)
-      if (error) return null
-      return (data?.[0] as SharedQueueRow | undefined) ?? null
+      const rows = await loadQueue()
+      return rows?.find((row) => row.video_id === videoId) ?? null
     },
     findTopOfQueue: async () => {
-      const { data, error } = await supabase
-        .from('queue_items')
-        .select('id, created_at, title, video_id, insert_mode')
-        .eq('room_id', roomId)
-        .order('position', { ascending: true })
-        .limit(1)
-      if (error) return null
-      return (data?.[0] as SharedQueueRow | undefined) ?? null
+      const rows = await loadQueue()
+      return rows?.[0] ?? null
     },
     deleteRow: async (row, reason) => {
       skipYtmRemoveIds.add(row.id)
       syncedIds.delete(row.id)
-      const { error } = await supabase
-        .from('queue_items')
-        .delete()
-        .eq('id', row.id)
+      const error = await ytmq
+        .delete(`/queue/${encodeURIComponent(row.id)}`)
+        .then(() => null, (err: Error) => err)
       if (error) {
         // Roll back the skip flag so a later DELETE event (e.g. from a manual
         // remove) still triggers the YT Music cleanup.
@@ -1411,8 +1406,7 @@ async function runBridge() {
       }
     }
 
-    // Defer realtime sends until the channel is actually joined; otherwise
-    // supabase-js falls back to REST and logs a deprecation warning.
+    // Defer realtime sends until the channel is actually joined.
     if (!playbackJoined) return
 
     void playbackChannel.send({
@@ -1433,27 +1427,9 @@ async function runBridge() {
   }, 500)
 
   async function loadInitialQueue(): Promise<QueueRow[]> {
-    const primary = await supabase
-      .from('queue_items')
-      .select('id, video_id, title, created_at, insert_mode')
-      .eq('room_id', roomId)
-      .order('position', { ascending: true })
-
-    if (!primary.error) return (primary.data ?? []) as QueueRow[]
-
-    // Fall back if the live schema is missing `insert_mode` (older deploy).
-    log('Initial queue load failed, retrying without insert_mode column:', primary.error.message)
-    const fallback = await supabase
-      .from('queue_items')
-      .select('id, video_id, title, created_at')
-      .eq('room_id', roomId)
-      .order('position', { ascending: true })
-
-    if (fallback.error) {
-      log('Initial queue load failed (continuing anyway):', fallback.error.message)
-      return []
-    }
-    return (fallback.data ?? []) as QueueRow[]
+    const rows = await loadQueue()
+    if (!rows) log('Initial queue load failed (continuing anyway)')
+    return rows ?? []
   }
 
   const existingRows = await loadInitialQueue()
@@ -1510,7 +1486,7 @@ async function runBridge() {
     window.setTimeout(publishNowPlaying, 800)
   }
 
-  const channel = supabase
+  const channel = ytmq
     .channel(`ytmq-bridge:${roomId}`)
     .on('broadcast', { event: 'playback_control' }, ({ payload }) => {
       if (!payload || typeof payload !== 'object') return
@@ -1551,16 +1527,11 @@ async function runBridge() {
         'broadcast',
       )
     })
-    .on(
-      'postgres_changes',
-      {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'queue_items',
-        filter: `room_id=eq.${roomId}`,
-      },
+    .on<QueueRow>(
+      'changes',
+      { event: 'INSERT', table: 'queue_items', roomId },
       (payload) => {
-        const row = payload.new as QueueRow | undefined
+        const row = payload.new
         if (!row?.id || !row?.video_id) return
         trackRowVideo(row)
         const createdAt = row.created_at ?? new Date().toISOString()
@@ -1568,16 +1539,11 @@ async function runBridge() {
         void enqueueToYtm({ ...row, created_at: createdAt })
       },
     )
-    .on(
-      'postgres_changes',
-      {
-        event: 'DELETE',
-        schema: 'public',
-        table: 'queue_items',
-        filter: `room_id=eq.${roomId}`,
-      },
+    .on<QueueRow>(
+      'changes',
+      { event: 'DELETE', table: 'queue_items', roomId },
       (payload) => {
-        const row = payload.old as QueueRow | undefined
+        const row = payload.old
         if (!row?.id && !row?.video_id) return
         handleQueueRemove(
           {
@@ -1634,8 +1600,8 @@ async function runBridge() {
 
   const panelBridge = startPanelBridge({
     roomId,
-    siteBase: defaultYtmqSiteBase(),
-    supabase,
+    siteBase,
+    ytmq,
     isConnected: () => queueJoined,
     readNowPlaying: () => readNowPlaying(),
     readNextSong: getNextSongInfo,
@@ -1686,8 +1652,8 @@ async function runBridge() {
       }
       hideNextSongToast({ immediate: true })
       panelBridge.destroy()
-      void supabase.removeChannel(channel)
-      void supabase.removeChannel(playbackChannel)
+      void ytmq.removeChannel(channel)
+      void ytmq.removeChannel(playbackChannel)
       delete window.__YTMQ_BRIDGE__
       showToast('YTMQ disconnected')
     },

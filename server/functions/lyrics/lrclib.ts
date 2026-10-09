@@ -1,6 +1,6 @@
 // LRCLIB provider — the existing client-side source, mirrored on the server
 // so requests from regions that can't reach lrclib.net directly still get a
-// result via Supabase's edge runtime.
+// result via the server.
 
 import {
   fetchWithTimeout,

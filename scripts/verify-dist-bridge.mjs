@@ -21,8 +21,8 @@ const combined = jsFiles
   .map((f) => readFileSync(join(distAssets, f), 'utf8'))
   .join('\n')
 
-if (combined.includes('YTMQ/YTMQ')) {
-  console.error('FAIL: bundle contains double /YTMQ/ path')
+if (/ytmq\/ytmq/i.test(combined)) {
+  console.error('FAIL: bundle contains double /ytmq/ path')
   failed += 1
 }
 

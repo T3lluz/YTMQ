@@ -1,4 +1,4 @@
-import { supabase } from './supabase'
+import { ytmq } from './api'
 
 export type SearchResultItem = {
   id: string
@@ -25,11 +25,7 @@ const SEARCH_LIMITS: Record<SearchFilter, number> = {
 async function invokeSearch(
   body: Record<string, unknown>,
 ): Promise<SearchResponse> {
-  const { data, error } = await supabase.functions.invoke<SearchResponse>(
-    'search',
-    { body },
-  )
-  if (error) throw error
+  const data = await ytmq.invoke<SearchResponse>('search', body)
   if (data?.error) throw new Error(data.error)
   return data ?? {}
 }

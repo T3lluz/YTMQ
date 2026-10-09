@@ -9,7 +9,8 @@
  */
 
 const YTM_ORIGIN = 'https://music.youtube.com'
-const YTMQ_SITE_ORIGIN = 'https://t3lluz.github.io'
+const YTMQ_SITE_ORIGIN = 'https://t3lluz.com'
+const YTMQ_SITE_PATH = '/ytmq'
 const SESSION_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000
 
 function isValidSession(session) {
@@ -17,18 +18,15 @@ function isValidSession(session) {
     session &&
       typeof session.roomId === 'string' &&
       session.roomId &&
-      typeof session.sb === 'string' &&
-      session.sb &&
-      typeof session.key === 'string' &&
-      session.key,
+      typeof session.api === 'string' &&
+      session.api,
   )
 }
 
 function normalizeSession(session) {
   return {
     roomId: session.roomId,
-    sb: session.sb,
-    key: session.key,
+    api: session.api,
     since: session.since || new Date().toISOString(),
     at: typeof session.at === 'number' ? session.at : Date.now(),
   }
@@ -37,8 +35,7 @@ function normalizeSession(session) {
 function bridgeParamsFromSession(session) {
   return {
     roomId: session.roomId,
-    sb: session.sb,
-    key: session.key,
+    api: session.api,
     since: session.since || new Date().toISOString(),
   }
 }
@@ -61,15 +58,14 @@ function isSiteSender(sender) {
   return Boolean(
     sender.tab &&
       typeof sender.url === 'string' &&
-      sender.url.startsWith(YTMQ_SITE_ORIGIN + '/'),
+      sender.url.toLowerCase().startsWith(YTMQ_SITE_ORIGIN + YTMQ_SITE_PATH + '/'),
   )
 }
 
 function ytmDeepLink(session) {
   const q = new URLSearchParams({
     roomId: session.roomId,
-    sb: session.sb,
-    key: session.key,
+    api: session.api,
     since: session.since,
   })
   return YTM_ORIGIN + '/?' + q.toString()
@@ -77,12 +73,12 @@ function ytmDeepLink(session) {
 
 function ytmqRoomUrl(roomId) {
   return roomId
-    ? `${YTMQ_SITE_ORIGIN}/YTMQ/room/${encodeURIComponent(roomId)}`
-    : `${YTMQ_SITE_ORIGIN}/YTMQ/`
+    ? `${YTMQ_SITE_ORIGIN}${YTMQ_SITE_PATH}/room/${encodeURIComponent(roomId)}`
+    : `${YTMQ_SITE_ORIGIN}${YTMQ_SITE_PATH}/`
 }
 
 async function focusYtmqTab(roomId) {
-  const tabs = await chrome.tabs.query({ url: `${YTMQ_SITE_ORIGIN}/YTMQ/*` })
+  const tabs = await chrome.tabs.query({ url: `${YTMQ_SITE_ORIGIN}${YTMQ_SITE_PATH}/*` })
   if (tabs.length === 0) return false
   tabs.sort(byLastAccessed)
   let target = tabs[0]
@@ -106,59 +102,30 @@ async function openYtmqTab(roomId) {
   return true
 }
 
-async function supabaseRpc(session, fn, body) {
-  const res = await fetch(`${session.sb}/rest/v1/rpc/${fn}`, {
+async function apiRpc(session, fn, body) {
+  const res = await fetch(`${session.api}/rpc/${fn}`, {
     method: 'POST',
-    headers: {
-      apikey: session.key,
-      Authorization: `Bearer ${session.key}`,
-      'Content-Type': 'application/json',
-    },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
   if (!res.ok) return null
   return res.json()
 }
 
-async function fetchQueueCount(session) {
-  const url = new URL(`${session.sb}/rest/v1/queue_items`)
-  url.searchParams.set('room_id', `eq.${session.roomId}`)
-  url.searchParams.set('select', 'id')
-  const res = await fetch(url, {
-    method: 'HEAD',
-    headers: {
-      apikey: session.key,
-      Authorization: `Bearer ${session.key}`,
-      Prefer: 'count=exact',
-    },
-  })
-  if (!res.ok) return 0
-  const range = res.headers.get('content-range') || ''
-  const match = range.match(/\/(\d+)$/)
-  return match ? Number(match[1]) : 0
-}
-
-async function fetchParticipantCount(session) {
-  const url = new URL(`${session.sb}/rest/v1/participants`)
-  url.searchParams.set('room_id', `eq.${session.roomId}`)
-  url.searchParams.set('kicked', 'eq.false')
-  url.searchParams.set('select', 'client_id')
-  const res = await fetch(url, {
-    method: 'HEAD',
-    headers: {
-      apikey: session.key,
-      Authorization: `Bearer ${session.key}`,
-      Prefer: 'count=exact',
-    },
-  })
-  if (!res.ok) return 0
-  const range = res.headers.get('content-range') || ''
-  const match = range.match(/\/(\d+)$/)
-  return match ? Number(match[1]) : 0
+async function fetchCounts(session) {
+  try {
+    const res = await fetch(
+      `${session.api}/rooms/${encodeURIComponent(session.roomId)}/counts`,
+    )
+    if (!res.ok) return { queue: 0, participants: 0 }
+    return await res.json()
+  } catch {
+    return { queue: 0, participants: 0 }
+  }
 }
 
 async function fetchRoomMeta(session) {
-  const data = await supabaseRpc(session, 'get_room', {
+  const data = await apiRpc(session, 'get_room', {
     p_room_id: session.roomId,
   })
   if (!data || typeof data !== 'object') return { code: '', roomId: session.roomId }
@@ -363,12 +330,13 @@ async function buildPopupState() {
   if (!isValidSession(session) || Date.now() - (session.at || 0) >= SESSION_MAX_AGE_MS) {
     return { linked: false }
   }
-  const [room, queueCount, participantCount, ytm] = await Promise.all([
+  const [room, counts, ytm] = await Promise.all([
     fetchRoomMeta(session),
-    fetchQueueCount(session),
-    fetchParticipantCount(session),
+    fetchCounts(session),
     readYtmSnapshot(),
   ])
+  const queueCount = counts.queue || 0
+  const participantCount = counts.participants || 0
   const ytmTabs = await queryLinkedYtmTabs()
   return {
     linked: true,
@@ -417,8 +385,7 @@ async function injectBridge(tabId, session) {
         if (!target) return false
         return (
           target.roomId === bridgeParams.roomId &&
-          target.sb === bridgeParams.sb &&
-          target.key === bridgeParams.key &&
+          target.api === bridgeParams.api &&
           (target.since || '') === (bridgeParams.since || '')
         )
       }

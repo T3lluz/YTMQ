@@ -6,7 +6,7 @@ import { PREV_RESTART_SECONDS } from '../../src/lib/playback'
  * Space = play/pause, Right = next, Left = restart-or-previous (3s rule).
  */
 
-const FIXTURE_URL = 'http://localhost:5173/YTMQ/__test/playback-keybinds.html'
+const FIXTURE_URL = 'http://localhost:5173/ytmq/__test/playback-keybinds.html'
 
 const FIXTURE_HTML = `<!doctype html>
 <html>
@@ -25,8 +25,8 @@ const FIXTURE_HTML = `<!doctype html>
         resolvePrevCommand,
         commandForPlaybackKey,
         bindPlaybackKeybinds,
-      } from 'http://localhost:5173/YTMQ/src/lib/playbackKeybinds.ts'
-      import { PREV_RESTART_SECONDS } from 'http://localhost:5173/YTMQ/src/lib/playback.ts'
+      } from 'http://localhost:5173/ytmq/src/lib/playbackKeybinds.ts'
+      import { PREV_RESTART_SECONDS } from 'http://localhost:5173/ytmq/src/lib/playback.ts'
 
       const state = {
         enabled: true,

@@ -1,5 +1,5 @@
 var SESSION_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000
-var YTMQ_SITE = 'https://t3lluz.github.io/YTMQ'
+var YTMQ_SITE = 'https://t3lluz.com/ytmq'
 var YTM_ORIGIN = 'https://music.youtube.com'
 
 var popupState = { linked: false }

@@ -5,7 +5,6 @@
 // fully sync. The browser-side `fetchLyrics` still hits LRCLIB directly in
 // parallel for the fastest happy-path.
 
-import 'jsr:@supabase/functions-js/edge-runtime.d.ts'
 
 import { searchLrclib } from './lrclib.ts'
 import { searchKugou } from './kugou.ts'
@@ -222,7 +221,7 @@ function bestOf(
   )
 }
 
-Deno.serve(async (req) => {
+export async function handler(req: Request): Promise<Response> {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
@@ -235,7 +234,7 @@ Deno.serve(async (req) => {
 
     const best = await aggregate(query, sources)
     // Lightweight observability: log the exact query + outcome so failed
-    // lookups can be diagnosed from `supabase functions logs lyrics`.
+    // lookups can be diagnosed from the server log (`docker logs ytmq`).
     console.log(
       JSON.stringify({
         title: query.title,
@@ -257,4 +256,4 @@ Deno.serve(async (req) => {
     const message = err instanceof Error ? err.message : 'lyrics lookup failed'
     return jsonResponse({ lyrics: null, error: message }, 502)
   }
-})
+}

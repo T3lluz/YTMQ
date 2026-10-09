@@ -1,0 +1,67 @@
+# YTMQ on t3lluz.com/ytmq. See README.md next to this file.
+#
+# Run from ~/docker/ytmq, which holds the deploy checkout (repo/), the
+# built sites (build/) and the database (data/):
+#
+#   docker compose -f repo/deploy/server/compose.yml --project-directory . up -d
+#
+# update.sh does exactly that after every push to main.
+name: ytmq
+
+services:
+  # The app, its API, the realtime hub and the search/lyrics functions.
+  ytmq:
+    image: denoland/deno:2.9.6
+    container_name: ytmq
+    restart: unless-stopped
+    user: "${YTMQ_UID:-1000}:${YTMQ_GID:-1000}"
+    working_dir: /app/server
+    command:
+      - run
+      - --no-prompt
+      - --allow-net
+      - --allow-env
+      - --allow-read=/app,/build,/data
+      - --allow-write=/data
+      - main.ts
+    environment:
+      TZ: Europe/Oslo
+      DENO_DIR: /tmp/deno
+      PORT: "8080"
+      SITE_DIR: /build/current
+      DATA_DIR: /data
+    volumes:
+      - ./repo:/app:ro
+      - ./build:/build:ro
+      - ./data:/data
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test:
+        - CMD
+        - deno
+        - eval
+        - "const r = await fetch('http://127.0.0.1:8080/ytmq/api/health'); if (!r.ok) Deno.exit(1)"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    networks:
+      # Caddy (on the tailnet) reaches it as ytmq:8080.
+      proxynet: {}
+      # Cinema Info's Cloudflare tunnel (cinema-tunnel) reaches it as
+      # ytmq:8080 for the public t3lluz.com/ytmq* route.
+      edge: {}
+
+networks:
+  proxynet:
+    external: true
+    name: caddy_proxynet
+  edge:
+    external: true
+    name: cinema-info_edge

@@ -5,7 +5,7 @@ import { expect, test, type Page } from '@playwright/test'
  * loaded through Vite so we exercise the same module the app ships.
  */
 
-const FIXTURE_URL = 'http://localhost:5173/YTMQ/__test/spotify-match.html'
+const FIXTURE_URL = 'http://localhost:5173/ytmq/__test/spotify-match.html'
 
 const FIXTURE_HTML = `<!doctype html>
 <html>
@@ -22,7 +22,7 @@ const FIXTURE_HTML = `<!doctype html>
         scoreSpotifyCandidate,
         pickSpotifyMatch,
         pickNextPlayable,
-      } from 'http://localhost:5173/YTMQ/src/lib/spotifyMatch.ts'
+      } from 'http://localhost:5173/ytmq/src/lib/spotifyMatch.ts'
 
       window.__spotifyMatch = {
         cleanArtistName,

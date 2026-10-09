@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { supabase } from '../lib/supabase'
+import { ytmq } from '../lib/api'
 import {
   fetchParticipants,
   isOnline,
@@ -62,16 +62,11 @@ export function useRoomPresence(
       })
       .catch(() => {})
 
-    const channel = supabase
+    const channel = ytmq
       .channel(`participants:${roomId}`)
       .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'participants',
-          filter: `room_id=eq.${roomId}`,
-        },
+        'changes',
+        { event: '*', table: 'participants', roomId },
         (payload) => {
           const row = (payload.new ?? payload.old) as
             | (Participant & { kicked?: boolean })
@@ -104,7 +99,7 @@ export function useRoomPresence(
 
     return () => {
       cancelled = true
-      void supabase.removeChannel(channel)
+      void ytmq.removeChannel(channel)
     }
   }, [roomId, heartbeat, clientId])
 

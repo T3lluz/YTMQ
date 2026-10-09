@@ -1,9 +1,9 @@
 import { defineConfig, devices } from '@playwright/test'
 
 /**
- * Mocked-backend smoke config: runs the Vite dev server with placeholder
- * env vars and intercepts every Supabase request inside the page. Used to
- * verify UI behaviour without real Supabase credentials.
+ * Mocked-backend smoke config: runs the Vite dev server pointed at a stub
+ * API and intercepts every request to it inside the page. Used to verify UI
+ * behaviour without a running YTMQ server.
  */
 export default defineConfig({
   testDir: './tests/smoke',
@@ -14,7 +14,7 @@ export default defineConfig({
   timeout: 60_000,
   expect: { timeout: 10_000 },
   use: {
-    baseURL: 'http://localhost:5173/YTMQ/',
+    baseURL: 'http://localhost:5173/ytmq/',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
   },
@@ -26,17 +26,14 @@ export default defineConfig({
   ],
   webServer: {
     command: 'npm run dev',
-    url: 'http://localhost:5173/YTMQ/',
+    url: 'http://localhost:5173/ytmq/',
     reuseExistingServer: true,
     timeout: 120_000,
     env: {
       ...process.env,
-      VITE_SUPABASE_URL:
-        process.env.VITE_SUPABASE_URL ?? 'https://stub.supabase.co',
-      VITE_SUPABASE_ANON_KEY:
-        process.env.VITE_SUPABASE_ANON_KEY ?? 'stub-anon-key',
+      VITE_API_URL: 'https://stub.ytmq.test/api',
       VITE_PUBLIC_SITE_URL:
-        process.env.VITE_PUBLIC_SITE_URL ?? 'https://stub.github.io/YTMQ',
+        process.env.VITE_PUBLIC_SITE_URL ?? 'https://stub.ytmq.test/ytmq',
       VITE_SPOTIFY_CLIENT_ID:
         process.env.VITE_SPOTIFY_CLIENT_ID ?? 'stub-spotify-client-id',
     },

@@ -9,7 +9,7 @@ import { expect, test, type Page } from '@playwright/test'
  * drive it through every state without needing a real music.youtube.com tab.
  */
 
-const FIXTURE_URL = 'http://localhost:5173/YTMQ/__test/next-song-toast.html'
+const FIXTURE_URL = 'http://localhost:5173/ytmq/__test/next-song-toast.html'
 
 const FIXTURE_HTML = `<!doctype html>
 <html>
@@ -27,7 +27,7 @@ const FIXTURE_HTML = `<!doctype html>
         computeVisibleMs,
         getShownVideoIdForTest,
         resetNextSongToastForTest,
-      } from 'http://localhost:5173/YTMQ/src/bridge/nextSongToast.ts'
+      } from 'http://localhost:5173/ytmq/src/bridge/nextSongToast.ts'
 
       const state = {
         times: null,

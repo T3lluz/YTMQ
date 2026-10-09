@@ -18,7 +18,7 @@ test.describe('Home', () => {
   test('navigates to join page', async ({ page }) => {
     await gotoApp(page)
     await page.getByRole('link', { name: 'Join with code' }).click()
-    await expect(page).toHaveURL(/\/YTMQ\/join\/?$/)
+    await expect(page).toHaveURL(/\/ytmq\/join\/?$/)
     await expect(page.getByRole('heading', { name: 'Join lobby' })).toBeVisible()
   })
 
@@ -28,7 +28,7 @@ test.describe('Home', () => {
     await gotoApp(page)
     await page.getByRole('button', { name: 'Create lobby' }).click()
 
-    await expect(page).toHaveURL(/\/YTMQ\/room\/[0-9a-f-]{36}\/?$/, {
+    await expect(page).toHaveURL(/\/ytmq\/room\/[0-9a-f-]{36}\/?$/, {
       timeout: 15_000,
     })
     await expect(page.getByText('Queue mirror')).toBeVisible()

@@ -1,11 +1,10 @@
 import { expect, test, type Page } from '@playwright/test'
 
 /**
- * Mocked-Supabase smoke test for the Play next / Add to queue UI.
+ * Mocked-backend smoke test for the Play next / Add to queue UI.
  *
- * Real Supabase isn't available in this environment, so we intercept every
- * supabase.co request the React app makes and respond with deterministic
- * fixtures. This exercises:
+ * The YTMQ server isn't running here, so we intercept every request the
+ * React app makes to the stub API and respond with deterministic fixtures. This exercises:
  *   - Two icon buttons render on each search result (Play next + Add to queue)
  *   - Buttons stay aligned on a 360 px viewport without clipping
  *   - Adding a track surfaces the right toast for each mode
@@ -65,7 +64,7 @@ async function installMocks(page: Page) {
     return [...queue].sort((a, b) => a.position - b.position)
   }
 
-  await page.route(/stub\.supabase\.co\/.*/i, async (route) => {
+  await page.route(/stub\.ytmq\.test\/.*/i, async (route) => {
     const req = route.request()
     const url = new URL(req.url())
     const method = req.method().toUpperCase()
@@ -103,90 +102,55 @@ async function installMocks(page: Page) {
       })
     }
 
-    if (path.endsWith('/functions/v1/search')) {
+    if (path.endsWith('/functions/search')) {
       return json(200, { results: makeSongs() })
     }
 
-    if (path.endsWith('/rest/v1/queue_items')) {
-      const accept = req.headers()['accept'] ?? ''
-      const wantsSingleObject = accept.includes(
-        'application/vnd.pgrst.object+json',
-      )
-
-      if (method === 'GET') {
-        const order = url.searchParams.get('order') ?? ''
-        let rows = sortedQueue()
-        if (order.startsWith('position.desc')) {
-          rows = rows.slice().reverse()
-        }
-        const limitParam = url.searchParams.get('limit')
-        const limit = limitParam != null ? Number.parseInt(limitParam, 10) : NaN
-        if (Number.isFinite(limit) && limit > 0) {
-          rows = rows.slice(0, limit)
-        }
-
-        if (wantsSingleObject) {
-          return json(200, rows[0] ?? null)
-        }
-        return json(200, rows)
-      }
+    if (path.endsWith(`/rooms/${ROOM_ID}/queue`)) {
+      if (method === 'GET') return json(200, sortedQueue())
       if (method === 'POST') {
-        let body: Partial<QueueRow> | Partial<QueueRow>[] = {}
+        let body: Partial<QueueRow> = {}
         try {
-          const raw = req.postData()
-          body = raw
-            ? (JSON.parse(raw) as Partial<QueueRow> | Partial<QueueRow>[])
-            : {}
+          body = JSON.parse(req.postData() ?? '{}') as Partial<QueueRow>
         } catch {
           body = {}
         }
-        const bodyJson: Partial<QueueRow> = Array.isArray(body)
-          ? (body[0] ?? {})
-          : body
-
-        // Mirror Postgres: clash on (room_id, position) is a unique violation.
-        if (
-          typeof bodyJson.position === 'number' &&
-          queue.some((row) => row.position === bodyJson.position)
-        ) {
-          return json(409, {
-            code: '23505',
-            message:
-              'duplicate key value violates unique constraint "queue_items_room_id_position_key"',
-          })
-        }
-
+        // Mirror the server: Play next goes above the top, Add to queue below
+        // the bottom.
+        const sorted = sortedQueue()
+        const mode = body.insert_mode === 'queue' ? 'queue' : 'play_next'
+        const position =
+          sorted.length === 0
+            ? 0
+            : mode === 'queue'
+              ? sorted[sorted.length - 1]!.position + 1
+              : sorted[0]!.position - 1
         idCounter += 1
-        const fallbackPosition = queue.length
         const row: QueueRow = {
           id: `qi_${idCounter}`,
           room_id: ROOM_ID,
-          position:
-            typeof bodyJson.position === 'number'
-              ? bodyJson.position
-              : fallbackPosition,
-          video_id: bodyJson.video_id ?? '',
-          title: bodyJson.title ?? '',
-          channel_title: bodyJson.channel_title ?? '',
-          thumbnail_url: bodyJson.thumbnail_url ?? '',
-          added_by: bodyJson.added_by ?? '',
+          position,
+          video_id: body.video_id ?? '',
+          title: body.title ?? '',
+          channel_title: body.channel_title ?? '',
+          thumbnail_url: body.thumbnail_url ?? '',
+          added_by: body.added_by ?? '',
           created_at: new Date().toISOString(),
-          insert_mode: bodyJson.insert_mode === 'queue' ? 'queue' : 'play_next',
+          insert_mode: mode,
         }
         queue.push(row)
-        return json(201, wantsSingleObject ? row : [row])
-      }
-      if (method === 'DELETE') {
-        const id = url.searchParams.get('id')?.replace(/^eq\./, '')
-        if (id) {
-          const idx = queue.findIndex((row) => row.id === id)
-          if (idx >= 0) queue.splice(idx, 1)
-        }
-        return json(204, null)
+        return json(201, row)
       }
     }
 
-    if (path.includes('/realtime/')) {
+    const deleteMatch = path.match(/\/queue\/([^/]+)$/)
+    if (deleteMatch && method === 'DELETE') {
+      const idx = queue.findIndex((row) => row.id === deleteMatch[1])
+      if (idx >= 0) queue.splice(idx, 1)
+      return json(200, { deleted: idx >= 0 })
+    }
+
+    if (path.endsWith('/realtime')) {
       return route.fulfill({ status: 200, body: '' })
     }
 
@@ -220,7 +184,7 @@ async function gotoRoom(page: Page) {
 
 test.use({ viewport: { width: 360, height: 720 } })
 
-test.describe('Queue insert modes (mocked Supabase)', () => {
+test.describe('Queue insert modes (mocked API)', () => {
   test('search rows render Play next and Add to queue buttons that fit on mobile widths', async ({
     page,
   }) => {

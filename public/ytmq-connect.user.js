@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         YTMQ — YouTube Music connect
 // @namespace    https://github.com/T3lluz/YTMQ
-// @version      1.5.0
+// @version      1.6.0
 // @description  Auto-connects YTMQ on music.youtube.com (from host link or saved session)
 // @match        https://music.youtube.com/*
 // @run-at       document-start
@@ -12,18 +12,16 @@
   var SESSION_KEY = 'ytmq_session'
   var CAPTURE_KEY = 'ytmq_url_capture'
   var SESSION_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000
-  var DEFAULT_BRIDGE = 'https://t3lluz.github.io/YTMQ/ytmusic-bridge.js'
+  var DEFAULT_BRIDGE = 'https://t3lluz.com/ytmq/ytmusic-bridge.js'
 
   function readQueryParams() {
     var q = new URLSearchParams(location.search)
     var roomId = q.get('roomId')
-    var sb = q.get('sb')
-    var key = q.get('key')
-    if (!roomId || !sb || !key) return null
+    var api = q.get('api')
+    if (!roomId || !api) return null
     return {
       roomId: roomId,
-      sb: sb,
-      key: key,
+      api: api,
       since: q.get('since') || '',
       bridgeList: q.get('ytmqBridge') || '',
       at: Date.now(),
@@ -56,8 +54,7 @@
       if (
         !stored ||
         !stored.roomId ||
-        !stored.sb ||
-        !stored.key ||
+        !stored.api ||
         Date.now() - (stored.at || 0) >= SESSION_MAX_AGE_MS
       ) {
         return null
@@ -73,7 +70,7 @@
       var raw = sessionStorage.getItem(CAPTURE_KEY)
       if (!raw) return null
       var captured = JSON.parse(raw)
-      if (!captured || !captured.roomId || !captured.sb || !captured.key) {
+      if (!captured || !captured.roomId || !captured.api) {
         return null
       }
       return captured
@@ -96,8 +93,7 @@
     window.__YTMQ_BRIDGE_LOADING__ = true
     window.__YTMQ_BRIDGE_PARAMS__ = {
       roomId: session.roomId,
-      sb: session.sb,
-      key: session.key,
+      api: session.api,
       since: session.since || new Date().toISOString(),
     }
 

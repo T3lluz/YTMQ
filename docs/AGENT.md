@@ -1,6 +1,6 @@
 # YTMQ — Agent playbook
 
-YouTube Music **shared queue**: host plays in **YT Music app**; **guests** use the **web app** to search and manage a **realtime shared queue**. Repo: greenfield (git only until scaffolded). **Goal:** one-day MVP, **$0** stack.
+YouTube Music **shared queue**: the host plays in **YouTube Music**; **guests** use the **web app** to search and manage a **realtime shared queue**. Live at **https://t3lluz.com/ytmq/** (any case).
 
 ---
 
@@ -27,146 +27,86 @@ YouTube Music **shared queue**: host plays in **YT Music app**; **guests** use t
 
 ## Part 2 — Constraints (read before coding)
 
-1. **No official YT Music queue API** for third-party web apps.
-2. **Today's host sync:** Host tab shows queue + **open track in YT Music** (new tab). True queue injection = later (extension or ytmusicapi sidecar).
-3. **GitHub Pages = static only.** Need **Supabase** (DB + Realtime + Edge Functions) for API/search proxy.
-4. **Search:** YouTube Data API v3 via Edge Function (key never in frontend). Not 1:1 with YT Music catalog; OK for MVP.
-5. **ToS:** Unofficial YT Music tooling is gray; personal/friends use; rate-limit search.
+1. **No official YT Music queue API.** The host side is the bridge (`src/bridge/`), injected into music.youtube.com by the Chrome extension (`extension/`) or the userscript; it drives YT Music's own queue.
+2. **Everything runs on t3lluz.** One Deno process (`server/main.ts`) serves the app, the API, the realtime WebSocket and the search/lyrics functions. There is no Supabase any more.
+3. **Search** scrapes YouTube Music's own web API server-side (`server/functions/search`). No API key.
+4. **ToS:** unofficial YT Music tooling is gray; personal/friends use.
 
 ---
 
-## Part 3 — Stack (free)
+## Part 3 — Stack
 
-| Layer | Service |
-|-------|---------|
-| DB + Realtime | Supabase (free) |
-| Search proxy | Supabase Edge Function `search` |
-| Lyrics proxy | Supabase Edge Function `lyrics` (LRCLIB + NetEase + KuGou) |
-| Frontend | Vite + React + TS + Tailwind |
-| Hosting | GitHub Pages (`base: '/YTMQ/'`) |
-| QR | `qrcode` (client) |
+| Layer | Where |
+|-------|-------|
+| App | Vite + React + TS + Tailwind, base `/ytmq/` |
+| API + realtime | `server/main.ts` (Deno 2.9), `server/realtime.ts` (WebSocket hub) |
+| Data | SQLite (`node:sqlite`) in `~/docker/ytmq/data/ytmq.db`, schema in `server/db.ts` |
+| Search / lyrics | `server/functions/search`, `server/functions/lyrics` (LRCLIB + NetEase + KuGou + Musixmatch) |
+| Client | `src/lib/ytmqClient.ts` (shared by app and bridge), app singleton in `src/lib/api.ts` |
+| Hosting | `~/docker/ytmq` on t3lluz, public through the `t3lluz-public` Cloudflare tunnel, tailnet through Caddy |
+| Deploy | push to `main` → live within a minute (`deploy/server/update.sh`, `ytmq-deploy.timer`) |
 
-**Env (frontend):** `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`  
-**Secrets (Supabase only):** `YOUTUBE_API_KEY` — never commit `service_role` or YouTube key.
-
----
-
-## Part 4 — User setup (user does first; agent waits for values)
-
-1. **GitHub:** Repo `YTMQ`. Pages via GitHub Actions. URL: `https://<user>.github.io/YTMQ/`.
-2. **Supabase:** New project → copy Project URL + **anon** key. Enable Realtime on `queue_items` after migration.
-3. **YouTube:** Cloud Console → enable YouTube Data API v3 → API key → set as Supabase secret for Edge Function.
-4. **Local:** Node 20+, pnpm/npm, optional Supabase CLI.
-5. User pastes into chat / `.env.local` (not committed):
-
-```text
-VITE_SUPABASE_URL=https://owpmwxoqpzwbsrrcmvpz.supabase.co
-VITE_SUPABASE_ANON_KEY=eyJ...
-# YOUTUBE_API_KEY → supabase secrets only
-```
-
-**Supabase project:** `owpmwxoqpzwbsrrcmvpz` (name: YTMQ, `eu-central-1`). MCP is scoped in `.cursor/mcp.json` (`project_ref` + database/docs/dev/debug tools). Reload Cursor after changing MCP config.
+No secrets. `VITE_API_URL` is optional (defaults to the app's own origin + `/ytmq/api`).
 
 ---
 
-## Part 5 — Data model
+## Part 4 — Data model (`server/db.ts`)
 
-**`rooms`:** `id` (uuid PK), `code` (text unique), `host_token` (text), `created_at`, `expires_at`
+**`rooms`:** `id`, `code` (6 chars, unique, case-insensitive), `host_token`, `password_hash` (PBKDF2), `locked`, `allow_guest_add|remove|controls`, `created_at`, `expires_at` (24 h). Never sent to clients except through the RPCs.
 
-**`queue_items`:** `id`, `room_id` (FK), `position` (int), `video_id`, `title`, `channel_title`, `thumbnail_url`, `added_by` (text), `created_at`
+**`queue_items`:** `id`, `room_id`, `position` (unique per room; Play next = min − 1, Add to queue = max + 1, picked by the server), `video_id`, `title`, `channel_title`, `thumbnail_url`, `added_by`, `insert_mode` (`play_next` | `queue`), `created_at`.
 
-**Optional:** `participants` (`room_id`, `nickname`, `last_seen`)
+**`participants`:** `room_id`, `client_id` (per device), `nickname`, `last_seen`, `kicked`.
 
-**RPC:** `create_room()` → `{ room_id, code, host_token }`  
-**Join:** resolve `code` → `room_id`
+**RPCs** (`POST /ytmq/api/rpc/<name>`, same names and `p_*` arguments as the old Postgres functions): `create_room`, `join_room`, `get_room`, `verify_room_password`, `set_room_settings`, `set_room_password`, `end_room`, `touch_participant`, `kick_participant`, `kick_by_nickname`, `leave_participant`, `purge_expired_rooms`.
 
-**RLS:** Room-scoped SELECT/INSERT/UPDATE/DELETE on `queue_items` (no wide-open public write). Realtime on `queue_items`.
+**REST:** `GET|POST /rooms/<id>/queue`, `DELETE /queue/<itemId>`, `GET /rooms/<id>/participants`, `GET /rooms/<id>/counts`, `POST /broadcast`, `POST /functions/search|lyrics`, `GET /health`.
 
-**Events (conceptual):** `queue.updated`, `nowPlaying` (optional later), `room.closed`
+**Realtime** (`/ytmq/api/realtime`): channels with broadcast (`ytmq-bridge:<room>` for playback controls and queue removes, `ytmq-playback:<room>` for now playing) and table changes (`queue_items`, `participants`, `room_settings`) for one room. The client keeps supabase-js's channel shape: `ytmq.channel(topic).on('broadcast' | 'changes', …).subscribe(cb)`.
 
 ---
 
-## Part 6 — Routes
+## Part 5 — Routes
 
 | Path | Purpose |
 |------|---------|
-| `/` | Create lobby \| Join with code |
-| `/room/:roomId` | Guest: Search \| Queue \| Room |
-| `/host/:roomId` | Host: QR, link, queue mirror, open in YT Music; store `host_token` in `sessionStorage` |
+| `/ytmq/` | Create lobby \| Join with code |
+| `/ytmq/room/:roomId` | Guest (and host) room: Search \| Queue \| Lyrics \| Room \| Admin |
+| `/ytmq/host/:roomId` | Host entry; `host_token` lives in `sessionStorage` |
 
 ---
 
-## Part 7 — Agent build order (one day)
+## Part 6 — Working on it
 
-Execute in order; verify each step before next.
-
-1. **Scaffold:** Vite React TS, Tailwind, react-router, `@supabase/supabase-js`, `qrcode`. `vite.config` `base: '/YTMQ/'`. `.env.example`, `.gitignore` `.env*`.
-2. **SQL:** `supabase/migrations/001_initial.sql` — tables, RLS, Realtime, `create_room` RPC.
-3. **Lobby:** `src/lib/supabase.ts`; create/join; redirects.
-4. **Queue:** Subscribe `postgres_changes` on `queue_items`; insert/delete; reorder (rewrite positions 0..n-1; up/down buttons OK; DnD optional).
-5. **Edge Function `search`:** `?q=&type=song|artist` → YouTube API → `{ id, title, channelTitle, thumbnail, type }`. Deploy + secret.
-6. **Search UI:** debounced invoke; Add to queue. Artist MVP: channel top videos via Edge or filtered search (no full discography today).
-7. **Room tab:** code, copy link, QR (include base path).
-8. **Host tab:** realtime queue; button → `https://music.youtube.com/watch?v={videoId}`; optional copy all video IDs.
-9. **UI pass:** dark, 3-tab mobile nav, empty states, errors.
-10. **Deploy:** GitHub Actions → Pages; repo secrets for `VITE_*`. README smoke tests.
-
-**If behind:** drop DnD (buttons only), simplify artist to channel search.
+- Work in `~/projects/ytmq`. Never edit `~/docker/ytmq/repo` (the deploy checkout).
+- `npm run dev` + `cd server && deno task dev` for local work (Vite proxies `/ytmq/api` to :8787). `YTMQ_API_PROXY=https://t3lluz.com npm run dev` uses the live API instead.
+- Push to `main` and it is live in about a minute. A failed build leaves the previous one up; see `journalctl --user -u ytmq-deploy`.
+- Server details and operations: [deploy/server/README.md](../deploy/server/README.md).
 
 ---
 
-## Part 8 — Smoke tests (deployed)
+## Part 7 — Smoke tests (deployed)
 
 - [ ] Create lobby → QR works on phone
 - [ ] Join with code
 - [ ] Search → add 3 tracks → 2nd tab updates <1s
-- [ ] Remove + reorder
-- [ ] Host opens correct music.youtube.com link
-- [ ] No `YOUTUBE_API_KEY` or `service_role` in frontend bundle
+- [ ] Remove a track; YT Music queue follows
+- [ ] Host connects YouTube Music via the extension; guest add lands in the YT Music queue
+- [ ] Playback controls from a guest phone move YT Music
 
 ---
 
-## Part 9 — Out of scope (do not build unless asked)
-
-Extension, ytmusicapi, Supabase Auth, play counts, album add-all, in-app audio, paid hosting.
-
----
-
-## Part 10 — Kickoff prompt (new chat)
-
-```text
-Follow docs/AGENT.md for YTMQ. Implement Part 7 in order.
-
-User provides:
-- VITE_SUPABASE_URL
-- VITE_SUPABASE_ANON_KEY
-- GitHub repo name YTMQ (Pages base /YTMQ/)
-- YOUTUBE_API_KEY via supabase secrets (user sets)
-
-Do not commit secrets. Done when Part 8 passes on GitHub Pages.
-```
-
----
-
-## Part 11 — Architecture (reference)
+## Part 8 — Architecture
 
 ```mermaid
 flowchart LR
-  G[Guest Web App] --> SB[(Supabase DB)]
-  G --> RT[Realtime]
+  G[Guest web app] -->|HTTP + WebSocket| S[ytmq server on t3lluz]
+  H[Host web app] --> S
+  B[Bridge on music.youtube.com] --> S
+  S --> DB[(SQLite)]
+  S --> YTM[YouTube Music web API]
+  S --> LY[LRCLIB / NetEase / KuGou / Musixmatch]
   G --> LRC[LRCLIB direct]
-  H[Host Tab] --> SB
-  H --> YTM[YT Music App manual open]
-  EF[Edge Function search] --> YTAPI[YouTube Data API]
-  LY[Edge Function lyrics] --> LRC
-  LY --> NE[NetEase Cloud Music]
-  LY --> KG[KuGou Music]
-  G --> EF
-  G --> LY
 ```
 
-**Lyrics sourcing.** The browser hits LRCLIB directly for the fastest happy path. In parallel it invokes the `lyrics` edge function, which aggregates LRCLIB + NetEase Cloud Music + KuGou Music server-side (the same upstream sources used by unofficial Spotify lyrics tools like syrics / spotify-lyrics-api) since those don't ship CORS headers. The first source to return time-synced lyrics wins; falling back to plain/instrumental matches when nothing has synced. If the `lyrics` function isn't deployed the app keeps working with LRCLIB-only coverage.
-
-**Original vision:** Shared queue via link/QR; host uses YT Music app only; guests add/remove/reorder; search with title, artist, cover, featured artists; artist pages; small listen stats if API allows; simple intuitive UI; free to host (GitHub Pages + free backend).
-
-**Follow-ups:** ytmusicapi on free compute; Chrome extension for real queue sync; tighter RLS; room expiry; guest nicknames on queue rows.
+**Lyrics sourcing.** The browser hits LRCLIB directly for the fastest happy path. In parallel it calls the server's `lyrics` function, which aggregates LRCLIB + NetEase Cloud Music + KuGou + Musixmatch (none of which ship CORS headers). The first source to return time-synced lyrics wins; it falls back to plain/instrumental matches when nothing has synced.

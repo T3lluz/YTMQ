@@ -1,4 +1,3 @@
-import 'jsr:@supabase/functions-js/edge-runtime.d.ts'
 import {
   ARTIST_TRACKS_LIMIT,
   fetchYtmAlbumTracks,
@@ -104,7 +103,7 @@ async function parseBody(req: Request): Promise<{
   }
 }
 
-Deno.serve(async (req) => {
+export async function handler(req: Request): Promise<Response> {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
@@ -185,4 +184,4 @@ Deno.serve(async (req) => {
     const message = err instanceof Error ? err.message : 'Search failed'
     return jsonResponse({ error: message }, 502)
   }
-})
+}

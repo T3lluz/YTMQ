@@ -4,6 +4,7 @@
  * worker, which links any open music.youtube.com tab to the current room —
  * no deep link or new window required.
  */
+import { apiUrl } from './api'
 import { getOrStartPlaybackSince } from './playbackSession'
 
 export const APP_MESSAGE_SOURCE = 'ytmq-app' as const
@@ -11,8 +12,7 @@ export const EXTENSION_MESSAGE_SOURCE = 'ytmq-extension' as const
 
 export type ExtensionSession = {
   roomId: string
-  sb: string
-  key: string
+  api: string
   since: string
   at: number
 }
@@ -24,10 +24,7 @@ export type ExtensionConnectResult = {
 }
 
 function buildSession(roomId: string, since: string): ExtensionSession | null {
-  const sb = import.meta.env.VITE_SUPABASE_URL
-  const key = import.meta.env.VITE_SUPABASE_ANON_KEY
-  if (!sb || !key) return null
-  return { roomId, sb, key, since, at: Date.now() }
+  return { roomId, api: apiUrl(), since, at: Date.now() }
 }
 
 /**

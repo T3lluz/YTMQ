@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { createLobbyViaApi } from './helpers/supabase'
+import { createLobbyViaApi } from './helpers/api'
 import {
   goToGuestRoom,
   goToHost,

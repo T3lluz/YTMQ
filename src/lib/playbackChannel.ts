@@ -1,4 +1,4 @@
-import type { RealtimeChannel } from '@supabase/supabase-js'
+import type { RealtimeChannel } from './ytmqClient'
 import {
   playbackChannelName,
   type NowPlaying,
@@ -6,7 +6,7 @@ import {
   type PlaybackState,
 } from './playback'
 import { recordPlayed } from './recentlyPlayed'
-import { supabase } from './supabase'
+import { ytmq } from './api'
 
 const HEALTH_CHECK_MS = 5_000
 /** ~4 missed bridge broadcasts before we try to rejoin the channel. */
@@ -171,7 +171,7 @@ function attachChannel(roomId: string, room: RoomPlayback) {
 
 function createRoom(roomId: string): RoomPlayback {
   const room: RoomPlayback = {
-    channel: supabase.channel(playbackChannelName(roomId)),
+    channel: ytmq.channel(playbackChannelName(roomId)),
     listeners: new Set(),
     lastReceivedAt: lastNowPlaying.has(roomId) ? Date.now() : 0,
     subscribed: false,
@@ -192,7 +192,7 @@ function reconnectRoom(roomId: string) {
   room.reconnectTimer = window.setTimeout(() => {
     room.reconnectTimer = undefined
     const listeners = room.listeners
-    void supabase.removeChannel(room.channel).finally(() => {
+    void ytmq.removeChannel(room.channel).finally(() => {
       if (!rooms.has(roomId) || rooms.get(roomId) !== room) return
       rooms.delete(roomId)
       const next = createRoom(roomId)
@@ -255,7 +255,7 @@ export function subscribeNowPlaying(
       window.clearTimeout(room.reconnectTimer)
     }
     rooms.delete(roomId)
-    void supabase.removeChannel(room.channel)
+    void ytmq.removeChannel(room.channel)
     stopHealthCheck()
   }
 }
@@ -268,6 +268,6 @@ export function disposePlaybackChannel(roomId: string): void {
   }
   room.listeners.clear()
   rooms.delete(roomId)
-  void supabase.removeChannel(room.channel)
+  void ytmq.removeChannel(room.channel)
   stopHealthCheck()
 }

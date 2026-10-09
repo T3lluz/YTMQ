@@ -1,7 +1,7 @@
 import type { Page } from '@playwright/test'
-import type { LobbyApiResult } from './supabase'
+import type { LobbyApiResult } from './api'
 
-/** Navigate within the Vite `base` path (/YTMQ/). */
+/** Navigate within the Vite `base` path (/ytmq/). */
 export async function gotoApp(page: Page, path = '') {
   const segment = path.replace(/^\//, '')
   await page.goto(segment ? `./${segment}` : './')

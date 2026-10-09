@@ -4,7 +4,7 @@
  * shadow host for userscript-only installs.
  */
 
-import type { SupabaseClient } from '@supabase/supabase-js'
+import type { YtmqClient } from '../lib/ytmqClient'
 import type { NextSongInfo } from './nextSongToast'
 
 export type PanelBridgePlayback = {
@@ -19,7 +19,7 @@ export type PanelBridgePlayback = {
 export type PanelBridgeDeps = {
   roomId: string
   siteBase: string
-  supabase: SupabaseClient
+  ytmq: YtmqClient
   isConnected: () => boolean
   readNowPlaying: () => PanelBridgePlayback | null
   readNextSong: () => NextSongInfo | null
@@ -31,7 +31,7 @@ export type PanelBridgeDeps = {
 
 const BRIDGE_SOURCE = 'ytmq-bridge'
 const PANEL_SOURCE = 'ytmq-panel-ui'
-const DEFAULT_SITE = 'https://t3lluz.github.io/YTMQ'
+const DEFAULT_SITE = 'https://t3lluz.com/ytmq'
 
 type PanelState = {
   roomCode: string
@@ -76,10 +76,10 @@ function postPanelState(payload: Record<string, unknown>) {
 
 async function fetchRoomCode(panelDeps: PanelBridgeDeps): Promise<string> {
   try {
-    const { data, error } = await panelDeps.supabase.rpc('get_room', {
+    const data = await panelDeps.ytmq.rpc('get_room', {
       p_room_id: panelDeps.roomId,
     })
-    if (error || !data || typeof data !== 'object') return ''
+    if (!data || typeof data !== 'object') return ''
     const code = (data as { code?: string }).code
     return typeof code === 'string' ? code : ''
   } catch {
@@ -87,38 +87,24 @@ async function fetchRoomCode(panelDeps: PanelBridgeDeps): Promise<string> {
   }
 }
 
-async function fetchQueueCount(panelDeps: PanelBridgeDeps): Promise<number> {
+async function fetchCounts(
+  panelDeps: PanelBridgeDeps,
+): Promise<{ queue: number; participants: number }> {
   try {
-    const { count, error } = await panelDeps.supabase
-      .from('queue_items')
-      .select('*', { count: 'exact', head: true })
-      .eq('room_id', panelDeps.roomId)
-    if (error) return 0
-    return count ?? 0
+    return await panelDeps.ytmq.get(
+      `/rooms/${encodeURIComponent(panelDeps.roomId)}/counts`,
+    )
   } catch {
-    return 0
-  }
-}
-
-async function fetchParticipantCount(panelDeps: PanelBridgeDeps): Promise<number> {
-  try {
-    const { count, error } = await panelDeps.supabase
-      .from('participants')
-      .select('*', { count: 'exact', head: true })
-      .eq('room_id', panelDeps.roomId)
-      .eq('kicked', false)
-    if (error) return 0
-    return count ?? 0
-  } catch {
-    return 0
+    return { queue: state.queueCount, participants: state.participantCount }
   }
 }
 
 async function refreshCounts() {
   if (!deps) return
   if (!state.roomCode) state.roomCode = await fetchRoomCode(deps)
-  state.queueCount = await fetchQueueCount(deps)
-  state.participantCount = await fetchParticipantCount(deps)
+  const counts = await fetchCounts(deps)
+  state.queueCount = counts.queue
+  state.participantCount = counts.participants
 }
 
 function buildPayload(): Record<string, unknown> {

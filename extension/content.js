@@ -24,13 +24,11 @@ try {
 function readQueryParams() {
   var q = new URLSearchParams(location.search)
   var roomId = q.get('roomId')
-  var sb = q.get('sb')
-  var key = q.get('key')
-  if (!roomId || !sb || !key) return null
+  var api = q.get('api')
+  if (!roomId || !api) return null
   return {
     roomId: roomId,
-    sb: sb,
-    key: key,
+    api: api,
     since: q.get('since') || '',
     at: Date.now(),
   }
@@ -40,8 +38,7 @@ function isValidSession(session) {
   return Boolean(
     session &&
       session.roomId &&
-      session.sb &&
-      session.key &&
+      session.api &&
       Date.now() - (session.at || 0) < SESSION_MAX_AGE_MS,
   )
 }

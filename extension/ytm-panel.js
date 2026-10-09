@@ -10,7 +10,7 @@
   var PANEL_GAP = 12
   var BRIDGE_SOURCE = 'ytmq-bridge'
   var PANEL_SOURCE = 'ytmq-panel-ui'
-  var YTMQ_SITE = 'https://t3lluz.github.io/YTMQ'
+  var YTMQ_SITE = 'https://t3lluz.com/ytmq'
 
   var host = null
   var shadow = null

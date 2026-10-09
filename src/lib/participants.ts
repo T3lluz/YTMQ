@@ -1,4 +1,4 @@
-import { supabase } from './supabase'
+import { ytmq } from './api'
 
 export type Participant = {
   client_id: string
@@ -19,14 +19,7 @@ export function isOnline(lastSeen: string, now: number = Date.now()): boolean {
 }
 
 export async function fetchParticipants(roomId: string): Promise<Participant[]> {
-  const { data, error } = await supabase
-    .from('participants')
-    .select('client_id, nickname, last_seen, kicked')
-    .eq('room_id', roomId)
-    .eq('kicked', false)
-    .order('last_seen', { ascending: false })
-  if (error) throw error
-  return (data ?? []) as Participant[]
+  return ytmq.get<Participant[]>(`/rooms/${encodeURIComponent(roomId)}/participants`)
 }
 
 export async function touchParticipant(
@@ -34,12 +27,11 @@ export async function touchParticipant(
   clientId: string,
   nickname: string,
 ): Promise<PresenceStatus> {
-  const { data, error } = await supabase.rpc('touch_participant', {
+  const data = await ytmq.rpc('touch_participant', {
     p_room_id: roomId,
     p_client_id: clientId,
     p_nickname: nickname,
   })
-  if (error) throw error
   const status = data as string
   if (status === 'kicked' || status === 'locked' || status === 'inactive') {
     return status
@@ -52,12 +44,11 @@ export async function kickParticipant(
   hostToken: string,
   clientId: string,
 ): Promise<boolean> {
-  const { data, error } = await supabase.rpc('kick_participant', {
+  const data = await ytmq.rpc('kick_participant', {
     p_room_id: roomId,
     p_host_token: hostToken,
     p_client_id: clientId,
   })
-  if (error) throw error
   return data === true
 }
 
@@ -67,12 +58,11 @@ export async function kickByNickname(
   hostToken: string,
   nickname: string,
 ): Promise<number> {
-  const { data, error } = await supabase.rpc('kick_by_nickname', {
+  const data = await ytmq.rpc('kick_by_nickname', {
     p_room_id: roomId,
     p_host_token: hostToken,
     p_nickname: nickname,
   })
-  if (error) throw error
   return typeof data === 'number' ? data : 0
 }
 
@@ -81,7 +71,7 @@ export async function leaveParticipant(
   clientId: string,
 ): Promise<void> {
   try {
-    await supabase.rpc('leave_participant', {
+    await ytmq.rpc('leave_participant', {
       p_room_id: roomId,
       p_client_id: clientId,
     })

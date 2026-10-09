@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { createLobbyViaApi } from './helpers/supabase'
+import { createLobbyViaApi } from './helpers/api'
 import { gotoApp, joinLobbyWithNickname } from './helpers/ui'
 
 test.describe('Join', () => {
@@ -29,7 +29,7 @@ test.describe('Join', () => {
     await gotoApp(page, 'join')
     await joinLobbyWithNickname(page, lobby.code)
 
-    await expect(page).toHaveURL(new RegExp(`/YTMQ/room/${lobby.room_id}/?$`))
+    await expect(page).toHaveURL(new RegExp(`/ytmq/room/${lobby.room_id}/?$`))
     await page.getByRole('navigation', { name: 'Room navigation' }).waitFor()
     await expect(page.getByRole('heading', { name: 'Search' })).toBeVisible()
   })

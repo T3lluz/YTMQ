@@ -1,4 +1,4 @@
-/** Sanity-check bridge URL construction (no double /YTMQ/). */
+/** Sanity-check bridge URL construction (no double /ytmq/). */
 
 function bridgeSiteRoot({ VITE_PUBLIC_SITE_URL, BASE_URL }) {
   const base = BASE_URL.replace(/\/$/, '')
@@ -20,16 +20,16 @@ function bridgeScriptFetchUrls(env) {
 
 const cases = [
   {
-    name: 'GitHub Pages production env',
+    name: 't3lluz.com production env',
     env: {
-      VITE_PUBLIC_SITE_URL: 'https://t3lluz.github.io/YTMQ',
-      BASE_URL: '/YTMQ/',
+      VITE_PUBLIC_SITE_URL: 'https://t3lluz.com/ytmq',
+      BASE_URL: '/ytmq/',
     },
-    expect: 'https://t3lluz.github.io/YTMQ/ytmusic-bridge.js',
+    expect: 'https://t3lluz.com/ytmq/ytmusic-bridge.js',
   },
   {
     name: 'origin-only local https',
-    env: { BASE_URL: '/YTMQ/' },
+    env: { BASE_URL: '/ytmq/' },
     expect: null,
   },
 ]

@@ -1,0 +1,9 @@
+[Unit]
+Description=Publish YTMQ's main branch to t3lluz.com/ytmq
+After=network-online.target docker.service
+
+[Service]
+Type=oneshot
+ExecStart=%h/docker/ytmq/repo/deploy/server/update.sh
+# npm ci on a fresh lockfile can take a while; never pile up behind it.
+TimeoutStartSec=10min

@@ -1,5 +1,5 @@
-import type { RealtimeChannel } from '@supabase/supabase-js'
-import { supabase } from './supabase'
+import type { RealtimeChannel } from './ytmqClient'
+import { ytmq } from './api'
 import type { PlaybackAction } from './playback'
 
 export function bridgeChannelName(roomId: string) {
@@ -69,7 +69,7 @@ function getSender(roomId: string): SenderState {
   const existing = senders.get(roomId)
   if (existing) return existing
 
-  const channel = supabase.channel(bridgeChannelName(roomId), {
+  const channel = ytmq.channel(bridgeChannelName(roomId), {
     config: { broadcast: { self: true } },
   })
   const ready = new Promise<boolean>((resolve) => {
@@ -92,7 +92,7 @@ function getSender(roomId: string): SenderState {
         // Drop the cached sender so the next call can retry on a fresh channel.
         if (senders.get(roomId)?.channel === channel) {
           senders.delete(roomId)
-          void supabase.removeChannel(channel)
+          void ytmq.removeChannel(channel)
         }
         resolve(false)
       }
@@ -172,5 +172,5 @@ export function disposeBridgeSender(roomId: string): void {
   if (!existing) return
   senders.delete(roomId)
   playbackControlListeners.delete(roomId)
-  void supabase.removeChannel(existing.channel)
+  void ytmq.removeChannel(existing.channel)
 }

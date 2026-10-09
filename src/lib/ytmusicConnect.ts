@@ -1,3 +1,4 @@
+import { apiUrl } from './api'
 import {
   getOrStartPlaybackSince,
   resetPlaybackSession,
@@ -11,7 +12,7 @@ const HOST_INITIALIZED_KEY = 'ytmq_host_initialized'
 const viteBasePath = () => import.meta.env.BASE_URL.replace(/\/$/, '')
 
 /**
- * Deploy root for static assets (includes `/YTMQ` on GitHub Pages).
+ * Deploy root for static assets (includes the `/ytmq` base path).
  * `VITE_PUBLIC_SITE_URL` is the full site root; do not append BASE_URL twice.
  */
 export function bridgeSiteRoot(): string | null {
@@ -31,7 +32,7 @@ export function bridgeSiteRoot(): string | null {
   return null
 }
 
-/** Path to bundled bridge on this deployment (no query string — GH Pages 404s some ? URLs). */
+/** Path to bundled bridge on this deployment. */
 export function bridgeScriptFetchUrl(): string | null {
   const urls = bridgeScriptFetchUrls()
   return urls[0] ?? null
@@ -48,8 +49,7 @@ export function bridgeScriptFetchUrls(): string[] {
 function bridgeParamsJson(roomId: string, playbackSince: string) {
   return JSON.stringify({
     roomId,
-    sb: import.meta.env.VITE_SUPABASE_URL,
-    key: import.meta.env.VITE_SUPABASE_ANON_KEY,
+    api: apiUrl(),
     since: playbackSince,
   })
 }
@@ -79,8 +79,7 @@ export function buildYtmConnectDeepLink(
 
   const q = new URLSearchParams({
     roomId,
-    sb: import.meta.env.VITE_SUPABASE_URL,
-    key: import.meta.env.VITE_SUPABASE_ANON_KEY,
+    api: apiUrl(),
     since: playbackSince,
     ytmqBridge: bridgeUrls.join(','),
   })
@@ -120,14 +119,14 @@ export function openYtmMusicWindow(
   )
 }
 
-/** Tampermonkey / Violentmonkey install URL (hosted on your Pages site). */
+/** Tampermonkey / Violentmonkey install URL (served next to the app). */
 export function ytmUserscriptInstallUrl(): string | null {
   const root = bridgeSiteRoot()
   if (!root) return null
   return `${root}/ytmq-connect.user.js`
 }
 
-/** Chrome extension zip download URL (hosted on your Pages site). */
+/** Chrome extension zip download URL (served next to the app). */
 export function ytmExtensionZipUrl(): string | null {
   const root = bridgeSiteRoot()
   if (!root) return null

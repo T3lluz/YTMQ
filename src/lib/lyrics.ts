@@ -5,7 +5,7 @@
 // 1. **LRCLIB direct**  — the browser hits https://lrclib.net/api straight
 //    away. It's the fastest path when LRCLIB has the song, and it works
 //    independently of any backend deploy state.
-// 2. **Supabase `lyrics` edge function** — proxies extra providers that don't
+// 2. **The server's `lyrics` function** — proxies extra providers that don't
 //    ship CORS headers (NetEase Cloud Music, KuGou Music). These cover huge
 //    swathes of music LRCLIB doesn't (K-pop, J-pop, indie, remixes, Mandarin
 //    pop, plus a lot of Western tracks). They're the same upstream sources
@@ -16,7 +16,7 @@
 // match we settle for the best plain/instrumental result. The whole API
 // surface stays the same as before, so callers don't change.
 
-import { isSupabaseConfigured, supabase } from './supabase'
+import { ytmq } from './api'
 
 const LRCLIB_BASE = 'https://lrclib.net/api'
 
@@ -245,9 +245,9 @@ type EdgeLyricsResponse = {
 }
 
 /**
- * Call the Supabase `lyrics` edge function that aggregates NetEase + KuGou
- * + (as a safety net) server-side LRCLIB. Returns `null` if Supabase isn't
- * configured, the function isn't deployed, or the call fails — callers should
+ * Call the server's `lyrics` function that aggregates NetEase + KuGou
+ * + (as a safety net) server-side LRCLIB. Returns `null` if the call fails
+ * or times out — callers should
  * always treat this as a best-effort enhancement on top of the direct LRCLIB
  * path.
  */
@@ -255,8 +255,6 @@ async function fetchFromEdge(
   query: LyricsQuery,
   signal?: AbortSignal,
 ): Promise<AggregatedRecord | null> {
-  if (!isSupabaseConfigured) return null
-
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), EDGE_TIMEOUT_MS)
   const onAbort = () => controller.abort()
@@ -266,18 +264,16 @@ async function fetchFromEdge(
   }
 
   try {
-    const { data, error } = await supabase.functions.invoke<EdgeLyricsResponse>(
+    const data = await ytmq.invoke<EdgeLyricsResponse>(
       'lyrics',
       {
-        body: {
-          title: query.title,
-          artist: query.artist,
-          album: query.album,
-          duration: query.duration,
-        },
+        title: query.title,
+        artist: query.artist,
+        album: query.album,
+        duration: query.duration,
       },
+      controller.signal,
     )
-    if (error) return null
     const lyrics = data?.lyrics
     if (!lyrics) return null
     if (!hasContent(lyrics)) return null
@@ -292,13 +288,13 @@ async function fetchFromEdge(
 
 /**
  * Fetch the best available lyrics for a track. Direct LRCLIB lookups and the
- * Supabase aggregator (NetEase + KuGou + server-side LRCLIB) run in parallel;
+ * server aggregator (NetEase + KuGou + server-side LRCLIB) run in parallel;
  * the first source to return time-synced lyrics wins, otherwise we settle for
  * the highest-scoring plain/instrumental match.
  *
  * Speed strategy:
  * 1. All fast internal-DB lookups (`/get-cached` + two `/search` variants) fire
- *    simultaneously alongside the Supabase aggregator and resolve the moment
+ *    simultaneously alongside the server aggregator and resolve the moment
  *    any of them yields time-synced lyrics — the common case still resolves
  *    in a single round-trip.
  * 2. The slow `/api/get` scraper is also fired immediately in parallel, but

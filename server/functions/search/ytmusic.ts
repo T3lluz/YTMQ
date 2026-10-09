@@ -123,6 +123,7 @@ function artistThumbnailSource(item: JsonObject): unknown {
     (item.thumbnailRenderer as { musicThumbnailRenderer?: unknown })
       ?.musicThumbnailRenderer ??
     item.thumbnail ??
+    item.thumbnailRenderer
   )
 }
 

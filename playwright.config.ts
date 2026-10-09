@@ -33,7 +33,7 @@ export default defineConfig({
   timeout: 60_000,
   expect: { timeout: 15_000 },
   use: {
-    baseURL: 'http://localhost:5173/YTMQ/',
+    baseURL: 'http://localhost:5173/ytmq/',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
   },
@@ -45,14 +45,14 @@ export default defineConfig({
   ],
   webServer: {
     command: 'npm run dev',
-    url: 'http://localhost:5173/YTMQ/',
+    url: 'http://localhost:5173/ytmq/',
     reuseExistingServer: false,
     timeout: 120_000,
     env: {
       ...process.env,
       // Lets the host "Connect" UI build an HTTPS bridge URL during http://localhost e2e
       VITE_PUBLIC_SITE_URL:
-        process.env.VITE_PUBLIC_SITE_URL ?? 'https://e2e-placeholder.github.io/YTMQ',
+        process.env.VITE_PUBLIC_SITE_URL ?? 'https://e2e-placeholder.example/ytmq',
       VITE_SPOTIFY_CLIENT_ID:
         process.env.VITE_SPOTIFY_CLIENT_ID ?? 'e2e-spotify-client-id',
     },

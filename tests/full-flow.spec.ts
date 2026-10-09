@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { createLobbyViaApi } from './helpers/supabase'
+import { createLobbyViaApi } from './helpers/api'
 import {
   goToGuestRoom,
   goToHost,
@@ -22,7 +22,7 @@ test.describe('Full flow', () => {
 
     await gotoApp(hostPage)
     await hostPage.getByRole('button', { name: 'Create lobby' }).click()
-    await expect(hostPage).toHaveURL(/\/YTMQ\/room\/[0-9a-f-]{36}\/?$/, {
+    await expect(hostPage).toHaveURL(/\/ytmq\/room\/[0-9a-f-]{36}\/?$/, {
       timeout: 15_000,
     })
 
@@ -35,7 +35,7 @@ test.describe('Full flow', () => {
 
     await gotoApp(guestPage, 'join')
     await joinLobbyWithNickname(guestPage, code!, 'PartyGuest')
-    await expect(guestPage).toHaveURL(new RegExp(`/YTMQ/room/${roomId}/?$`))
+    await expect(guestPage).toHaveURL(new RegExp(`/ytmq/room/${roomId}/?$`))
 
     await searchAndAddFirstResult(guestPage, 'daft punk one more time')
     await searchAndAddFirstResult(guestPage, 'daft punk get lucky')

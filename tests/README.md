@@ -1,12 +1,11 @@
 # YTMQ Playwright tests
 
-End-to-end tests against the Vite dev server with a live Supabase backend.
+End-to-end tests against the Vite dev server and a local YTMQ server.
 
 ## Prerequisites
 
-- `.env.local` with `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`
-- Dev server on `http://localhost:5173/YTMQ/` (started automatically, or reuse an existing `npm run dev`)
-- Supabase `search` edge function deployed with `YOUTUBE_API_KEY` secret
+- The server running: `cd server && deno task dev` (http://localhost:8787/ytmq/api; override with `YTMQ_TEST_API`)
+- Dev server on `http://localhost:5173/ytmq/` (started automatically; it proxies `/ytmq/api` to :8787)
 
 ## Run
 
@@ -43,4 +42,4 @@ npm run test:e2e:report
 | `full-flow.spec.ts` | Full host+guest journey + API sync |
 | `smoke/spotify-match.spec.ts` | YouTube title/artist → Spotify track matching |
 | `smoke/spotify-connect.spec.ts` | Host Admin Connect Spotify button |
-| `helpers/` | Supabase API + UI navigation (`gotoApp` for `/YTMQ/` base) |
+| `helpers/` | YTMQ API + UI navigation (`gotoApp` for `/ytmq/` base) |

@@ -3,7 +3,7 @@ import { expect, test, type Page } from '@playwright/test'
 const ROOM_ID = '11111111-1111-4111-9111-111111111111'
 
 async function installMocks(page: Page, asHost: boolean) {
-  await page.route(/stub\.supabase\.co\/.*/i, async (route) => {
+  await page.route(/stub\.ytmq\.test\/.*/i, async (route) => {
     const req = route.request()
     const url = new URL(req.url())
     const method = req.method().toUpperCase()
@@ -46,7 +46,7 @@ async function installMocks(page: Page, asHost: boolean) {
       })
     }
 
-    if (path.includes('/realtime/')) {
+    if (path.endsWith('/realtime')) {
       return route.fulfill({ status: 200, body: '' })
     }
 
@@ -84,7 +84,7 @@ async function gotoRoom(page: Page, nickname = 'SmokeGuest') {
 
 test.use({ viewport: { width: 390, height: 844 } })
 
-test.describe('Spotify connect (mocked Supabase)', () => {
+test.describe('Spotify connect (mocked API)', () => {
   test('host Admin tab offers Connect Spotify next to YouTube Music', async ({
     page,
   }) => {

@@ -3,7 +3,7 @@ import { expect, test, type Page } from '@playwright/test'
 /**
  * Unit-style smoke tests for the `playedQueueCleanup` module that the bridge
  * uses to decide which shared-queue row to delete when YT Music advances to a
- * new now-playing track. The module is pure logic (no DOM, no live Supabase),
+ * new now-playing track. The module is pure logic (no DOM, no live server),
  * so we load it directly from the Vite dev server with mocked deps and verify
  * its branching from a fixture page.
  *
@@ -16,7 +16,7 @@ import { expect, test, type Page } from '@playwright/test'
  */
 
 const FIXTURE_URL =
-  'http://localhost:5173/YTMQ/__test/played-queue-cleanup.html'
+  'http://localhost:5173/ytmq/__test/played-queue-cleanup.html'
 
 const FIXTURE_HTML = `<!doctype html>
 <html>
@@ -26,7 +26,7 @@ const FIXTURE_HTML = `<!doctype html>
   </head>
   <body>
     <script type="module">
-      import { createPlayedQueueCleanup } from 'http://localhost:5173/YTMQ/src/bridge/playedQueueCleanup.ts'
+      import { createPlayedQueueCleanup } from 'http://localhost:5173/ytmq/src/bridge/playedQueueCleanup.ts'
 
       const state = {
         rows: [],

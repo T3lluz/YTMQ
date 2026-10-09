@@ -1,8 +1,11 @@
-name: Deploy to GitHub Pages
+# The app lives at https://t3lluz.com/ytmq (deployed by the server itself,
+# see deploy/server). GitHub Pages only redirects old links there.
+name: Pages redirect
 
 on:
   push:
     branches: [main]
+    paths: [deploy/pages/**, .github/workflows/deploy.yml]
   workflow_dispatch:
 
 permissions:
@@ -19,52 +22,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
+      - run: |
+          mkdir -p site
+          cp deploy/pages/index.html site/index.html
+          cp deploy/pages/index.html site/404.html
+          touch site/.nojekyll
+      - uses: actions/upload-pages-artifact@v3
         with:
-          node-version: '22'
-          cache: npm
-
-      - run: npm ci
-
-      - name: Require Supabase secrets
-        env:
-          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
-        run: |
-          if [ -z "$VITE_SUPABASE_URL" ] || [ -z "$VITE_SUPABASE_ANON_KEY" ]; then
-            echo "::error::Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY repository secrets."
-            exit 1
-          fi
-
-      - name: Build site
-        env:
-          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
-          VITE_SPOTIFY_CLIENT_ID: ${{ secrets.VITE_SPOTIFY_CLIENT_ID }}
-        run: |
-          set -euo pipefail
-          OWNER_LC=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
-          export VITE_PUBLIC_SITE_URL="https://${OWNER_LC}.github.io/YTMQ"
-          export VITE_SPOTIFY_CLIENT_ID="${VITE_SPOTIFY_CLIENT_ID:-431fa658f06e4078b3b79f20b41083f1}"
-          echo "VITE_PUBLIC_SITE_URL=${VITE_PUBLIC_SITE_URL}"
-          node scripts/verify-bridge-urls.mjs
-          npm run build
-          node scripts/verify-dist-bridge.mjs
-          echo "dist contents:"
-          ls -la dist/
-          test -f dist/index.html
-          test -f dist/404.html
-          test -f dist/ytmusic-bridge.js
-          test -f dist/ytmq-extension.zip
-          grep -q '/YTMQ/assets/index-' dist/index.html
-          grep -q 'segmentCount' dist/404.html
-          ! grep -qE 'src="/src/main\.tsx"|src="/src/main"' dist/index.html
-
-      - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: dist
+          path: site
 
   deploy:
     needs: build
