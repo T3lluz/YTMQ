@@ -1141,30 +1141,51 @@ async function removeVideoFromQueueWithRetry(
   return false
 }
 
+/** A pill like the app's toasts: dark glass, a violet dot, fades in and out. */
 function showToast(message: string) {
   document.getElementById('ytmq-bridge-toast')?.remove()
 
   const el = document.createElement('div')
   el.id = 'ytmq-bridge-toast'
-  el.textContent = message
+  el.setAttribute('role', 'status')
+  const dot = document.createElement('span')
+  dot.style.cssText =
+    'width:7px;height:7px;border-radius:50%;flex:none;background:#a78bfa;box-shadow:0 0 0 3px rgba(139,92,246,.22)'
+  const text = document.createElement('span')
+  text.textContent = message
+  text.style.cssText = 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap'
+  el.append(dot, text)
   el.style.cssText = [
     'position:fixed',
-    'bottom:88px',
+    'bottom:92px',
     'left:50%',
     'transform:translateX(-50%)',
-    'z-index:99999',
-    'background:#18181b',
-    'color:#fafafa',
-    'padding:10px 16px',
-    'border-radius:10px',
-    'font:14px/1.4 system-ui,sans-serif',
-    'box-shadow:0 4px 24px rgba(0,0,0,.45)',
-    'border:1px solid #3f3f46',
-    'max-width:90vw',
-    'text-align:center',
+    'z-index:2147483645',
+    'display:flex',
+    'align-items:center',
+    'gap:10px',
+    'background:rgba(15,15,18,.86)',
+    'backdrop-filter:blur(16px) saturate(160%)',
+    '-webkit-backdrop-filter:blur(16px) saturate(160%)',
+    'color:#f4f4f5',
+    'padding:10px 18px 10px 14px',
+    'border-radius:999px',
+    "font:500 14px/1.3 'YouTube Sans',Roboto,system-ui,sans-serif",
+    'box-shadow:0 12px 32px rgba(0,0,0,.5)',
+    'border:1px solid rgba(255,255,255,.1)',
+    'max-width:min(26rem,90vw)',
+    'pointer-events:none',
   ].join(';')
   document.body.appendChild(el)
-  window.setTimeout(() => el.remove(), 3500)
+  const frames: Keyframe[] = [
+    { opacity: 0, transform: 'translate(-50%, 8px) scale(.97)' },
+    { opacity: 1, transform: 'translate(-50%, 0) scale(1)' },
+  ]
+  el.animate(frames, { duration: 220, easing: 'cubic-bezier(.22,1,.36,1)' })
+  window.setTimeout(() => {
+    const out = el.animate([...frames].reverse(), { duration: 180, easing: 'ease-in', fill: 'forwards' })
+    out.onfinish = () => el.remove()
+  }, 3200)
 }
 
 async function runBridge() {
@@ -1486,6 +1507,9 @@ async function runBridge() {
     window.setTimeout(publishNowPlaying, 800)
   }
 
+  // Set once the panel bridge starts below; queue changes refresh it.
+  let refreshPanel = () => {}
+
   const channel = ytmq
     .channel(`ytmq-bridge:${roomId}`)
     .on('broadcast', { event: 'playback_control' }, ({ payload }) => {
@@ -1534,6 +1558,7 @@ async function runBridge() {
         const row = payload.new
         if (!row?.id || !row?.video_id) return
         trackRowVideo(row)
+        refreshPanel()
         const createdAt = row.created_at ?? new Date().toISOString()
         if (!isInPlaybackSession(createdAt, playbackSince)) return
         void enqueueToYtm({ ...row, created_at: createdAt })
@@ -1545,6 +1570,7 @@ async function runBridge() {
       (payload) => {
         const row = payload.old
         if (!row?.id && !row?.video_id) return
+        refreshPanel()
         handleQueueRemove(
           {
             id: row.id ?? '',
@@ -1605,6 +1631,11 @@ async function runBridge() {
     isConnected: () => queueJoined,
     readNowPlaying: () => readNowPlaying(),
     readNextSong: getNextSongInfo,
+    pendingCount: () => pendingRows.length,
+    onRetrySync: () => {
+      // syncAll marks what it added; processPending then drops those rows.
+      void syncAllTracks().then(() => processPending())
+    },
     onPlayPause: doToggle,
     onNext: () => {
       doNext()
@@ -1614,6 +1645,7 @@ async function runBridge() {
     },
     showToast,
   })
+  refreshPanel = panelBridge.refresh
 
   window.__YTMQ_BRIDGE__ = {
     roomId,

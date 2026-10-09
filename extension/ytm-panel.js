@@ -1,156 +1,286 @@
 /**
- * YTMQ floating panel on music.youtube.com — lives in the extension content
- * script with a closed shadow root on documentElement so YouTube Music cannot
- * strip it when it rebuilds <body>.
+ * YTMQ panel on music.youtube.com. Lives in the extension content script in a
+ * closed shadow root on documentElement, so YouTube Music cannot strip it when
+ * it rebuilds <body>.
+ *
+ * Collapsed it is a pill above the player bar: lobby code, songs queued,
+ * people listening. Open, it shows what YouTube Music can't: the shared queue
+ * with who added what, the lobby code and a QR to scan, and any songs that did
+ * not make it into YouTube Music yet. It is tinted from the album art, like
+ * the app's now-playing sidebar.
+ *
+ * State arrives from the bridge (src/bridge/panelBridge.ts) as postMessage
+ * 'panel-state'; actions go back as 'panel-action'. Everything that comes
+ * from guests (titles, names) is set with textContent, never as markup.
  */
 ;(function () {
   var HOST_ID = 'ytmq-ext-host'
   var LEGACY_HOST_ID = 'ytmq-ytm-panel'
-  var PANEL_REV = '4'
+  var PANEL_REV = '5'
   var PANEL_GAP = 12
   var BRIDGE_SOURCE = 'ytmq-bridge'
   var PANEL_SOURCE = 'ytmq-panel-ui'
-  var YTMQ_SITE = 'https://t3lluz.com/ytmq'
+  var OPEN_KEY = 'ytmq_panel_open'
+  var FONT_LINK_ID = 'ytmq-panel-font'
+  var SVG_NS = 'http://www.w3.org/2000/svg'
 
   var host = null
   var shadow = null
-  var root = null
+  var els = {}
   var expanded = false
+  var qrShown = false
   var lastState = null
-  var keepAliveTimer = 0
+  var lastQueueKey = ''
+  var lastQrKey = ''
+  // Playback is interpolated between bridge updates so the bar moves smoothly.
+  var clock = { at: 0, time: 0, duration: 0, playing: false }
 
-  var LOGO =
-    '<svg viewBox="0 0 32 32" fill="none" aria-hidden="true"><defs><linearGradient id="g" x1="6" y1="4" x2="26" y2="28"><stop stop-color="#8B5CF6"/><stop offset="1" stop-color="#D946EF"/></linearGradient></defs><rect width="32" height="32" rx="8" fill="url(#g)"/><rect x="6" y="7" width="20" height="6.5" rx="3.25" fill="#fff" fill-opacity="0.96"/><path fill="#7C3AED" d="M10.2 9.1v3.3l3.1-1.65z"/><rect x="6" y="15.5" width="20" height="4.5" rx="2.25" fill="#fff" fill-opacity="0.42"/><rect x="6" y="21.5" width="13.5" height="4.5" rx="2.25" fill="#fff" fill-opacity="0.24"/></svg>'
-
-  function icon(paths) {
+  /** The app's logo. Each copy needs its own gradient id: the pill's copy is
+   *  hidden while the panel is open, and a hidden gradient paints nothing. */
+  function logo(id) {
     return (
-      '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
-      paths +
+      '<svg viewBox="0 0 32 32" fill="none" aria-hidden="true"><defs><linearGradient id="' + id +
+      '" x1="6" y1="4" x2="26" y2="28"><stop stop-color="#8B5CF6"/><stop offset="1" stop-color="#D946EF"/></linearGradient></defs><rect width="32" height="32" rx="8" fill="url(#' + id +
+      ')"/><rect x="6" y="7" width="20" height="6.5" rx="3.25" fill="#fff" fill-opacity="0.96"/><path fill="#7C3AED" d="M10.2 9.1v3.3l3.1-1.65z"/><rect x="6" y="15.5" width="20" height="4.5" rx="2.25" fill="#fff" fill-opacity="0.42"/><rect x="6" y="21.5" width="13.5" height="4.5" rx="2.25" fill="#fff" fill-opacity="0.24"/></svg>'
+    )
+  }
+
+  var ICONS = {
+    queue: '<path d="M3 6h13"/><path d="M3 12h9"/><path d="M3 18h9"/><path d="M17 11v8"/><path d="m14 16 3 3 3-3"/>',
+    people: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+    chevronUp: '<path d="m6 15 6-6 6 6"/>',
+    close: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+    external: '<path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>',
+    link: '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
+    qr: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3z"/><path d="M20 14v.01"/><path d="M14 20h.01"/><path d="M17 17h4v4h-4"/>',
+    prev: '<path d="M19 20 9 12l10-8v16z" fill="currentColor" stroke="none"/><path d="M5 19V5"/>',
+    next: '<path d="m5 4 10 8-10 8V4z" fill="currentColor" stroke="none"/><path d="M19 5v14"/>',
+    play: '<path d="M7 4v16l13-8z" fill="currentColor" stroke="none"/>',
+    pause: '<rect x="6" y="4" width="4" height="16" rx="1" fill="currentColor" stroke="none"/><rect x="14" y="4" width="4" height="16" rx="1" fill="currentColor" stroke="none"/>',
+    remove: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+    warn: '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
+  }
+
+  function icon(name, size) {
+    var s = size || 16
+    return (
+      '<svg viewBox="0 0 24 24" width="' + s + '" height="' + s +
+      '" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+      ICONS[name] +
       '</svg>'
     )
   }
 
   function css() {
-    return (
-      ':host{display:block;position:fixed;inset:0;pointer-events:none;z-index:2147483646}' +
-      '*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;font-synthesis:none}' +
-      '#wrap{position:fixed;right:20px;z-index:2147483647;pointer-events:none;max-width:min(320px,calc(100vw - 24px));transform-origin:bottom right;bottom:calc(112px + env(safe-area-inset-bottom,0px))}' +
-      '#panel{pointer-events:auto;font-family:Montserrat,"YouTube Sans",Roboto,system-ui,-apple-system,sans-serif;font-size:13px;line-height:1.4;color:#fafafa;-webkit-font-smoothing:antialiased;animation:ypPillIn .38s cubic-bezier(.22,1,.36,1) both}' +
-      '@keyframes ypPillIn{from{opacity:0;transform:translateY(12px) scale(.96)}to{opacity:1;transform:none}}' +
-      '@keyframes ypPulse{0%,100%{box-shadow:0 0 0 0 rgba(139,92,246,.35)}50%{box-shadow:0 0 0 4px rgba(139,92,246,0)}}' +
-      '.shell{position:relative;display:inline-flex;flex-direction:column;align-items:stretch;width:max-content;max-width:min(320px,calc(100vw - 24px));border-radius:999px;border:1px solid rgba(139,92,246,.35);box-shadow:0 16px 48px rgba(0,0,0,.5),0 0 0 1px rgba(255,255,255,.05);overflow:hidden;transition:border-radius .3s cubic-bezier(.4,0,.2,1),box-shadow .3s ease}' +
-      '.shell.open{border-radius:18px;width:min(320px,calc(100vw - 24px));box-shadow:0 20px 56px rgba(0,0,0,.55),0 0 0 1px rgba(167,139,250,.14)}' +
-      '.glass{position:absolute;inset:0;border-radius:inherit;z-index:0;pointer-events:none;background:rgba(18,18,24,.58);backdrop-filter:blur(28px) saturate(180%);-webkit-backdrop-filter:blur(28px) saturate(180%)}' +
-      '.shell::after{content:"";position:absolute;inset:0;border-radius:inherit;z-index:0;pointer-events:none;background:linear-gradient(145deg,rgba(39,39,42,.55),rgba(24,24,27,.45))}' +
-      '.hdr{position:relative;z-index:1;display:flex;align-items:center;gap:4px;flex-shrink:0;height:44px}' +
-      '.pill{display:flex;align-items:center;gap:8px;min-width:0;flex:1;border:0;background:transparent;color:inherit;cursor:pointer;padding:6px 4px 6px 6px;text-align:left;font:inherit}' +
-      '.pill:hover{background:rgba(255,255,255,.04)}' +
-      '.logo{width:32px;height:32px;border-radius:10px;overflow:hidden;flex:none;animation:ypPulse 2.8s ease-in-out infinite}' +
-      '.logo svg{display:block;width:100%;height:100%}' +
-      '.pill-text{display:flex;flex-direction:column;min-width:0;flex:1;gap:1px}' +
-      '.pill-title{font-size:13px;font-weight:700;letter-spacing:.02em;color:#e9d5ff;white-space:nowrap;line-height:1.15}' +
-      '.pill-sub{font-size:10px;font-weight:500;color:#a1a1aa;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:148px;line-height:1.15;transition:opacity .2s ease,margin .2s ease}' +
-      '.shell.open .pill-sub{opacity:0;margin-top:-12px}' +
-      '.hdr-actions{display:flex;align-items:center;flex:none;padding-right:6px}' +
-      '.chev,.close-btn{width:30px;height:30px;border:0;border-radius:999px;background:transparent;color:#a78bfa;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;padding:0;transition:background .15s ease,color .15s ease,transform .32s cubic-bezier(.22,1.2,.36,1)}' +
-      '.close-btn{display:none;color:#a1a1aa}' +
-      '.chev:hover,.close-btn:hover{background:rgba(139,92,246,.16);color:#ede9fe}' +
-      '.shell.open .chev{display:none}' +
-      '.shell.open .close-btn{display:inline-flex}' +
-      '.drawer{position:relative;z-index:1;display:grid;grid-template-rows:0fr;transition:grid-template-rows .32s cubic-bezier(.4,0,.2,1)}' +
-      '.shell.open .drawer{grid-template-rows:1fr}' +
-      '.drawer-scroll{overflow:hidden;min-height:0}' +
-      '.drawer-inner{overflow-x:hidden;overflow-y:auto;max-height:min(68dvh,460px);padding:0 12px 12px;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;scrollbar-width:thin;scrollbar-color:rgba(113,113,122,.35) transparent;opacity:0;transform:translateY(-6px);transition:opacity .16s ease,transform .2s ease}' +
-      '.shell.open .drawer-inner{opacity:1;transform:none;transition:opacity .24s ease .05s,transform .28s cubic-bezier(.4,0,.2,1) .05s}' +
-      '.drawer-inner::-webkit-scrollbar{width:5px}' +
-      '.drawer-inner::-webkit-scrollbar-thumb{background:rgba(113,113,122,.35);border-radius:999px}' +
-      '.drawer-body{display:flex;flex-direction:column;gap:8px}' +
-      '.sec{border-radius:12px;border:1px solid rgba(255,255,255,.08);background:rgba(0,0,0,.22);padding:10px 12px}' +
-      '.lbl{font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#a78bfa;margin:0 0 6px}' +
-      '.row{display:flex;align-items:center;justify-content:space-between;gap:8px}' +
-      '.badge{display:inline-flex;align-items:center;gap:5px;font-size:10px;font-weight:600;padding:2px 8px;border-radius:999px;background:rgba(34,197,94,.15);color:#86efac;border:1px solid rgba(34,197,94,.25);white-space:nowrap}' +
-      '.badge.off{background:rgba(113,113,122,.2);color:#d4d4d8;border-color:rgba(113,113,122,.35)}' +
-      '.dot{width:6px;height:6px;border-radius:50%;background:currentColor;flex:none}' +
-      '.code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:18px;font-weight:700;letter-spacing:.18em;color:#fafafa;line-height:1.2}' +
-      '.meta{font-size:11px;color:#a1a1aa;margin-top:2px}' +
-      '.stats{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px}' +
-      '.stat{text-align:center;padding:6px 4px;border-radius:10px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.06)}' +
-      '.stat strong{display:block;font-size:15px;font-weight:700;color:#e9d5ff;line-height:1.1;font-variant-numeric:tabular-nums}' +
-      '.stat span{display:block;margin-top:2px;font-size:9px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#71717a}' +
-      '.title{font-size:14px;font-weight:600;color:#fafafa;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}' +
-      '.artist{font-size:12px;font-weight:500;color:#a1a1aa;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}' +
-      '.prog{margin-top:8px;height:4px;border-radius:999px;background:rgba(255,255,255,.08);overflow:hidden}' +
-      '.prog>i{display:block;height:100%;width:0%;border-radius:inherit;background:linear-gradient(90deg,#8b5cf6,#d946ef);transition:width .4s linear}' +
-      '.times{display:flex;justify-content:space-between;margin-top:4px;font-size:10px;color:#71717a;font-variant-numeric:tabular-nums}' +
-      '.ctlrow{display:flex;align-items:center;justify-content:center;gap:8px;margin-top:8px}' +
-      '.ctl{width:36px;height:36px;border-radius:999px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.06);color:#fafafa;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;padding:0;transition:background .15s ease,transform .1s ease}' +
-      '.ctl:hover{background:rgba(255,255,255,.12)}' +
-      '.ctl:active{transform:scale(.92)}' +
-      '.ctl.pri{width:42px;height:42px;border:0;background:linear-gradient(135deg,#7c3aed,#c026d3);box-shadow:0 4px 14px rgba(124,58,237,.35)}' +
-      '.ctl.pri:hover{background:linear-gradient(135deg,#8b5cf6,#d946ef)}' +
-      '.acts{display:grid;grid-template-columns:1fr 1fr;gap:6px}' +
-      '.btn{border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.05);color:#f4f4f5;border-radius:10px;padding:8px 10px;font-family:inherit;font-size:11px;font-weight:600;cursor:pointer;transition:background .15s ease,border-color .15s ease,transform .1s ease;line-height:1.2}' +
-      '.btn:hover{background:rgba(139,92,246,.18);border-color:rgba(167,139,250,.35)}' +
-      '.btn:active{transform:scale(.97)}' +
-      '.btn.acc{background:rgba(139,92,246,.22);border-color:rgba(167,139,250,.4);color:#ede9fe}' +
-      '.btn.acc:hover{background:rgba(139,92,246,.32)}' +
-      '.upnext{margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,.06)}' +
-      '.upnext .up-lbl{display:block;font-size:9px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:#71717a;margin-bottom:2px}' +
-      '.upnext b{display:block;font-size:12px;font-weight:600;color:#e4e4e7;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}' +
-      '.wait .ctl{opacity:.4;pointer-events:none}' +
-      '.ctl.pri .ico-play{display:inline-flex;align-items:center;justify-content:center}' +
-      '.ctl.pri .ico-pause{display:none;align-items:center;justify-content:center}'
-    )
+    return [
+      ':host{all:initial}',
+      '*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;margin:0}',
+      '[hidden]{display:none!important}',
+      'button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}',
+      'button:focus-visible{outline:2px solid rgb(var(--ac-light));outline-offset:2px}',
+      '#wrap{--ac:139 92 246;--ac-light:196 181 253;position:fixed;right:20px;bottom:84px;z-index:2147483647;' +
+        'font-family:"YouTube Sans",Roboto,system-ui,-apple-system,sans-serif;font-size:13px;line-height:1.35;color:#f4f4f5;' +
+        '-webkit-font-smoothing:antialiased;display:flex;flex-direction:column;align-items:flex-end}',
+      '.display{font-family:Montserrat,"YouTube Sans",Roboto,system-ui,sans-serif}',
+      '.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}',
+
+      // Shared glass surface, tinted by the album art.
+      '.surface{position:relative;pointer-events:auto;background:rgba(12,12,15,.82);' +
+        'backdrop-filter:blur(24px) saturate(170%);-webkit-backdrop-filter:blur(24px) saturate(170%);' +
+        'border:1px solid rgba(255,255,255,.09);box-shadow:0 18px 50px rgba(0,0,0,.55),0 0 0 1px rgba(var(--ac),.08);' +
+        'transition:box-shadow .5s ease}',
+      '.surface::before{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;' +
+        'background:radial-gradient(120% 90% at 85% 0%,rgba(var(--ac),.22),transparent 60%);transition:background .6s ease}',
+
+      // Collapsed pill.
+      '#pill{display:flex;align-items:center;gap:10px;height:44px;padding:0 14px 0 6px;border-radius:999px;' +
+        'animation:in .38s cubic-bezier(.22,1,.36,1) both}',
+      '#pill:hover{border-color:rgba(var(--ac),.45)}',
+      '#pill>*{position:relative}',
+      '.logo{position:relative;width:32px;height:32px;flex:none}',
+      '.logo svg{display:block;width:100%;height:100%;border-radius:9px}',
+      '.status{position:absolute;right:-2px;bottom:-2px;width:11px;height:11px;border-radius:50%;' +
+        'border:2px solid #0c0c0f;background:#71717a}',
+      '.live .status{background:#34d399;box-shadow:0 0 0 0 rgba(52,211,153,.5);animation:ping 2.4s ease-out infinite}',
+      '.wait .status{background:#fbbf24}',
+      '.pill-code{font-size:15px;font-weight:700;letter-spacing:.14em;color:#fafafa}',
+      '.pill-stat{display:inline-flex;align-items:center;gap:5px;font-size:13px;font-weight:600;color:#d4d4d8;font-variant-numeric:tabular-nums}',
+      '.pill-stat svg{color:rgb(var(--ac-light));opacity:.9}',
+      '.pill-sep{width:1px;height:18px;background:rgba(255,255,255,.12)}',
+      '.pill-hint{font-size:13px;font-weight:500;color:#a1a1aa;white-space:nowrap}',
+      '.pill-warn{display:none;width:8px;height:8px;border-radius:50%;background:#fbbf24}',
+      '.has-pending .pill-warn{display:block}',
+      '#wrap.open #pill{display:none}',
+
+      // Open panel.
+      '#panel{display:none;flex-direction:column;width:min(348px,calc(100vw - 24px));border-radius:20px;overflow:hidden;' +
+        'max-height:var(--max-h,560px);animation:in .32s cubic-bezier(.22,1,.36,1) both}',
+      '#wrap.open #panel{display:flex}',
+      '#panel>*{position:relative}',
+      '.head{display:flex;align-items:center;gap:10px;padding:12px 10px 4px 12px}',
+      '.head .logo{width:28px;height:28px}',
+      '.head-title{font-size:15px;font-weight:800;letter-spacing:.01em}',
+      '.chip{display:inline-flex;align-items:center;gap:6px;height:22px;padding:0 9px;border-radius:999px;font-size:11px;font-weight:600;' +
+        'background:rgba(113,113,122,.18);color:#d4d4d8;border:1px solid rgba(113,113,122,.3)}',
+      '.chip i{width:6px;height:6px;border-radius:50%;background:currentColor}',
+      '.live .chip.conn{background:rgba(16,185,129,.12);color:#6ee7b7;border-color:rgba(16,185,129,.3)}',
+      '.wait .chip.conn{background:rgba(245,158,11,.12);color:#fcd34d;border-color:rgba(245,158,11,.3)}',
+      '.spacer{flex:1}',
+      '.icon-btn{width:32px;height:32px;border-radius:999px;display:inline-flex;align-items:center;justify-content:center;color:#a1a1aa;' +
+        'transition:background .15s ease,color .15s ease}',
+      '.icon-btn:hover{background:rgba(255,255,255,.08);color:#fafafa}',
+      '.icon-btn.on{background:rgba(var(--ac),.2);color:rgb(var(--ac-light))}',
+
+      '.scroll{overflow-y:auto;overscroll-behavior:contain;padding:0 14px 14px;scrollbar-width:thin;scrollbar-color:rgba(113,113,122,.4) transparent}',
+      '.scroll::-webkit-scrollbar{width:6px}',
+      '.scroll::-webkit-scrollbar-thumb{background:rgba(113,113,122,.4);border-radius:999px}',
+
+      // Lobby: the code is the thing people need, so it is big.
+      '.lobby{display:flex;align-items:center;gap:12px;padding:10px 0 14px}',
+      '.lobby-text{flex:1;min-width:0}',
+      '.label{font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#71717a}',
+      '.code{font-size:28px;font-weight:700;letter-spacing:.16em;line-height:1.15;color:#fafafa;margin-top:2px}',
+      '.meta{margin-top:3px;font-size:12px;color:#a1a1aa}',
+      '.meta b{color:#e4e4e7;font-weight:600}',
+      '.lobby-actions{display:flex;gap:4px}',
+      '.qr{display:none;flex-direction:column;align-items:center;gap:8px;padding:0 0 14px}',
+      '.qr.on{display:flex}',
+      '.qr-box{background:#fff;border-radius:14px;padding:10px;line-height:0}',
+      '.qr-box svg{width:168px;height:168px;display:block}',
+      '.qr p{font-size:12px;color:#a1a1aa}',
+
+      // Now playing.
+      '.np{display:grid;grid-template-columns:52px minmax(0,1fr) auto;grid-template-areas:"art text ctl" "bar bar bar";' +
+        'align-items:center;column-gap:12px;row-gap:10px;padding:12px;border-radius:16px;background:rgba(255,255,255,.045)}',
+      '.art{grid-area:art;position:relative;width:52px;height:52px;flex:none;border-radius:10px;overflow:hidden;background:#27272a;' +
+        'box-shadow:0 6px 18px rgba(0,0,0,.45),0 0 24px rgba(var(--ac),.25)}',
+      '.art img{width:100%;height:100%;object-fit:cover;display:block}',
+      '.art img.wide{transform:scale(1.34)}',
+      '.np-text{grid-area:text;min-width:0}',
+      '.np-title{font-size:14px;font-weight:700;line-height:1.25;color:#fafafa;overflow:hidden;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;word-break:break-word}',
+      '.np-artist{margin-top:1px;font-size:12px;color:#a1a1aa;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
+      '.prog{grid-area:bar;display:flex;align-items:center;gap:8px;font-size:10px;color:#71717a;font-variant-numeric:tabular-nums}',
+      '.bar{flex:1;height:3px;border-radius:999px;background:rgba(255,255,255,.1);overflow:hidden}',
+      '.bar i{display:block;height:100%;width:0;border-radius:inherit;background:rgb(var(--ac-light))}',
+      '.ctl{grid-area:ctl;display:flex;align-items:center}',
+      '.ctl-row{display:flex;align-items:center;gap:2px}',
+      '.ctl button{width:28px;height:28px;border-radius:999px;display:inline-flex;align-items:center;justify-content:center;color:#d4d4d8;transition:background .15s,transform .1s}',
+      '.ctl button:hover{background:rgba(255,255,255,.1);color:#fff}',
+      '.ctl button:active{transform:scale(.9)}',
+      '.ctl .play{width:34px;height:34px;background:#fafafa;color:#0c0c0f}',
+      '.ctl .play:hover{background:#fff;color:#000}',
+      '.idle .np{opacity:.55}',
+      '.idle .ctl,.idle .prog{display:none}',
+
+      // Sync warning.
+      '.warn{display:none;align-items:center;gap:10px;margin-top:10px;padding:9px 10px 9px 12px;border-radius:12px;' +
+        'background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.25);color:#fde68a;font-size:12px}',
+      '.has-pending .warn{display:flex}',
+      '.warn span{flex:1}',
+      '.warn button{padding:5px 10px;border-radius:999px;background:rgba(245,158,11,.2);color:#fef3c7;font-size:12px;font-weight:600}',
+      '.warn button:hover{background:rgba(245,158,11,.32)}',
+
+      // Shared queue.
+      '.q-head{display:flex;align-items:baseline;justify-content:space-between;margin:16px 2px 6px}',
+      '.q-title{font-size:14px;font-weight:700}',
+      '.q-count{font-size:12px;color:#71717a}',
+      '.rows{display:flex;flex-direction:column;gap:2px}',
+      '.row{display:flex;align-items:center;gap:10px;padding:6px 6px 6px 4px;border-radius:12px;transition:background .15s}',
+      '.row:hover{background:rgba(255,255,255,.05)}',
+      '.row-n{width:16px;text-align:center;font-size:12px;color:#71717a;font-variant-numeric:tabular-nums;flex:none}',
+      '.row-art{width:38px;height:38px;flex:none;border-radius:8px;overflow:hidden;background:#27272a}',
+      '.row-art img{width:100%;height:100%;object-fit:cover;display:block}',
+      '.row-art img.wide{transform:scale(1.34)}',
+      '.row-text{flex:1;min-width:0}',
+      '.row-title{display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;color:#f4f4f5}',
+      '.row-title span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
+      '.row-by{margin-top:1px;font-size:11px;color:#a1a1aa;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
+      '.tag{flex:none;font-style:normal;font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:2px 6px;border-radius:999px;' +
+        'background:rgba(var(--ac),.2);color:rgb(var(--ac-light))}',
+      '.row .rm{width:28px;height:28px;flex:none;border-radius:999px;display:inline-flex;align-items:center;justify-content:center;color:#71717a;opacity:0;transition:opacity .15s,background .15s,color .15s}',
+      '.row:hover .rm,.row .rm:focus-visible{opacity:1}',
+      '.row .rm:hover{background:rgba(239,68,68,.15);color:#fca5a5}',
+      '.more{display:block;width:100%;margin-top:6px;padding:8px;border-radius:12px;font-size:12px;font-weight:600;color:rgb(var(--ac-light));text-align:center}',
+      '.more:hover{background:rgba(var(--ac),.12)}',
+      '.empty{padding:14px 4px 4px;font-size:12px;color:#a1a1aa;line-height:1.5}',
+      '.empty b{color:#e4e4e7;font-weight:600}',
+      '.autoplay{margin-top:10px;padding:0 4px;font-size:11px;color:#71717a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
+      '.autoplay b{color:#a1a1aa;font-weight:600}',
+
+      '@keyframes in{from{opacity:0;transform:translateY(10px) scale(.97)}to{opacity:1;transform:none}}',
+      '@keyframes ping{0%{box-shadow:0 0 0 0 rgba(52,211,153,.55)}70%,100%{box-shadow:0 0 0 7px rgba(52,211,153,0)}}',
+      '@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}',
+    ].join('')
   }
 
   function html() {
     return (
-      '<div id="wrap">' +
-      '<div id="panel">' +
-      '<div class="shell" id="shell">' +
-      '<div class="glass" aria-hidden="true"></div>' +
-      '<div class="hdr">' +
-      '<button type="button" class="pill" id="toggle" aria-expanded="false">' +
-      '<span class="logo">' +
-      LOGO +
-      '</span>' +
-      '<span class="pill-text"><span class="pill-title">YTMQ</span><span class="pill-sub" id="pill-sub">Waiting for lobby…</span></span>' +
+      '<div id="wrap" class="idle">' +
+      // Pill.
+      '<button type="button" id="pill" class="surface" aria-expanded="false" aria-label="Open YTMQ">' +
+      '<span class="logo">' + logo('ytmq-g-pill') + '<span class="status"></span></span>' +
+      '<span class="pill-hint" id="pill-hint">Waiting for a lobby…</span>' +
+      '<span class="pill-code mono" id="pill-code" hidden></span>' +
+      '<span class="pill-sep" id="pill-sep" hidden></span>' +
+      '<span class="pill-stat" id="pill-q" hidden title="Songs in the shared queue">' + icon('queue', 15) + '<span></span></span>' +
+      '<span class="pill-stat" id="pill-p" hidden title="People listening">' + icon('people', 15) + '<span></span></span>' +
+      '<span class="pill-warn" title="Some songs are not in YouTube Music yet"></span>' +
       '</button>' +
-      '<div class="hdr-actions">' +
-      '<button type="button" class="chev" id="chev" aria-label="Expand panel">' +
-      icon('<path d="m6 15 6-6 6 6"/>') +
-      '</button>' +
-      '<button type="button" class="close-btn" id="close" aria-label="Collapse panel">' +
-      icon('<path d="M18 6 6 18"/><path d="m6 6 12 12"/>') +
-      '</button>' +
+      // Panel.
+      '<section id="panel" class="surface" role="dialog" aria-label="YTMQ">' +
+      '<div class="head">' +
+      '<span class="logo">' + logo('ytmq-g-head') + '<span class="status"></span></span>' +
+      '<span class="head-title display">YTMQ</span>' +
+      '<span class="chip conn"><i></i><span id="conn">Offline</span></span>' +
+      '<span class="spacer"></span>' +
+      '<button type="button" class="icon-btn" data-a="focus-app" title="Open YTMQ">' + icon('external') + '</button>' +
+      '<button type="button" class="icon-btn" id="close" title="Close (Esc)">' + icon('chevronUp') + '</button>' +
+      '</div>' +
+      '<div class="scroll">' +
+      '<div class="lobby"><div class="lobby-text">' +
+      '<div class="label">Lobby code</div>' +
+      '<div class="code mono" id="code">······</div>' +
+      '<div class="meta" id="meta"></div>' +
+      '</div><div class="lobby-actions">' +
+      '<button type="button" class="icon-btn" data-a="copy-link" title="Copy room link">' + icon('link', 18) + '</button>' +
+      '<button type="button" class="icon-btn" id="qr-btn" title="Show QR code">' + icon('qr', 18) + '</button>' +
       '</div></div>' +
-      '<div class="drawer" id="drawer"><div class="drawer-scroll"><div class="drawer-inner"><div class="drawer-body">' +
-      '<div class="sec"><div class="row"><span class="lbl" style="margin:0">Lobby</span><span class="badge off" id="badge"><span class="dot"></span><span id="badge-t">Offline</span></span></div>' +
-      '<div class="code" id="code">····</div><div class="meta" id="meta">Room</div>' +
-      '<div class="stats"><div class="stat"><strong id="q">0</strong><span>In queue</span></div><div class="stat"><strong id="p">0</strong><span>Participants</span></div></div></div>' +
-      '<div class="sec" id="np-sec"><div class="lbl">Now playing</div><div class="title" id="np-t">—</div><div class="artist" id="np-a">—</div>' +
-      '<div class="prog"><i id="prog"></i></div><div class="times"><span id="t0">0:00</span><span id="t1">0:00</span></div>' +
-      '<div class="ctlrow">' +
-      '<button type="button" class="ctl" data-a="prev" aria-label="Previous">' +
-      icon('<path d="m15 18-6-6 6-6"/><path d="M5 6v12"/>') +
-      '</button>' +
-      '<button type="button" class="ctl pri" data-a="toggle" aria-label="Play" id="ctl-play">' +
-      '<span class="ico-play">' +
-      icon('<path d="M8 5v14l11-7z" fill="currentColor" stroke="none"/>') +
-      '</span><span class="ico-pause">' +
-      icon('<rect x="7" y="5" width="4" height="14" fill="currentColor" stroke="none"/><rect x="13" y="5" width="4" height="14" fill="currentColor" stroke="none"/>') +
-      '</span></button>' +
-      '<button type="button" class="ctl" data-a="next" aria-label="Next">' +
-      icon('<path d="m9 18 6-6-6-6"/><path d="M19 6v12"/>') +
-      '</button></div>' +
-      '<div class="upnext" id="upnext"><span class="up-lbl">Up next</span><b>—</b></div></div>' +
-      '<div class="sec"><div class="lbl">Quick actions</div><div class="acts">' +
-      '<button type="button" class="btn acc" data-a="open-app">Open YTMQ</button>' +
-      '<button type="button" class="btn" data-a="focus-app">Switch to YTMQ</button>' +
-      '<button type="button" class="btn" data-a="copy-link">Copy room link</button>' +
-      '<button type="button" class="btn" data-a="collapse">Collapse</button>' +
-      '</div></div></div></div></div></div></div></div></div>'
+      '<div class="qr" id="qr"><div class="qr-box" id="qr-box"></div><p>Scan to join the queue</p></div>' +
+      '<div class="np">' +
+      '<div class="art"><img id="np-art" alt="" referrerpolicy="no-referrer" hidden></div>' +
+      '<div class="np-text">' +
+      '<div class="np-title display" id="np-title">Nothing playing</div>' +
+      '<div class="np-artist" id="np-artist">Start a song in YouTube Music</div>' +
+      '</div>' +
+      '<div class="ctl"><div class="ctl-row">' +
+      '<button type="button" data-a="prev" title="Previous">' + icon('prev', 15) + '</button>' +
+      '<button type="button" class="play" data-a="toggle" id="np-play" title="Play">' + icon('play', 16) + '</button>' +
+      '<button type="button" data-a="next" title="Next">' + icon('next', 15) + '</button>' +
+      '</div></div>' +
+      '<div class="prog"><span id="np-t0">0:00</span><div class="bar"><i id="np-bar"></i></div><span id="np-t1">0:00</span></div>' +
+      '</div>' +
+      '<div class="warn">' + icon('warn', 16) + '<span id="warn-text"></span>' +
+      '<button type="button" data-a="retry-sync">Retry</button></div>' +
+      '<div class="q-head"><span class="q-title display">Up next</span><span class="q-count" id="q-count"></span></div>' +
+      '<div class="rows" id="rows"></div>' +
+      '<div class="autoplay" id="autoplay" hidden></div>' +
+      '</div>' +
+      '</section>' +
+      '</div>'
     )
+  }
+
+  // --- helpers --------------------------------------------------------------
+
+  function $(id) {
+    return shadow ? shadow.getElementById(id) : null
+  }
+
+  function el(tag, className, text) {
+    var node = document.createElement(tag)
+    if (className) node.className = className
+    if (text != null) node.textContent = text
+    return node
   }
 
   function fmt(sec) {
@@ -161,154 +291,347 @@
     return m + ':' + (s < 10 ? '0' : '') + s
   }
 
-  function shortId(id) {
-    return id && id.length > 8 ? id.slice(0, 8) + '…' : id || ''
+  function plural(n, one, many) {
+    return n + ' ' + (n === 1 ? one : many)
   }
 
-  function postAction(action) {
-    window.postMessage({ source: PANEL_SOURCE, type: 'panel-action', action: action }, '*')
+  /** YouTube's 16:9 thumbs pad square art; zoom those to crop the bars. */
+  function setArt(img, url) {
+    if (!url) {
+      img.hidden = true
+      img.removeAttribute('src')
+      return
+    }
+    if (img.getAttribute('src') !== url) img.src = url
+    img.hidden = false
+    img.classList.toggle('wide', /i\.ytimg\.com\/vi\//.test(url))
   }
 
-  function readPlayerBarOffset() {
+  function safeUrl(url) {
+    return typeof url === 'string' && /^https:\/\//.test(url) ? url : ''
+  }
+
+  function postAction(action, extra) {
+    var msg = { source: PANEL_SOURCE, type: 'panel-action', action: action }
+    if (extra) for (var k in extra) msg[k] = extra[k]
+    window.postMessage(msg, '*')
+  }
+
+  // --- position -------------------------------------------------------------
+
+  function updatePosition() {
+    var wrap = $('wrap')
+    if (!wrap) return
+    var offset = 84
     try {
       var bar = document.querySelector('ytmusic-player-bar')
-      if (bar && bar.getBoundingClientRect) {
-        var rect = bar.getBoundingClientRect()
-        if (rect.height > 0) return Math.ceil(rect.height) + PANEL_GAP
+      var rect = bar && bar.getBoundingClientRect()
+      if (rect && rect.height > 0 && rect.top < window.innerHeight) {
+        offset = Math.ceil(window.innerHeight - rect.top) + PANEL_GAP
       }
     } catch (e) {
       /* ignore */
     }
-    return 112
+    wrap.style.bottom = offset + 'px'
+    wrap.style.setProperty('--max-h', Math.max(240, Math.min(620, window.innerHeight - offset - 16)) + 'px')
   }
 
-  function updatePanelPosition() {
-    var wrap = q('#wrap')
-    if (!wrap) return
-    var offset = readPlayerBarOffset()
-    wrap.style.bottom = 'calc(' + offset + 'px + env(safe-area-inset-bottom, 0px))'
-  }
+  // --- open / close -----------------------------------------------------------
 
-  function schedulePositionUpdate() {
-    updatePanelPosition()
-    window.requestAnimationFrame(updatePanelPosition)
-  }
-
-  function setExpanded(on) {
+  function setExpanded(on, persist) {
     expanded = on
-    var shell = q('#shell')
-    var toggle = q('#toggle')
-    if (shell) shell.classList.toggle('open', on)
-    if (toggle) toggle.setAttribute('aria-expanded', on ? 'true' : 'false')
-    schedulePositionUpdate()
+    var wrap = $('wrap')
+    if (wrap) wrap.classList.toggle('open', on)
+    var pill = $('pill')
+    if (pill) pill.setAttribute('aria-expanded', on ? 'true' : 'false')
+    if (persist !== false) {
+      try {
+        localStorage.setItem(OPEN_KEY, on ? '1' : '0')
+      } catch (e) {
+        /* ignore */
+      }
+    }
+    updatePosition()
   }
 
-  function q(sel) {
-    return shadow ? shadow.querySelector(sel) : null
+  function setQrShown(on) {
+    qrShown = on
+    var qr = $('qr')
+    var btn = $('qr-btn')
+    if (qr) qr.classList.toggle('on', on)
+    if (btn) {
+      btn.classList.toggle('on', on)
+      btn.title = on ? 'Hide QR code' : 'Show QR code'
+    }
+  }
+
+  // --- rendering ------------------------------------------------------------
+
+  function renderQr(qr) {
+    var key = qr ? qr.size + ':' + qr.bits : ''
+    if (key === lastQrKey) return
+    lastQrKey = key
+    var box = $('qr-box')
+    if (!box) return
+    box.textContent = ''
+    if (!qr || !qr.size || typeof qr.bits !== 'string') return
+    var n = qr.size
+    var quiet = 1
+    var svg = document.createElementNS(SVG_NS, 'svg')
+    svg.setAttribute('viewBox', -quiet + ' ' + -quiet + ' ' + (n + quiet * 2) + ' ' + (n + quiet * 2))
+    svg.setAttribute('shape-rendering', 'crispEdges')
+    var d = ''
+    for (var y = 0; y < n; y++) {
+      for (var x = 0; x < n; x++) {
+        if (qr.bits.charAt(y * n + x) === '1') d += 'M' + x + ' ' + y + 'h1v1h-1z'
+      }
+    }
+    var path = document.createElementNS(SVG_NS, 'path')
+    path.setAttribute('d', d)
+    path.setAttribute('fill', '#09090b')
+    svg.appendChild(path)
+    box.appendChild(svg)
+  }
+
+  function renderQueue(st) {
+    var rows = Array.isArray(st.queue) ? st.queue : []
+    var total = typeof st.queueCount === 'number' ? st.queueCount : rows.length
+    var key = total + '|' + rows.map(function (r) { return r.id + r.title + r.added_by }).join(',')
+    var countEl = $('q-count')
+    if (countEl) countEl.textContent = total ? plural(total, 'song', 'songs') : ''
+    if (key === lastQueueKey) return
+    lastQueueKey = key
+
+    var list = $('rows')
+    if (!list) return
+    list.textContent = ''
+
+    if (rows.length === 0) {
+      var empty = el('div', 'empty')
+      empty.appendChild(el('b', null, 'No guest picks yet. '))
+      empty.appendChild(
+        document.createTextNode(
+          st.roomCode
+            ? 'Friends join at the YTMQ site with code ' + st.roomCode + ', or scan the QR.'
+            : 'Share the lobby so friends can add songs.',
+        ),
+      )
+      list.appendChild(empty)
+      return
+    }
+
+    rows.forEach(function (row, i) {
+      var item = el('div', 'row')
+      item.appendChild(el('span', 'row-n', String(i + 1)))
+      var art = el('div', 'row-art')
+      var img = el('img')
+      img.alt = ''
+      img.loading = 'lazy'
+      img.referrerPolicy = 'no-referrer'
+      setArt(img, safeUrl(row.thumbnail_url) || (row.video_id ? 'https://i.ytimg.com/vi/' + encodeURIComponent(row.video_id) + '/mqdefault.jpg' : ''))
+      art.appendChild(img)
+      item.appendChild(art)
+
+      var text = el('div', 'row-text')
+      var title = el('div', 'row-title')
+      title.appendChild(el('span', null, row.title || 'Untitled'))
+      if (row.insert_mode === 'play_next') title.appendChild(el('em', 'tag', 'Next'))
+      text.appendChild(title)
+      var by = [row.channel_title, row.added_by ? 'added by ' + row.added_by : ''].filter(Boolean).join(' · ')
+      text.appendChild(el('div', 'row-by', by || ' '))
+      item.appendChild(text)
+
+      var rm = el('button', 'rm')
+      rm.type = 'button'
+      rm.title = 'Remove from the queue'
+      rm.setAttribute('aria-label', 'Remove ' + (row.title || 'song'))
+      rm.innerHTML = icon('remove', 14)
+      rm.addEventListener('click', function () {
+        item.style.opacity = '.4'
+        postAction('remove', { id: String(row.id) })
+      })
+      item.appendChild(rm)
+      list.appendChild(item)
+    })
+
+    if (total > rows.length) {
+      var more = el('button', 'more', '+' + (total - rows.length) + ' more in YTMQ')
+      more.type = 'button'
+      more.addEventListener('click', function () {
+        openApp()
+      })
+      list.appendChild(more)
+    }
+  }
+
+  function renderPlayback() {
+    var bar = $('np-bar')
+    var t0 = $('np-t0')
+    var t1 = $('np-t1')
+    var now = clock.time
+    if (clock.playing && clock.at) now += (Date.now() - clock.at) / 1000
+    if (clock.duration > 0) now = Math.min(now, clock.duration)
+    var pct = clock.duration > 0 ? (now / clock.duration) * 100 : 0
+    if (bar) bar.style.width = pct.toFixed(2) + '%'
+    if (t0) t0.textContent = fmt(now)
+    if (t1) t1.textContent = clock.duration > 0 ? fmt(clock.duration) : '–:––'
   }
 
   function applyState(st) {
     if (!st || st.destroy) {
+      lastState = null
       if (host) host.style.display = 'none'
       return
     }
     lastState = st
-    if (host) host.style.display = 'block'
+    if (host) host.style.display = ''
+    var wrap = $('wrap')
+    if (!wrap) return
 
     var linked = Boolean(st.roomId)
     var live = Boolean(st.connected)
-    var np = st.nowPlaying || {}
+    var np = st.nowPlaying && st.nowPlaying.title ? st.nowPlaying : null
+    var queueCount = typeof st.queueCount === 'number' ? st.queueCount : 0
+    var listening = typeof st.listeningCount === 'number' ? st.listeningCount : st.participantCount || 0
+    var pending = typeof st.pendingCount === 'number' ? st.pendingCount : 0
 
-    var badge = q('#badge')
-    var badgeT = q('#badge-t')
-    if (badge) badge.classList.toggle('off', !live)
-    if (badgeT) badgeT.textContent = live ? 'Live' : linked ? 'Connecting…' : 'Offline'
+    wrap.classList.toggle('live', live)
+    wrap.classList.toggle('wait', linked && !live)
+    wrap.classList.toggle('idle', !np)
+    wrap.classList.toggle('has-pending', pending > 0)
 
-    var pillSub = q('#pill-sub')
-    if (pillSub) {
-      pillSub.textContent = live
-        ? st.roomCode
-          ? 'Lobby ' + st.roomCode
-          : 'Lobby linked'
-        : linked
-          ? 'Connecting…'
-          : 'Waiting for lobby…'
+    if (Array.isArray(st.accent) && st.accent.length === 3) {
+      var rgb = st.accent.map(function (v) { return Math.max(0, Math.min(255, Math.round(Number(v) || 0))) })
+      // A lighter mix of the accent for text and the progress bar.
+      var light = rgb.map(function (v) { return Math.round(v + (255 - v) * 0.45) })
+      wrap.style.setProperty('--ac', rgb.join(' '))
+      wrap.style.setProperty('--ac-light', light.join(' '))
     }
 
-    var code = q('#code')
-    if (code) code.textContent = st.roomCode || shortId(st.roomId) || '····'
-    var meta = q('#meta')
-    if (meta) meta.textContent = st.roomId ? 'Room ' + shortId(st.roomId) : 'Open YTMQ as host'
+    // Pill.
+    var code = st.roomCode || ''
+    $('pill-hint').hidden = live && Boolean(code)
+    $('pill-hint').textContent = !linked ? 'Waiting for a lobby…' : live ? 'Lobby linked' : 'Connecting…'
+    $('pill-code').hidden = !(live && code)
+    $('pill-code').textContent = code
+    $('pill-sep').hidden = !live
+    $('pill-q').hidden = !live
+    $('pill-q').lastChild.textContent = String(queueCount)
+    $('pill-p').hidden = !live
+    $('pill-p').lastChild.textContent = String(listening)
+    $('pill').setAttribute(
+      'aria-label',
+      'YTMQ' + (code ? ', lobby ' + code : '') + ', ' + plural(queueCount, 'song', 'songs') + ' queued, ' + listening + ' listening',
+    )
 
-    var qEl = q('#q')
-    var pEl = q('#p')
-    if (qEl) qEl.textContent = String(st.queueCount != null ? st.queueCount : 0)
-    if (pEl) pEl.textContent = String(st.participantCount != null ? st.participantCount : 0)
+    // Header + lobby.
+    $('conn').textContent = live ? 'Live' : linked ? 'Connecting' : 'Offline'
+    $('code').textContent = code || '······'
+    var meta = $('meta')
+    meta.textContent = ''
+    if (linked) {
+      meta.appendChild(el('b', null, String(listening)))
+      meta.appendChild(document.createTextNode(' listening · '))
+      meta.appendChild(el('b', null, String(queueCount)))
+      meta.appendChild(document.createTextNode(queueCount === 1 ? ' song queued' : ' songs queued'))
+    } else {
+      meta.textContent = 'Open your lobby in YTMQ as host'
+    }
+    renderQr(st.qr)
 
-    var npSec = q('#np-sec')
-    if (npSec) npSec.classList.toggle('wait', !live)
+    // Now playing.
+    setArt($('np-art'), np ? safeUrl(np.thumbnailUrl) : '')
+    $('np-title').textContent = np ? np.title : 'Nothing playing'
+    $('np-title').title = np ? np.title : ''
+    $('np-artist').textContent = np ? np.artist || ' ' : 'Start a song in YouTube Music'
+    var playing = Boolean(np && np.state === 'playing')
+    var playBtn = $('np-play')
+    if (playBtn.dataset.state !== String(playing)) {
+      playBtn.dataset.state = String(playing)
+      playBtn.innerHTML = icon(playing ? 'pause' : 'play', 16)
+      playBtn.title = playing ? 'Pause' : 'Play'
+    }
+    clock = {
+      at: Date.now(),
+      time: np && isFinite(np.currentTime) ? np.currentTime : 0,
+      duration: np && np.duration > 0 ? np.duration : 0,
+      playing: playing,
+    }
+    renderPlayback()
 
-    var playing = np.state === 'playing'
-    var playIco = q('.ico-play')
-    var pauseIco = q('.ico-pause')
-    var playBtn = q('#ctl-play')
-    if (playIco) playIco.style.display = playing ? 'none' : 'inline-flex'
-    if (pauseIco) pauseIco.style.display = playing ? 'inline-flex' : 'none'
-    if (playBtn) playBtn.setAttribute('aria-label', playing ? 'Pause' : 'Play')
+    // Sync warning.
+    $('warn-text').textContent =
+      plural(pending, 'song is', 'songs are') + ' not in YouTube Music yet'
 
-    var t = q('#np-t')
-    var a = q('#np-a')
-    if (t) t.textContent = np.title || 'Nothing playing'
-    if (a) a.textContent = np.artist || '—'
+    // Queue + what YouTube Music will play when the shared queue runs dry.
+    renderQueue(st)
+    var auto = $('autoplay')
+    var nx = st.nextSong
+    var showAuto = queueCount === 0 && nx && nx.title
+    auto.hidden = !showAuto
+    auto.textContent = ''
+    if (showAuto) {
+      auto.appendChild(document.createTextNode('YouTube Music plays next: '))
+      auto.appendChild(el('b', null, nx.title + (nx.artist ? ' · ' + nx.artist : '')))
+    }
+  }
 
-    var pct = 0
-    if (np.duration > 0) pct = Math.min(100, Math.max(0, (np.currentTime / np.duration) * 100))
-    var prog = q('#prog')
-    if (prog) prog.style.width = pct + '%'
-    var t0 = q('#t0')
-    var t1 = q('#t1')
-    if (t0) t0.textContent = fmt(np.currentTime || 0)
-    if (t1) t1.textContent = fmt(np.duration || 0)
+  // --- wiring ---------------------------------------------------------------
 
-    var up = q('#upnext')
-    if (up) {
-      var nx = st.nextSong
-      up.innerHTML = nx
-        ? '<span class="up-lbl">Up next on YT Music</span><b>' + (nx.title || '—') + (nx.artist ? ' · ' + nx.artist : '') + '</b>'
-        : '<span class="up-lbl">Up next</span><b>—</b>'
+  function openApp() {
+    try {
+      chrome.runtime.sendMessage({
+        type: 'ytmq-focus-app',
+        roomId: (lastState && lastState.roomId) || '',
+      })
+    } catch (e) {
+      postAction('focus-app')
     }
   }
 
   function bind() {
-    function togglePanel() {
-      setExpanded(!expanded)
-    }
-    q('#toggle').addEventListener('click', togglePanel)
-    q('#chev').addEventListener('click', togglePanel)
-    q('#close').addEventListener('click', function () {
+    $('pill').addEventListener('click', function () {
+      setExpanded(true)
+    })
+    $('close').addEventListener('click', function () {
       setExpanded(false)
+    })
+    $('qr-btn').addEventListener('click', function () {
+      setQrShown(!qrShown)
     })
     shadow.querySelectorAll('[data-a]').forEach(function (btn) {
       btn.addEventListener('click', function () {
         var action = btn.getAttribute('data-a')
-        if (action === 'collapse') {
-          setExpanded(false)
-          return
-        }
-        if (action === 'open-app' || action === 'focus-app') {
-          try {
-            chrome.runtime.sendMessage({
-              type: action === 'focus-app' ? 'ytmq-focus-app' : 'ytmq-open-app',
-              roomId: (lastState && lastState.roomId) || '',
-            })
-          } catch (e) {
-            postAction(action)
-          }
+        if (action === 'focus-app' || action === 'open-app') {
+          openApp()
           return
         }
         postAction(action)
       })
     })
+    shadow.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && expanded) {
+        e.stopPropagation()
+        setExpanded(false)
+        var pill = $('pill')
+        if (pill) pill.focus()
+      }
+    })
+    // Keep YouTube Music's own shortcuts (space, j/k...) from firing while
+    // a panel button has focus.
+    shadow.addEventListener('keydown', function (e) {
+      if (e.key === ' ' || e.key === 'Enter') e.stopPropagation()
+    })
+  }
+
+  /** @font-face does not work inside shadow roots, so the font goes on the page. */
+  function ensureFont() {
+    if (document.getElementById(FONT_LINK_ID)) return
+    var link = document.createElement('link')
+    link.id = FONT_LINK_ID
+    link.rel = 'stylesheet'
+    link.href = 'https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&display=swap'
+    ;(document.head || document.documentElement).appendChild(link)
   }
 
   function destroyStaleHosts() {
@@ -321,7 +644,8 @@
       stale.remove()
       host = null
       shadow = null
-      root = null
+      lastQueueKey = ''
+      lastQrKey = ''
     }
   }
 
@@ -330,22 +654,26 @@
     host.id = HOST_ID
     host.dataset.ytmqRev = PANEL_REV
     host.style.cssText =
-      'position:fixed!important;right:0!important;bottom:0!important;width:0!important;height:0!important;z-index:2147483646!important;pointer-events:none!important;overflow:visible!important;background:transparent!important;border:0!important;margin:0!important;padding:0!important'
+      'position:fixed!important;right:0!important;bottom:0!important;width:0!important;height:0!important;' +
+      'z-index:2147483646!important;overflow:visible!important;background:transparent!important;' +
+      'border:0!important;margin:0!important;padding:0!important'
+    // Hidden until there is a lobby to show.
+    host.style.setProperty('display', 'none')
     shadow = host.attachShadow({ mode: 'closed' })
-    var font = document.createElement('link')
-    font.rel = 'stylesheet'
-    font.href =
-      'https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700&display=swap'
-    shadow.appendChild(font)
     var style = document.createElement('style')
     style.textContent = css()
     shadow.appendChild(style)
     var mount = document.createElement('div')
     mount.innerHTML = html()
-    root = mount.firstElementChild
-    shadow.appendChild(root)
+    shadow.appendChild(mount.firstElementChild)
     bind()
-    schedulePositionUpdate()
+    var open = false
+    try {
+      open = localStorage.getItem(OPEN_KEY) === '1'
+    } catch (e) {
+      /* ignore */
+    }
+    setExpanded(open, false)
     try {
       document.documentElement.dataset.ytmqPanel = PANEL_REV
     } catch (e) {
@@ -356,13 +684,17 @@
   function ensureHost() {
     var parent = document.documentElement
     if (!parent) return
-
     destroyStaleHosts()
-
     if (!host || !parent.contains(host)) {
-      if (!host) mountHost()
+      if (!host) {
+        mountHost()
+        lastQueueKey = ''
+        lastQrKey = ''
+        if (lastState) applyState(lastState)
+      }
       parent.appendChild(host)
     }
+    if (document.head) ensureFont()
   }
 
   window.addEventListener('message', function (event) {
@@ -377,48 +709,41 @@
     'yt-navigate-finish',
     function () {
       ensureHost()
-      schedulePositionUpdate()
-      if (lastState) applyState(lastState)
+      updatePosition()
     },
     true,
   )
 
   window.addEventListener('pageshow', ensureHost)
-  window.addEventListener('resize', schedulePositionUpdate)
+  window.addEventListener('resize', updatePosition)
   destroyStaleHosts()
   ensureHost()
-  schedulePositionUpdate()
-  keepAliveTimer = window.setInterval(function () {
+  updatePosition()
+  window.setInterval(function () {
     ensureHost()
-    updatePanelPosition()
+    updatePosition()
   }, 1500)
+  window.setInterval(function () {
+    if (clock.playing && lastState) renderPlayback()
+  }, 250)
 
   try {
-    chrome.storage.local.get('ytmq_session', function (data) {
-      var session = data && data.ytmq_session
-      if (!session || !session.roomId) return
-      ensureHost()
-      applyState({
-        roomId: session.roomId,
-        connected: false,
-        queueCount: 0,
-        participantCount: 0,
-      })
-    })
-    chrome.storage.onChanged.addListener(function (changes, area) {
-      if (area !== 'local' || !changes.ytmq_session) return
-      var session = changes.ytmq_session.newValue
+    var showStored = function (session) {
       if (!session || !session.roomId) {
         applyState({ destroy: true })
         return
       }
       ensureHost()
-      applyState({
-        roomId: session.roomId,
-        connected: false,
-        queueCount: 0,
-        participantCount: 0,
-      })
+      if (!lastState || !lastState.connected) {
+        applyState({ roomId: session.roomId, connected: false, queueCount: 0, listeningCount: 0 })
+      }
+    }
+    chrome.storage.local.get('ytmq_session', function (data) {
+      if (data && data.ytmq_session) showStored(data.ytmq_session)
+    })
+    chrome.storage.onChanged.addListener(function (changes, area) {
+      if (area !== 'local' || !changes.ytmq_session) return
+      showStored(changes.ytmq_session.newValue)
     })
   } catch (e) {
     /* ignore */

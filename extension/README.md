@@ -14,9 +14,10 @@ Creating a new lobby re-points every YouTube Music tab at the new room — no st
 
 ## Files
 
-- `manifest.json` — Manifest V3, scoped to `https://music.youtube.com/*` and the YTMQ site.
+- `manifest.json` — Manifest V3, scoped to `https://music.youtube.com/*` and the YTMQ site (`https://t3lluz.com/ytmq`).
 - `content.js` — runs on music.youtube.com; captures the room session from the connect link (`document_start`, before YT Music strips the query string) and persists it. When several stored sessions exist, the newest wins.
 - `site.js` — runs on the YTMQ web app; relays the current room session to the service worker so open YouTube Music tabs connect without a deep link.
 - `background.js` — service worker; injects the bridge into the page's main world via `chrome.scripting.executeScript`, re-linking tabs whenever the room changes.
 - `ytmusic-bridge.js` — the bundled YTMQ bridge (build artifact of `npm run build:bridge`; do not edit by hand).
+- `ytm-panel.js` — the YTMQ pill and panel on music.youtube.com: lobby code with QR, who is listening, the shared queue with who added each song (remove from there), songs that have not reached YouTube Music yet (Retry), and now playing, tinted from the album art. Fed by `src/bridge/panelBridge.ts`.
 - `popup.html` / `popup.js` — toolbar popup showing link status. Open YTMQ / Open YT Music focus existing tabs instead of opening duplicates; Disconnect unlinks everything.
