@@ -259,13 +259,18 @@ export function openDb(path: string, emit: (change: Change) => void) {
     get_room({ p_room_id }) {
       const room = activeRoom(p_room_id);
       if (!room) return null;
-      const { room_id: _id, updated_at: _at, ...settings } = settingsOf(room);
+      const { locked, has_password, allow_guest_add, allow_guest_remove, allow_guest_controls } =
+        settingsOf(room);
       return {
         room_id: room.id,
         code: room.code,
         created_at: room.created_at,
         expires_at: room.expires_at,
-        ...settings,
+        locked,
+        has_password,
+        allow_guest_add,
+        allow_guest_remove,
+        allow_guest_controls,
       };
     },
 
@@ -399,7 +404,10 @@ export function openDb(path: string, emit: (change: Change) => void) {
   function addToQueue(roomId: string, input: Record<string, unknown>): QueueRow {
     const room = activeRoom(roomId);
     if (!room) throw new HttpError(404, "This lobby has ended", "room_inactive");
-    if (!room.allow_guest_add) {
+    // The switch is for guests; the host can always add.
+    const byHost = typeof input.host_token === "string" &&
+      timingSafeEqual(room.host_token, input.host_token);
+    if (!room.allow_guest_add && !byHost) {
       throw new HttpError(403, "The host has turned off adding songs", "add_disabled");
     }
     const videoId = str(input.video_id, 64).trim();

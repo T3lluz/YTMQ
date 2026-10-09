@@ -73,12 +73,18 @@ function songArtistLine(
   runs: Array<{ text?: string }> | undefined,
 ): string {
   if (!runs?.length) return ''
-  const parts: string[] = []
+  // Runs read "Song • Daft Punk • Random Access Memories • 4:08" in the
+  // top-result card and "Daft Punk • Discovery • 3:44" elsewhere. The artist
+  // is the first group that is not the kind.
+  const groups: string[] = ['']
   for (const run of runs) {
-    if (run.text === ' • ') break
-    parts.push(run.text ?? '')
+    if (run.text === ' • ') groups.push('')
+    else groups[groups.length - 1] += run.text ?? ''
   }
-  return parts.join('').trim()
+  const kinds = /^(song|video|single|ep|album|episode)$/i
+  const notArtist = (g: string) => kinds.test(g) || /^\d+(:\d{2}){1,2}$/.test(g) || /\d\s*(plays|views)$/i.test(g)
+  const artist = groups.map((g) => g.trim()).find((g) => g && !notArtist(g))
+  return artist ?? ''
 }
 
 function pickMusicThumbnail(thumbnail: unknown): string {
@@ -522,6 +528,11 @@ function collectMixedSearchResults(data: JsonObject): MixedSearchResults {
           const parsed = parseSongItem(item) ?? parseArtistItem(item)
           if (!parsed || seen.has(`${parsed.type}:${parsed.id}`)) continue
           seen.add(`${parsed.type}:${parsed.id}`)
+          // Songs inside an artist's card leave the artist out of their
+          // subtitle ("Song • 6:10"); it is the card's own title.
+          if (parsed.type === 'song' && parsed.channelTitle === 'Unknown artist' && header?.type === 'artist') {
+            parsed.channelTitle = header.title
+          }
           if (parsed.type === 'song') songs.push(parsed)
           else artists.push(parsed)
         }
