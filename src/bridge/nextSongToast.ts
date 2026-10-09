@@ -236,7 +236,7 @@ export function showNextSongToast(
   el.appendChild(text)
   el.appendChild(progress)
 
-  document.body.appendChild(el)
+  ;(document.body ?? document.documentElement).appendChild(el)
   state.shownForVideoId = currentVideoId
 
   state.hideTimer = window.setTimeout(() => {

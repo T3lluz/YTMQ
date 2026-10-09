@@ -61,6 +61,8 @@ type PanelParticipant = { last_seen: string }
 
 type PanelState = {
   roomCode: string
+  /** False once the server says the lobby is gone (ended or expired). */
+  roomActive: boolean
   queue: PanelQueueRow[]
   queueCount: number
   participantCount: number
@@ -74,6 +76,7 @@ type PanelState = {
 
 const state: PanelState = {
   roomCode: '',
+  roomActive: true,
   queue: [],
   queueCount: 0,
   participantCount: 0,
@@ -142,13 +145,15 @@ async function refresh() {
   const room = `/rooms/${encodeURIComponent(roomId)}`
   try {
     const [info, queue, participants] = await Promise.all([
-      state.roomCode
-        ? Promise.resolve(null)
-        : ytmq.rpc<{ code?: string } | null>('get_room', { p_room_id: roomId }).catch(() => null),
+      // undefined = could not ask; null = the lobby is gone.
+      ytmq
+        .rpc<{ code?: string } | null>('get_room', { p_room_id: roomId })
+        .catch(() => undefined),
       ytmq.get<PanelQueueRow[]>(`${room}/queue`).catch(() => null),
       ytmq.get<PanelParticipant[]>(`${room}/participants`).catch(() => null),
     ])
     if (info?.code) state.roomCode = info.code
+    if (info !== undefined) state.roomActive = info !== null
     if (queue) {
       state.queueCount = queue.length
       state.queue = queue.slice(0, PANEL_QUEUE_ROWS).map((row) => ({
@@ -184,6 +189,7 @@ function buildPayload(): Record<string, unknown> {
   return {
     roomId: deps.roomId,
     roomCode: state.roomCode,
+    roomActive: state.roomActive,
     roomUrl: url,
     siteBase: deps.siteBase,
     connected: deps.isConnected(),
@@ -297,6 +303,7 @@ export function startPanelBridge(panelDeps: PanelBridgeDeps): {
       postPanelState({ connected: false, destroy: true })
       deps = null
       state.roomCode = ''
+      state.roomActive = true
       state.queue = []
       state.queueCount = 0
       state.participantCount = 0

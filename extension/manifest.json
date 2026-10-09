@@ -1,10 +1,13 @@
 {
   "manifest_version": 3,
-  "name": "YTMQ — YouTube Music Connect",
-  "version": "1.8.1",
-  "description": "Auto-connects YTMQ shared queues on music.youtube.com. Guest picks land in your YouTube Music queue automatically.",
+  "name": "YTMQ",
+  "version": "1.9.0",
+  "description": "Host companion for YTMQ: links YouTube Music to your lobby, shows the shared queue on YouTube Music, and puts the lobby in your toolbar.",
   "minimum_chrome_version": "102",
-  "permissions": ["scripting", "storage"],
+  "permissions": [
+    "scripting",
+    "storage"
+  ],
   "host_permissions": [
     "https://music.youtube.com/*",
     "https://t3lluz.com/*"
@@ -14,19 +17,29 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://music.youtube.com/*"],
-      "js": ["content.js", "ytm-panel.js"],
+      "matches": [
+        "https://music.youtube.com/*"
+      ],
+      "js": [
+        "content.js",
+        "ui.js",
+        "ytm-panel.js"
+      ],
       "run_at": "document_start"
     },
     {
-      "matches": ["https://t3lluz.com/ytmq/*"],
-      "js": ["site.js"],
+      "matches": [
+        "https://t3lluz.com/ytmq/*"
+      ],
+      "js": [
+        "site.js"
+      ],
       "run_at": "document_start"
     }
   ],
   "action": {
     "default_popup": "popup.html",
-    "default_title": "YTMQ — YouTube Music Connect"
+    "default_title": "YTMQ"
   },
   "icons": {
     "16": "icons/icon16.png",

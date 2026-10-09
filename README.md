@@ -45,7 +45,10 @@ Guest links and QR codes point at `/ytmq/room/<id>`; the server answers any unkn
 
 ## Chrome extension (host auto-connect)
 
-The `extension/` folder is a Manifest V3 Chrome extension that connects **every** `music.youtube.com` tab to your lobby: no Tampermonkey, no console pasting, and it survives reloads and browser restarts. It also puts the YTMQ panel on YouTube Music: the lobby code and QR, who is listening, and the shared queue with who added what.
+The `extension/` folder is a Manifest V3 Chrome extension that connects **every** `music.youtube.com` tab to your lobby: no Tampermonkey, no console pasting, and it survives reloads and browser restarts. Two surfaces, built on the same view (`extension/ui.js`):
+
+- **The overlay on YouTube Music** (`ytm-panel.js`): a pill above the player that opens into the panel. It is about that tab: the lobby code and QR, who is listening, the guest queue flowing into YouTube Music (remove from there), songs that did not sync yet (Retry), and what YouTube Music plays when the queue runs dry. Drag the pill anywhere; double-click puts it back.
+- **The toolbar popup** (`popup.js`): the lobby as a whole. It talks to the server itself, so it follows YouTube Music *and* Spotify, its controls reach whichever player is active, and it works with no YouTube Music tab open. A Sources list shows how each is doing and what to do next.
 
 **Install (one time)** — the same steps, with a download button and install check, are at [t3lluz.com/ytmq/setup](https://t3lluz.com/ytmq/setup):
 

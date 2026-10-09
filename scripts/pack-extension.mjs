@@ -19,6 +19,7 @@ const requiredFiles = [
   'site.js',
   'popup.html',
   'popup.js',
+  'ui.js',
   'ytm-panel.js',
   'ytmusic-bridge.js',
   'icons/icon16.png',

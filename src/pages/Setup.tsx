@@ -176,9 +176,11 @@ export function Setup() {
               from step 2 (the one with <Kbd>manifest.json</Kbd> in it).
             </p>
           </Step>
-          <Step n={5} title="Pin it (optional)">
+          <Step n={5} title="Pin it">
             <p>
-              Click the puzzle piece in the toolbar and pin YTMQ. Its icon says{' '}
+              Click the puzzle piece in the toolbar and pin YTMQ. Its popup is your lobby at a
+              glance: the code and QR, what is playing on YouTube Music or Spotify with
+              controls, and the queue. The icon says{' '}
               <strong className="text-zinc-200">NEW</strong> when an update is out.
             </p>
           </Step>
@@ -206,7 +208,8 @@ export function Setup() {
           </li>
           <li>
             The YTMQ pill shows up above the YouTube Music player with a green dot once it is
-            linked.
+            linked. Click it for the queue and the QR; drag it if it is in the way
+            (double-click puts it back).
           </li>
           <li>
             Guests open <strong className="text-zinc-200">t3lluz.com/ytmq</strong> and enter the

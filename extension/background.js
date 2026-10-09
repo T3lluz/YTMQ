@@ -102,252 +102,63 @@ async function openYtmqTab(roomId) {
   return true
 }
 
-async function apiRpc(session, fn, body) {
-  const res = await fetch(`${session.api}/rpc/${fn}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  })
-  if (!res.ok) return null
-  return res.json()
-}
-
-async function fetchCounts(session) {
-  try {
-    const res = await fetch(
-      `${session.api}/rooms/${encodeURIComponent(session.roomId)}/counts`,
-    )
-    if (!res.ok) return { queue: 0, participants: 0 }
-    return await res.json()
-  } catch {
-    return { queue: 0, participants: 0 }
-  }
-}
-
-async function fetchRoomMeta(session) {
-  const data = await apiRpc(session, 'get_room', {
-    p_room_id: session.roomId,
-  })
-  if (!data || typeof data !== 'object') return { code: '', roomId: session.roomId }
-  return {
-    code: typeof data.code === 'string' ? data.code : '',
-    roomId: session.roomId,
-  }
-}
-
 async function queryLinkedYtmTabs() {
   const tabs = await chrome.tabs.query({ url: `${YTM_ORIGIN}/*` })
   tabs.sort(byLastAccessed)
   return tabs
 }
 
-async function readYtmSnapshot() {
+/**
+ * What the popup shows. The popup talks to the lobby itself (API + realtime);
+ * from here it needs the session, the update info, and how the YouTube Music
+ * tabs are doing, which only their overlays know.
+ */
+async function buildPopupSnapshot() {
+  const data = await chrome.storage.local.get(['ytmq_session', 'ytmq_update'])
+  const session = data.ytmq_session
+  const valid = isValidSession(session) && Date.now() - (session.at || 0) < SESSION_MAX_AGE_MS
   const tabs = await queryLinkedYtmTabs()
+  let ytm = { tabs: tabs.length, linked: 0, connected: false, pendingCount: 0, tabId: null }
   for (const tab of tabs) {
+    let snap = null
     try {
-      const [{ result }] = await chrome.scripting.executeScript({
-        target: { tabId: tab.id },
-        world: 'MAIN',
-        func: () => {
-          const bridge = window.__YTMQ_BRIDGE__
-          const bridgeActive = Boolean(bridge)
-          let bridgeConnected = bridgeActive
-          if (bridge && typeof bridge.getStatus === 'function') {
-            try {
-              const status = bridge.getStatus()
-              bridgeConnected = status.connected !== false
-            } catch (e) {
-              bridgeConnected = bridgeActive
-            }
-          }
-
-          const bar = document.querySelector('ytmusic-player-bar')
-          const title =
-            bar?.querySelector('.title')?.textContent?.trim() ||
-            bar?.querySelector('[title]')?.textContent?.trim() ||
-            ''
-          const artist =
-            bar?.querySelector('.byline')?.textContent?.trim() ||
-            bar?.querySelector('.subtitle')?.textContent?.trim() ||
-            ''
-          let currentTime = 0
-          let duration = 0
-          let state = 'unknown'
-          try {
-            const api = bar?.playerApi
-            currentTime = api?.getCurrentTime?.() ?? 0
-            duration = api?.getDuration?.() ?? 0
-            const code = api?.getPlayerState?.()
-            if (code === 1 || code === 3) state = 'playing'
-            else if (code === 2 || code === 0 || code === 5) state = 'paused'
-          } catch (e) {
-            /* player not ready */
-          }
-          return {
-            bridgeActive,
-            bridgeConnected,
-            hasPlayer: Boolean(bar),
-            title: title || 'Nothing playing',
-            artist,
-            currentTime,
-            duration,
-            state,
-          }
-        },
-      })
-      if (result) return { ...result, ytmTabId: tab.id }
+      snap = await chrome.tabs.sendMessage(tab.id, { type: 'ytmq-panel-snapshot' })
     } catch (e) {
-      /* tab not injectable */
+      /* no overlay in this tab yet */
+    }
+    if (!snap || !valid || snap.roomId !== session.roomId) continue
+    ytm.linked += 1
+    if (ytm.tabId == null || (snap.connected && !ytm.connected)) {
+      ytm = {
+        ...ytm,
+        tabId: tab.id,
+        connected: snap.connected,
+        pendingCount: snap.pendingCount || 0,
+        qr: snap.qr || null,
+        accent: snap.accent || null,
+      }
     }
   }
   return {
-    bridgeActive: false,
-    bridgeConnected: false,
-    hasPlayer: false,
-    title: 'No YouTube Music tab',
-    artist: '',
-    currentTime: 0,
-    duration: 0,
-    state: 'unknown',
-    ytmTabId: null,
-  }
-}
-
-async function runYtmDomPlayback(action) {
-  const tabs = await queryLinkedYtmTabs()
-  for (const tab of tabs) {
-    try {
-      const [{ result }] = await chrome.scripting.executeScript({
-        target: { tabId: tab.id },
-        world: 'MAIN',
-        func: (kind) => {
-          const bar = document.querySelector('ytmusic-player-bar')
-          if (!bar) return { ok: false, reason: 'no_player' }
-          const click = (selector) => {
-            const btn = bar.querySelector(selector)
-            if (btn) {
-              btn.click()
-              return true
-            }
-            return false
-          }
-          if (kind === 'toggle') {
-            if (click('#play-pause-button')) return { ok: true }
-            if (click('button[aria-label*="Pause" i]')) return { ok: true }
-            if (click('button[aria-label*="Play" i]')) return { ok: true }
-            const api = bar.playerApi
-            if (api) {
-              const code = api.getPlayerState?.()
-              if (code === 1 || code === 3) {
-                api.pauseVideo?.()
-                return { ok: true }
-              }
-              api.playVideo?.()
-              return { ok: true }
-            }
-          }
-          if (kind === 'next') {
-            if (bar.playerApi?.nextVideo) {
-              bar.playerApi.nextVideo()
-              return { ok: true }
-            }
-            if (click('.next-button, tp-yt-paper-icon-button.next-button, button[aria-label*="Next" i]')) {
-              return { ok: true }
-            }
-          }
-          if (kind === 'prev') {
-            if (bar.playerApi?.previousVideo) {
-              bar.playerApi.previousVideo()
-              return { ok: true }
-            }
-            if (click('.previous-button, tp-yt-paper-icon-button.previous-button, button[aria-label*="Previous" i]')) {
-              return { ok: true }
-            }
-          }
-          return { ok: false, reason: 'control_failed' }
-        },
-        args: [action],
-      })
-      if (result?.ok) return result
-    } catch (e) {
-      /* try next tab */
-    }
-  }
-  return { ok: false, reason: 'no_tab' }
-}
-
-async function runYtmPlayback(action) {
-  if (action === 'syncAll' || action === 'openQueue') {
-    return runYtmBridgeAction(action)
-  }
-  const bridgeResult = await runYtmBridgeAction(action)
-  if (bridgeResult?.ok) return bridgeResult
-  return runYtmDomPlayback(action)
-}
-
-async function runYtmBridgeAction(action) {
-  const tabs = await queryLinkedYtmTabs()
-  for (const tab of tabs) {
-    try {
-      const [{ result }] = await chrome.scripting.executeScript({
-        target: { tabId: tab.id },
-        world: 'MAIN',
-        func: async (kind) => {
-          const bridge = window.__YTMQ_BRIDGE__
-          if (!bridge) return { ok: false, reason: 'no_bridge' }
-          if (kind === 'syncAll' && typeof bridge.syncAll === 'function') {
-            const n = await bridge.syncAll()
-            return { ok: true, synced: n }
-          }
-          if (kind === 'next' && typeof bridge.next === 'function') {
-            return { ok: bridge.next() }
-          }
-          if (kind === 'prev' && typeof bridge.prev === 'function') {
-            return { ok: bridge.prev() }
-          }
-          if (kind === 'toggle' && typeof bridge.togglePlayPause === 'function') {
-            return { ok: bridge.togglePlayPause() }
-          }
-          if (kind === 'openQueue' && typeof bridge.openQueue === 'function') {
-            bridge.openQueue()
-            return { ok: true }
-          }
-          return { ok: false, reason: 'unsupported' }
-        },
-        args: [action],
-      })
-      if (result?.ok) return result
-    } catch (e) {
-      /* try next tab */
-    }
-  }
-  return { ok: false, reason: 'no_tab' }
-}
-
-async function buildPopupState() {
-  const data = await chrome.storage.local.get('ytmq_session')
-  const session = data?.ytmq_session
-  if (!isValidSession(session) || Date.now() - (session.at || 0) >= SESSION_MAX_AGE_MS) {
-    return { linked: false }
-  }
-  const [room, counts, ytm] = await Promise.all([
-    fetchRoomMeta(session),
-    fetchCounts(session),
-    readYtmSnapshot(),
-  ])
-  const queueCount = counts.queue || 0
-  const participantCount = counts.participants || 0
-  const ytmTabs = await queryLinkedYtmTabs()
-  return {
-    linked: true,
-    session,
-    room,
-    queueCount,
-    participantCount,
-    ytmTabs: ytmTabs.length,
+    session: valid ? session : null,
+    update: data.ytmq_update || null,
+    roomUrl: valid ? ytmqRoomUrl(session.roomId) : '',
     ytm,
-    roomUrl: ytmqRoomUrl(session.roomId),
   }
+}
+
+/** Run an overlay action (remove, retry-sync...) in the linked YT Music tab. */
+async function runInYtmTab(tabId, action, id) {
+  const tabs = tabId != null ? [{ id: tabId }] : await queryLinkedYtmTabs()
+  for (const tab of tabs) {
+    try {
+      const res = await chrome.tabs.sendMessage(tab.id, { type: 'ytmq-panel-action', action, id })
+      if (res && res.ok) return { ok: true }
+    } catch (e) {
+      /* try the next tab */
+    }
+  }
+  return { ok: false }
 }
 
 async function persistSessionInTab(tabId, session) {
@@ -680,20 +491,42 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true
   }
 
-  if (message && message.type === 'ytmq-popup-state') {
-    buildPopupState().then(
-      (state) => sendResponse(state),
-      () => sendResponse({ linked: false }),
+  if (message && message.type === 'ytmq-popup-snapshot') {
+    buildPopupSnapshot().then(
+      (snap) => sendResponse(snap),
+      () => sendResponse(null),
     )
     return true
   }
 
-  if (message && message.type === 'ytmq-popup-action') {
-    runYtmPlayback(message.action || '').then(
-      (result) => sendResponse(result),
+  if (message && message.type === 'ytmq-ytm-action') {
+    runInYtmTab(message.tabId ?? null, message.action || '', message.id || '').then(
+      (res) => sendResponse(res),
       () => sendResponse({ ok: false }),
     )
     return true
+  }
+
+  // Bring a linked YT Music tab forward, or open one that links itself.
+  if (message && message.type === 'ytmq-open-ytm') {
+    chrome.storage.local.get('ytmq_session', (data) => {
+      const session = data && data.ytmq_session
+      const done = (res) => sendResponse(res)
+      if (!isValidSession(session)) {
+        chrome.tabs.create({ url: YTM_ORIGIN + '/' }).then(() => done({ ok: true }), () => done({ ok: false }))
+        return
+      }
+      connectSession(session, { focus: true, openIfNone: true }).then(done, () => done({ ok: false }))
+    })
+    return true
+  }
+
+  // Only YTMQ's own pages (the setup guide, the room's Admin tab).
+  if (message && message.type === 'ytmq-open-url') {
+    const url = String(message.url || '')
+    if (url.startsWith(YTMQ_SITE_ORIGIN + YTMQ_SITE_PATH + '/')) chrome.tabs.create({ url })
+    sendResponse({ ok: true })
+    return false
   }
 
   return false
@@ -722,6 +555,16 @@ async function localFingerprint(files) {
   return sha256Hex(new TextEncoder().encode(joined))
 }
 
+function versionAbove(a, b) {
+  const pa = a.split('.').map(Number)
+  const pb = b.split('.').map(Number)
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const d = (pa[i] || 0) - (pb[i] || 0)
+    if (d) return d > 0
+  }
+  return false
+}
+
 async function checkForUpdate(force) {
   const { ytmq_update: last } = await chrome.storage.local.get('ytmq_update')
   if (!force && last && Date.now() - (last.checkedAt || 0) < UPDATE_CHECK_MS) return last
@@ -737,10 +580,12 @@ async function checkForUpdate(force) {
     return last || null
   }
   const mine = await localFingerprint(info.files.filter((f) => typeof f === 'string'))
+  const current = chrome.runtime.getManifest().version
   const update = {
-    available: Boolean(mine) && mine !== info.fingerprint,
+    // Different files, and not a build newer than the site's (a dev copy).
+    available: Boolean(mine) && mine !== info.fingerprint && !versionAbove(current, String(info.version || '0')),
     version: String(info.version || ''),
-    current: chrome.runtime.getManifest().version,
+    current,
     zip: YTMQ_SITE_ORIGIN + YTMQ_SITE_PATH + '/' + String(info.zip || 'ytmq-extension.zip'),
     checkedAt: Date.now(),
   }

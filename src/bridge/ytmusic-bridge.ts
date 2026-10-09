@@ -1176,7 +1176,7 @@ function showToast(message: string) {
     'max-width:min(26rem,90vw)',
     'pointer-events:none',
   ].join(';')
-  document.body.appendChild(el)
+  ;(document.body ?? document.documentElement).appendChild(el)
   const frames: Keyframe[] = [
     { opacity: 0, transform: 'translate(-50%, 8px) scale(.97)' },
     { opacity: 1, transform: 'translate(-50%, 0) scale(1)' },
