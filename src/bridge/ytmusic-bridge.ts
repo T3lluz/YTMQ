@@ -1694,4 +1694,8 @@ async function runBridge() {
   log('Bridge ready. Call __YTMQ_BRIDGE__.syncAll() to push the full queue.')
 }
 
+// Lets the extension tell that the live copy it injected actually ran (a page
+// CSP can block it silently), and fall back to its bundled copy if not.
+window.__YTMQ_BRIDGE_RAN__ = true
+
 void runBridge()

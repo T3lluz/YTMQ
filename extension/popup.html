@@ -285,6 +285,41 @@
         font-size: var(--text-sm);
         line-height: 1.45;
       }
+      .update {
+        border-radius: var(--radius);
+        border: 1px solid rgba(167, 139, 250, 0.35);
+        background: rgba(139, 92, 246, 0.14);
+        padding: 10px var(--space);
+      }
+      .update strong {
+        display: block;
+        color: #ede9fe;
+        font-size: var(--text);
+      }
+      .update p {
+        margin: 2px 0 8px;
+        color: #c4b5fd;
+        font-size: var(--text-sm);
+        line-height: 1.45;
+      }
+      .update .row {
+        display: flex;
+        gap: 6px;
+      }
+      .update button {
+        flex: 1;
+        height: 32px;
+        border-radius: 999px;
+        border: 0;
+        font: 600 12px system-ui, sans-serif;
+        cursor: pointer;
+        background: rgba(255, 255, 255, 0.08);
+        color: #f4f4f5;
+      }
+      .update button.pri {
+        background: #8b5cf6;
+        color: #fff;
+      }
       .toast {
         position: fixed;
         left: 50%;
@@ -323,6 +358,14 @@
       </div>
     </header>
     <main>
+      <section class="update hidden" id="update">
+        <strong id="update-title">Extension update ready</strong>
+        <p>Download the zip, unzip it over your YTMQ extension folder, then press Reload.</p>
+        <div class="row">
+          <button type="button" class="pri" id="update-download">Download</button>
+          <button type="button" id="update-reload">Reload</button>
+        </div>
+      </section>
       <p class="hint" id="hint">
         Open your YTMQ lobby as host — the extension picks up the room and
         links every YouTube Music tab automatically.

@@ -158,6 +158,24 @@ function render(state) {
   $('now-card').classList.toggle('disabled-section', !hasYtm)
 }
 
+function renderUpdate(update) {
+  var available = Boolean(update && update.available)
+  $('update').classList.toggle('hidden', !available)
+  if (available && update.version) {
+    $('update-title').textContent =
+      'Extension update ready (v' + update.current + ' → v' + update.version + ')'
+  }
+}
+
+$('update-download').addEventListener('click', function () {
+  void send({ type: 'ytmq-download-update' })
+})
+$('update-reload').addEventListener('click', function () {
+  void send({ type: 'ytmq-reload-extension' })
+})
+// Opening the popup is a good moment to look for a new version.
+void send({ type: 'ytmq-check-update', force: true }).then(renderUpdate)
+
 async function refresh() {
   var state = await send({ type: 'ytmq-popup-state' })
   render(state)
@@ -220,6 +238,7 @@ $('disconnect').addEventListener('click', function () {
 })
 
 chrome.storage.onChanged.addListener(function (changes, area) {
+  if (area === 'local' && changes.ytmq_update) renderUpdate(changes.ytmq_update.newValue)
   if (area === 'local' && changes.ytmq_session) void refresh()
 })
 

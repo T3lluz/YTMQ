@@ -183,6 +183,19 @@
       '.warn button{padding:5px 10px;border-radius:999px;background:rgba(245,158,11,.2);color:#fef3c7;font-size:12px;font-weight:600}',
       '.warn button:hover{background:rgba(245,158,11,.32)}',
 
+      // Extension update.
+      '.upd{display:none;margin:2px 0 12px;padding:10px 12px;border-radius:14px;background:rgba(139,92,246,.14);border:1px solid rgba(167,139,250,.3)}',
+      '.has-update .upd{display:block}',
+      '.upd-title{font-size:13px;font-weight:700;color:#ede9fe}',
+      '.upd p{margin-top:2px;font-size:11px;color:#c4b5fd;line-height:1.45}',
+      '.upd-acts{display:flex;gap:6px;margin-top:8px}',
+      '.upd-acts button{padding:6px 12px;border-radius:999px;font-size:12px;font-weight:600;background:rgba(255,255,255,.08);color:#f4f4f5}',
+      '.upd-acts button:hover{background:rgba(255,255,255,.14)}',
+      '.upd-acts .pri{background:#8b5cf6;color:#fff}',
+      '.upd-acts .pri:hover{background:#7c3aed}',
+      '.pill-upd{display:none;font-size:9px;font-weight:800;letter-spacing:.08em;padding:2px 6px;border-radius:999px;background:#8b5cf6;color:#fff}',
+      '.has-update .pill-upd{display:inline-block}',
+
       // Shared queue.
       '.q-head{display:flex;align-items:baseline;justify-content:space-between;margin:16px 2px 6px}',
       '.q-title{font-size:14px;font-weight:700}',
@@ -228,6 +241,7 @@
       '<span class="pill-stat" id="pill-q" hidden title="Songs in the shared queue">' + icon('queue', 15) + '<span></span></span>' +
       '<span class="pill-stat" id="pill-p" hidden title="People listening">' + icon('people', 15) + '<span></span></span>' +
       '<span class="pill-warn" title="Some songs are not in YouTube Music yet"></span>' +
+      '<span class="pill-upd" title="Extension update available">NEW</span>' +
       '<span class="pill-chev">' + icon('chevronUp', 16) + '</span>' +
       '</button>' +
       // Panel.
@@ -241,6 +255,10 @@
       '<button type="button" class="icon-btn" id="close" title="Close (Esc)">' + icon('chevronDown') + '</button>' +
       '</div>' +
       '<div class="scroll">' +
+      '<div class="upd"><div class="upd-title" id="upd-title">Extension update ready</div>' +
+      '<p>Download the zip, unzip it over your YTMQ extension folder, then press Reload.</p>' +
+      '<div class="upd-acts"><button type="button" class="pri" id="upd-dl">Download</button>' +
+      '<button type="button" id="upd-reload">Reload</button></div></div>' +
       '<div class="lobby"><div class="lobby-text">' +
       '<div class="label">Lobby code</div>' +
       '<div class="code mono" id="code">······</div>' +
@@ -582,6 +600,29 @@
 
   // --- wiring ---------------------------------------------------------------
 
+  function sendRuntime(message) {
+    try {
+      chrome.runtime.sendMessage(message, function () {
+        void chrome.runtime.lastError
+      })
+    } catch (e) {
+      /* extension reloaded under us */
+    }
+  }
+
+  var update = null
+
+  function applyUpdate(next) {
+    update = next && next.available ? next : null
+    var wrap = $('wrap')
+    if (wrap) wrap.classList.toggle('has-update', Boolean(update))
+    var title = $('upd-title')
+    if (title && update) {
+      title.textContent =
+        'Extension update ready' + (update.version ? ' (v' + update.current + ' → v' + update.version + ')' : '')
+    }
+  }
+
   function openApp() {
     try {
       chrome.runtime.sendMessage({
@@ -602,6 +643,12 @@
     })
     $('qr-btn').addEventListener('click', function () {
       setQrShown(!qrShown)
+    })
+    $('upd-dl').addEventListener('click', function () {
+      sendRuntime({ type: 'ytmq-download-update' })
+    })
+    $('upd-reload').addEventListener('click', function () {
+      sendRuntime({ type: 'ytmq-reload-extension' })
     })
     shadow.querySelectorAll('[data-a]').forEach(function (btn) {
       btn.addEventListener('click', function () {
@@ -695,6 +742,7 @@
         lastQueueKey = ''
         lastQrKey = ''
         if (lastState) applyState(lastState)
+        applyUpdate(update)
       }
       parent.appendChild(host)
     }
@@ -746,9 +794,15 @@
       if (data && data.ytmq_session) showStored(data.ytmq_session)
     })
     chrome.storage.onChanged.addListener(function (changes, area) {
-      if (area !== 'local' || !changes.ytmq_session) return
-      showStored(changes.ytmq_session.newValue)
+      if (area !== 'local') return
+      if (changes.ytmq_session) showStored(changes.ytmq_session.newValue)
+      if (changes.ytmq_update) applyUpdate(changes.ytmq_update.newValue)
     })
+    chrome.storage.local.get('ytmq_update', function (data) {
+      applyUpdate(data && data.ytmq_update)
+    })
+    // Throttled in the background; this just makes sure a check happens.
+    sendRuntime({ type: 'ytmq-check-update' })
   } catch (e) {
     /* ignore */
   }

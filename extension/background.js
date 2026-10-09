@@ -368,6 +368,54 @@ async function persistSessionInTab(tabId, session) {
     .catch(() => {})
 }
 
+/**
+ * Inject the bridge the site serves right now, so bridge fixes reach this
+ * extension without a reinstall. Returns false if it could not run (offline,
+ * or YouTube Music's CSP / Trusted Types refused the inline script); the
+ * caller then injects the bundled copy.
+ */
+async function injectLiveBridge(tabId) {
+  let code
+  try {
+    const res = await fetch(YTMQ_SITE_ORIGIN + YTMQ_SITE_PATH + '/ytmusic-bridge.js', {
+      cache: 'no-cache',
+    })
+    if (!res.ok) return false
+    code = await res.text()
+  } catch (e) {
+    return false
+  }
+  try {
+    const [{ result }] = await chrome.scripting.executeScript({
+      target: { tabId },
+      world: 'MAIN',
+      injectImmediately: true,
+      func: (source) => {
+        delete window.__YTMQ_BRIDGE_RAN__
+        try {
+          const script = document.createElement('script')
+          const tt = window.trustedTypes
+          script.text =
+            tt && tt.createPolicy
+              ? tt
+                  .createPolicy('ytmq-bridge-' + Date.now(), { createScript: (x) => x })
+                  .createScript(source)
+              : source
+          ;(document.head || document.documentElement).appendChild(script)
+          script.remove()
+        } catch (e) {
+          /* blocked: fall back to the bundled copy */
+        }
+        return window.__YTMQ_BRIDGE_RAN__ === true
+      },
+      args: [code],
+    })
+    return result === true
+  } catch (e) {
+    return false
+  }
+}
+
 async function injectBridge(tabId, session) {
   const params = bridgeParamsFromSession(session)
 
@@ -430,12 +478,16 @@ async function injectBridge(tabId, session) {
   }
 
   try {
-    await chrome.scripting.executeScript({
-      target: { tabId },
-      world: 'MAIN',
-      injectImmediately: true,
-      files: ['ytmusic-bridge.js'],
-    })
+    const live = await injectLiveBridge(tabId)
+    console.info('[YTMQ] bridge injected:', live ? 'live from the site' : 'bundled copy')
+    if (!live) {
+      await chrome.scripting.executeScript({
+        target: { tabId },
+        world: 'MAIN',
+        injectImmediately: true,
+        files: ['ytmusic-bridge.js'],
+      })
+    }
     await persistSessionInTab(tabId, session)
   } catch (err) {
     // Unblock future attempts (the loading flag would otherwise wedge this
@@ -644,6 +696,89 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true
   }
 
+  return false
+})
+
+// --- Update check -----------------------------------------------------------
+// An unpacked extension cannot update itself. The site publishes a
+// fingerprint of the extension's files (scripts/pack-extension.mjs); when
+// ours differs, the panel and popup offer the new zip and a Reload button.
+
+const UPDATE_INFO_URL = YTMQ_SITE_ORIGIN + YTMQ_SITE_PATH + '/ytmq-extension.json'
+const UPDATE_CHECK_MS = 30 * 60 * 1000
+
+async function sha256Hex(data) {
+  const digest = await crypto.subtle.digest('SHA-256', data)
+  return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, '0')).join('')
+}
+
+async function localFingerprint(files) {
+  let joined = ''
+  for (const file of files) {
+    const res = await fetch(chrome.runtime.getURL(file))
+    if (!res.ok) return ''
+    joined += file + '\n' + (await sha256Hex(await res.arrayBuffer())) + '\n'
+  }
+  return sha256Hex(new TextEncoder().encode(joined))
+}
+
+async function checkForUpdate(force) {
+  const { ytmq_update: last } = await chrome.storage.local.get('ytmq_update')
+  if (!force && last && Date.now() - (last.checkedAt || 0) < UPDATE_CHECK_MS) return last
+  let info
+  try {
+    const res = await fetch(UPDATE_INFO_URL, { cache: 'no-cache' })
+    if (!res.ok) return last || null
+    info = await res.json()
+  } catch (e) {
+    return last || null
+  }
+  if (!info || !Array.isArray(info.files) || typeof info.fingerprint !== 'string') {
+    return last || null
+  }
+  const mine = await localFingerprint(info.files.filter((f) => typeof f === 'string'))
+  const update = {
+    available: Boolean(mine) && mine !== info.fingerprint,
+    version: String(info.version || ''),
+    current: chrome.runtime.getManifest().version,
+    zip: YTMQ_SITE_ORIGIN + YTMQ_SITE_PATH + '/' + String(info.zip || 'ytmq-extension.zip'),
+    checkedAt: Date.now(),
+  }
+  await chrome.storage.local.set({ ytmq_update: update })
+  await chrome.action.setBadgeText({ text: update.available ? 'NEW' : '' })
+  if (update.available) await chrome.action.setBadgeBackgroundColor({ color: '#8b5cf6' })
+  return update
+}
+
+// The service worker starts often (every message wakes it), which makes this
+// a cheap stand-in for a timer; checkForUpdate throttles itself.
+void checkForUpdate(false)
+chrome.runtime.onInstalled.addListener(() => {
+  void checkForUpdate(true)
+})
+
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message && message.type === 'ytmq-check-update') {
+    checkForUpdate(Boolean(message.force)).then(
+      (update) => sendResponse(update),
+      () => sendResponse(null),
+    )
+    return true
+  }
+  if (message && message.type === 'ytmq-download-update') {
+    chrome.storage.local.get('ytmq_update', (data) => {
+      const zip = (data && data.ytmq_update && data.ytmq_update.zip) || UPDATE_INFO_URL.replace(/\.json$/, '.zip')
+      chrome.tabs.create({ url: zip })
+      sendResponse({ ok: true })
+    })
+    return true
+  }
+  if (message && message.type === 'ytmq-reload-extension') {
+    sendResponse({ ok: true })
+    // Picks up the files you unzipped over this folder.
+    setTimeout(() => chrome.runtime.reload(), 100)
+    return false
+  }
   return false
 })
 

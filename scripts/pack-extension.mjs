@@ -3,7 +3,8 @@
  * download it straight from the deployed site. Run after `vite build`.
  */
 import { execFileSync } from 'node:child_process'
-import { copyFileSync, existsSync, mkdirSync, rmSync } from 'node:fs'
+import { createHash } from 'node:crypto'
+import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 const root = resolve(import.meta.dirname, '..')
@@ -57,3 +58,20 @@ try {
 }
 
 console.log('OK: packed dist/ytmq-extension.zip')
+
+// What installed copies compare themselves against (extension/background.js,
+// checkForUpdate). The bridge is left out: the extension loads the live one
+// from the site, so a bridge-only change needs no reinstall.
+const fingerprinted = requiredFiles.filter((file) => file !== 'ytmusic-bridge.js').sort()
+const sha256 = (data) => createHash('sha256').update(data).digest('hex')
+const fingerprint = sha256(
+  fingerprinted
+    .map((file) => `${file}\n${sha256(readFileSync(resolve(extensionDir, file)))}\n`)
+    .join(''),
+)
+const { version } = JSON.parse(readFileSync(resolve(extensionDir, 'manifest.json'), 'utf8'))
+writeFileSync(
+  resolve(distDir, 'ytmq-extension.json'),
+  JSON.stringify({ version, fingerprint, files: fingerprinted, zip: 'ytmq-extension.zip' }, null, 2) + '\n',
+)
+console.log(`OK: dist/ytmq-extension.json (v${version}, ${fingerprint.slice(0, 12)})`)

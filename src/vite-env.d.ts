@@ -19,4 +19,5 @@ interface Window {
     since?: string
   }
   __YTMQ_BRIDGE__?: unknown
+  __YTMQ_BRIDGE_RAN__?: boolean
 }
