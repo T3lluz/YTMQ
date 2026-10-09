@@ -27,6 +27,15 @@ function buildSession(roomId: string, since: string): ExtensionSession | null {
   return { roomId, api: apiUrl(), since, at: Date.now() }
 }
 
+/** Version of the installed extension, or '' (set by extension/site.js since 1.8.1). */
+export function installedExtensionVersion(): string {
+  try {
+    return document.documentElement.dataset.ytmqExtensionVersion ?? ''
+  } catch {
+    return ''
+  }
+}
+
 /**
  * The extension's site content script sets this marker at document_start,
  * before the app boots. Lets us skip waiting for replies that will never come.

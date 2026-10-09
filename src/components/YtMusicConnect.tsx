@@ -65,20 +65,29 @@ function ExtensionInstall({
               >
                 Download the extension
               </a>{' '}
-              and unzip it somewhere permanent.
+              and unzip it into a folder you keep (not Downloads).
             </li>
             <li>
-              Open <code className="rounded bg-zinc-800 px-1">chrome://extensions</code>,
-              turn on <strong className="text-zinc-300">Developer mode</strong> (top right).
+              Open <code className="rounded bg-zinc-800 px-1">chrome://extensions</code>{' '}
+              (paste it in the address bar) and turn on{' '}
+              <strong className="text-zinc-300">Developer mode</strong> (top right).
             </li>
             <li>
               Click <strong className="text-zinc-300">Load unpacked</strong> and pick the
-              unzipped folder.
+              unzipped folder, then reload this page.
             </li>
           </ol>
           <p className="mt-1 text-xs text-zinc-500">
-            After that, every music.youtube.com tab connects automatically —
-            even after reloads and restarts.
+            After that, every music.youtube.com tab connects automatically, even after
+            reloads and restarts.{' '}
+            <a
+              href={`${import.meta.env.BASE_URL}setup`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-violet-300 underline"
+            >
+              Full setup guide
+            </a>
           </p>
         </div>
       )}

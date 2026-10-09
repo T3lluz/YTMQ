@@ -3,6 +3,7 @@ import { Home } from './pages/Home'
 import { Host } from './pages/Host'
 import { Join } from './pages/Join'
 import { Room } from './pages/Room'
+import { Setup } from './pages/Setup'
 
 function App() {
   const location = useLocation()
@@ -14,6 +15,7 @@ function App() {
         <Route path="/join" element={<Join />} />
         <Route path="/room/:roomId" element={<Room />} />
         <Route path="/host/:roomId" element={<Host />} />
+        <Route path="/setup" element={<Setup />} />
       </Routes>
     </div>
   )

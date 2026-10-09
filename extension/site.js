@@ -1,5 +1,5 @@
 /**
- * YTMQ content script for the YTMQ web app itself (the GitHub Pages site).
+ * YTMQ content script for the YTMQ web app itself (t3lluz.com/ytmq).
  *
  * The app posts window messages (source: 'ytmq-app'); this script relays them
  * to the service worker so the extension always tracks the CURRENT room:
@@ -16,6 +16,8 @@ var EXT_SOURCE = 'ytmq-extension'
 // app) so the app never waits on a reply that will never come.
 try {
   document.documentElement.dataset.ytmqExtension = '1'
+  // Lets the setup page tell an outdated install from a current one.
+  document.documentElement.dataset.ytmqExtensionVersion = chrome.runtime.getManifest().version
 } catch (e) {
   /* ignore */
 }

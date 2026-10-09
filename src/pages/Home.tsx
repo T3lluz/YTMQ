@@ -63,6 +63,15 @@ export function Home() {
           {error}
         </p>
       )}
+      <p
+        className="ytmq-anim-fade-up text-center text-sm text-zinc-500"
+        style={{ animationDelay: '180ms' }}
+      >
+        Hosting for the first time?{' '}
+        <Link to="/setup" className="font-medium text-violet-300 hover:text-violet-200">
+          Set up the extension →
+        </Link>
+      </p>
     </main>
   )
 }

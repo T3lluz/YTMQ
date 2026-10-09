@@ -2,7 +2,7 @@
 
 Shared queue for **YouTube Music**, plus a Spotify follower for lyrics. Guests use the web app to search and add to one queue in realtime. The host connects [YouTube Music](https://music.youtube.com) so new tracks play there, and/or links Spotify so the lobby shows whatever is already playing.
 
-**[Open YTMQ → t3lluz.com/ytmq](https://t3lluz.com/ytmq/)** · [Chrome extension (zip)](https://t3lluz.com/ytmq/ytmq-extension.zip) · [Userscript](https://t3lluz.com/ytmq/ytmq-connect.user.js)
+**[Open YTMQ → t3lluz.com/ytmq](https://t3lluz.com/ytmq/)** · [First-time host setup](https://t3lluz.com/ytmq/setup) · [Chrome extension (zip)](https://t3lluz.com/ytmq/ytmq-extension.zip) · [Userscript](https://t3lluz.com/ytmq/ytmq-connect.user.js)
 
 Any casing works (`/YTMQ`, `/Ytmq`, …). Push to `main` and it is live within a minute.
 
@@ -47,7 +47,7 @@ Guest links and QR codes point at `/ytmq/room/<id>`; the server answers any unkn
 
 The `extension/` folder is a Manifest V3 Chrome extension that connects **every** `music.youtube.com` tab to your lobby: no Tampermonkey, no console pasting, and it survives reloads and browser restarts. It also puts the YTMQ panel on YouTube Music: the lobby code and QR, who is listening, and the shared queue with who added what.
 
-**Install (one time):**
+**Install (one time)** — the same steps, with a download button and install check, are at [t3lluz.com/ytmq/setup](https://t3lluz.com/ytmq/setup):
 
 1. Download [ytmq-extension.zip](https://t3lluz.com/ytmq/ytmq-extension.zip) and unzip it somewhere permanent (or use the `extension/` folder of a checkout).
 2. Open `chrome://extensions` and turn on **Developer mode**.
