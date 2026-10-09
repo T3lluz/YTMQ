@@ -16,6 +16,10 @@
  * https://addons.mozilla.org/developers/addon/api/key/. Without them, or
  * when signing fails, the last signed build stays up and the deploy goes on.
  * Run after scripts/pack-extension.mjs.
+ *
+ * It also keeps the add-on's page on addons.mozilla.org in line with
+ * store/firefox/listing.json: name, summary, description, homepage, icon
+ * and screenshots. That only runs when one of them changed.
  */
 import { createHmac, randomUUID } from 'node:crypto'
 import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
@@ -27,6 +31,7 @@ import {
   firefoxFingerprint,
   GECKO_ID,
   packFirefox,
+  root,
   sha256,
   SITE,
 } from './extension-files.mjs'
@@ -35,6 +40,7 @@ const AMO = 'https://addons.mozilla.org/api/v5'
 const cacheDir = process.env.YTMQ_FIREFOX_DIR || join(homedir(), 'docker/ytmq/firefox')
 const statePath = join(cacheDir, 'state.json')
 const WAIT_MS = 15 * 60 * 1000
+const listingDir = resolve(root, 'store/firefox')
 
 const sleep = (ms) => new Promise((done) => setTimeout(done, ms))
 
@@ -177,17 +183,67 @@ function publish(signed) {
   console.log(`OK: dist/ytmq-firefox.xpi (signed v${signed.version})`)
 }
 
+/** Bring the add-on's page on addons.mozilla.org in line with the repo. */
+async function syncListing(state) {
+  const listing = JSON.parse(readFileSync(join(listingDir, 'listing.json'), 'utf8'))
+  const icon = readFileSync(resolve(listingDir, listing.icon))
+  const shots = listing.screenshots.map((file) => readFileSync(join(listingDir, file)))
+  const hash = sha256(JSON.stringify(listing) + sha256(icon) + shots.map((png) => sha256(png)).join(''))
+  if (state.listing === hash) return
+
+  const en = (text) => ({ 'en-US': text })
+  await amo('PATCH', addonPath + '/', {
+    name: en(listing.name),
+    summary: en(listing.summary),
+    description: en(listing.description),
+    homepage: en(listing.homepage),
+  })
+  const iconForm = new FormData()
+  iconForm.append('icon', new Blob([icon], { type: 'image/png' }), 'icon.png')
+  await amo('PATCH', addonPath + '/', iconForm)
+
+  // Screenshots: replace the lot, in the order listing.json gives.
+  const addon = await (await amo('GET', addonPath + '/')).json()
+  for (const preview of addon.previews ?? []) {
+    await amo('DELETE', `${addonPath}/previews/${preview.id}/`)
+  }
+  for (const [i, png] of shots.entries()) {
+    const form = new FormData()
+    form.append('image', new Blob([png], { type: 'image/png' }), listing.screenshots[i])
+    form.append('position', String(i))
+    await amo('POST', `${addonPath}/previews/`, form)
+  }
+
+  state.listing = hash
+  saveState(state)
+  console.log(`OK: add-on page on addons.mozilla.org updated (${shots.length} screenshots)`)
+}
+
 async function main() {
+  const state = await sign()
+  if (!state?.signed || !process.env.AMO_JWT_ISSUER || !process.env.AMO_JWT_SECRET) return
+  try {
+    await syncListing(state)
+  } catch (err) {
+    console.error(`sign-firefox: add-on page not updated: ${err.message}`)
+  }
+}
+
+/** Sign when the build changed, publish the signed build. Returns the state. */
+async function sign() {
   mkdirSync(cacheDir, { recursive: true })
   const state = readState()
   const fingerprint = firefoxFingerprint()
   const have = state.signed && existsSync(state.signed.file) ? state.signed : null
 
-  if (have?.fingerprint === fingerprint) return publish(have)
+  if (have?.fingerprint === fingerprint) {
+    publish(have)
+    return state
+  }
   if (!process.env.AMO_JWT_ISSUER || !process.env.AMO_JWT_SECRET) {
     console.log('sign-firefox: no AMO_JWT_ISSUER/AMO_JWT_SECRET, not signing')
     if (have) publish(have)
-    return
+    return state
   }
 
   try {
@@ -218,6 +274,7 @@ async function main() {
       publish(have)
     }
   }
+  return state
 }
 
 await main()

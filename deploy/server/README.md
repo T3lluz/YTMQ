@@ -94,7 +94,9 @@ Release Firefox installs only add-ons Mozilla signed. `update.sh` runs
 `scripts/sign-firefox.mjs`, which uploads a changed build to
 addons.mozilla.org as an unlisted add-on (signed, never listed), waits for
 the signature (usually a minute or two) and keeps the result in
-`~/docker/ytmq/firefox/`. Unchanged builds reuse it. A signing failure never
+`~/docker/ytmq/firefox/`. Unchanged builds reuse it. It also pushes
+`store/firefox/` (text, icon, screenshots) to the add-on's page there
+whenever that folder changes. A signing failure never
 fails the deploy; the last signed build stays up.
 
 One-time: create an API key at
