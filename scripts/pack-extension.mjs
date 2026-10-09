@@ -51,7 +51,13 @@ try {
   })
 } catch (err) {
   if (err?.code !== 'ENOENT') throw err
-  execFileSync('python3', ['-m', 'zipfile', '-c', zipPath, ...requiredFiles], {
+  // Not `python3 -m zipfile -c`: that stores icons/icon16.png as icon16.png,
+  // and Chrome then refuses the extension for a missing icon.
+  const script =
+    'import sys, zipfile\n' +
+    'with zipfile.ZipFile(sys.argv[1], "w", zipfile.ZIP_DEFLATED) as z:\n' +
+    '    for f in sys.argv[2:]: z.write(f, f)\n'
+  execFileSync('python3', ['-c', script, zipPath, ...requiredFiles], {
     cwd: extensionDir,
     stdio: 'inherit',
   })

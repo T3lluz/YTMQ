@@ -1,10 +1,18 @@
 # YTMQ
 
-Shared queue for **YouTube Music**, plus a Spotify follower for lyrics: guests use this web app to search and manage the queue in realtime; the host connects [YouTube Music](https://music.youtube.com) so new tracks play there, and/or links Spotify so the lobby shows whatever is already playing.
+Shared queue for **YouTube Music**, plus a Spotify follower for lyrics. Guests use the web app to search and add to one queue in realtime. The host connects [YouTube Music](https://music.youtube.com) so new tracks play there, and/or links Spotify so the lobby shows whatever is already playing.
 
-**Live app:** https://t3lluz.com/ytmq/ (`/YTMQ`, `/Ytmq` and so on redirect there). Push to `main` and it is live within a minute.
+**[Open YTMQ → t3lluz.com/ytmq](https://t3lluz.com/ytmq/)** · [Chrome extension (zip)](https://t3lluz.com/ytmq/ytmq-extension.zip) · [Userscript](https://t3lluz.com/ytmq/ytmq-connect.user.js)
+
+Any casing works (`/YTMQ`, `/Ytmq`, …). Push to `main` and it is live within a minute.
 
 Everything runs on t3lluz: one Deno server (`server/`) serves the app, the API, the realtime WebSocket and the search/lyrics functions, with the data in SQLite. How it is deployed and exposed: [deploy/server/README.md](deploy/server/README.md).
+
+## How it works
+
+1. The host opens [t3lluz.com/ytmq](https://t3lluz.com/ytmq/) and creates a lobby. Guests join with the 6-character code, the link or the QR.
+2. The host connects YouTube Music (the Chrome extension does it by itself once installed).
+3. Guests search and add songs; they land in the host's YouTube Music queue. Playback controls, lyrics and now playing follow along on every phone.
 
 ## Local development
 
@@ -37,17 +45,22 @@ Guest links and QR codes point at `/ytmq/room/<id>`; the server answers any unkn
 
 ## Chrome extension (host auto-connect)
 
-The `extension/` folder is a Manifest V3 Chrome extension that auto-injects the YTMQ bridge on **every** `music.youtube.com` tab — no Tampermonkey, no console pasting, and it survives reloads and browser restarts.
+The `extension/` folder is a Manifest V3 Chrome extension that connects **every** `music.youtube.com` tab to your lobby: no Tampermonkey, no console pasting, and it survives reloads and browser restarts. It also puts the YTMQ panel on YouTube Music: the lobby code and QR, who is listening, and the shared queue with who added what.
 
 **Install (one time):**
 
-1. Download `ytmq-extension.zip` from the deployed site (or run `npm run build` and grab `dist/ytmq-extension.zip`), unzip it somewhere permanent — or use the `extension/` folder of a checkout directly.
-2. Open `chrome://extensions`, enable **Developer mode**.
-3. Click **Load unpacked** and select the folder.
+1. Download [ytmq-extension.zip](https://t3lluz.com/ytmq/ytmq-extension.zip) and unzip it somewhere permanent (or use the `extension/` folder of a checkout).
+2. Open `chrome://extensions` and turn on **Developer mode**.
+3. Click **Load unpacked** and pick the folder.
 
-**How it works:** the host clicks *Connect YouTube Music* in the lobby, which opens `music.youtube.com` with the room id and API address in the URL. The extension's content script captures them (before YT Music strips the query string), stores the session (`chrome.storage.local` + `localStorage`, 7-day expiry), and the service worker injects the bundled `ytmusic-bridge.js` into the page's main world via `chrome.scripting`. Every later YT Music tab reconnects automatically from the stored session. The toolbar popup shows the linked room and offers a one-click **Disconnect** (stops the bridge in all YT Music tabs and clears the session).
+**Updates.** Chrome does not update unpacked extensions, so YTMQ does what it can:
 
-`extension/ytmusic-bridge.js` is the same bundle built by `npm run build:bridge` (kept in sync by `scripts/copy-bridge-root.mjs`); `scripts/pack-extension.mjs` zips the extension into `dist/` on every build.
+- The bridge, which is most of the logic, is loaded from the live site every time a tab connects. Fixes there reach you without doing anything. If YouTube Music ever refuses it, the extension uses the copy it shipped with.
+- For the rest, the site publishes a fingerprint of the extension's files ([ytmq-extension.json](https://t3lluz.com/ytmq/ytmq-extension.json)). When yours differs, the toolbar icon says **NEW** and the panel and popup show **Download** and **Reload**. Unzip the download over the same folder, press Reload, done.
+
+**How it works:** the host clicks *Connect YouTube Music* in the lobby, which opens `music.youtube.com` with the room id and API address in the URL. The content script captures them before YT Music strips the query string and stores the session (`chrome.storage.local` + `localStorage`, 7-day expiry). The service worker then injects the bridge into the page's main world. Every later YT Music tab reconnects from the stored session. The toolbar popup shows the linked room and has **Disconnect**.
+
+`scripts/pack-extension.mjs` zips the extension and writes the fingerprint into `dist/` on every build. The fingerprint leaves out `ytmusic-bridge.js`, since that comes from the site anyway.
 
 ## Tests
 
