@@ -49,6 +49,7 @@
     queue: '<path d="M3 6h13"/><path d="M3 12h9"/><path d="M3 18h9"/><path d="M17 11v8"/><path d="m14 16 3 3 3-3"/>',
     people: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
     chevronUp: '<path d="m6 15 6-6 6 6"/>',
+    chevronDown: '<path d="m6 9 6 6 6-6"/>',
     close: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
     external: '<path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>',
     link: '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
@@ -110,6 +111,8 @@
       '.pill-hint{font-size:13px;font-weight:500;color:#a1a1aa;white-space:nowrap}',
       '.pill-warn{display:none;width:8px;height:8px;border-radius:50%;background:#fbbf24}',
       '.has-pending .pill-warn{display:block}',
+      '.pill-chev{display:inline-flex;margin-left:-2px;color:#a1a1aa;transition:color .15s,transform .2s}',
+      '#pill:hover .pill-chev{color:#fafafa;transform:translateY(-1px)}',
       '#wrap.open #pill{display:none}',
 
       // Open panel.
@@ -225,6 +228,7 @@
       '<span class="pill-stat" id="pill-q" hidden title="Songs in the shared queue">' + icon('queue', 15) + '<span></span></span>' +
       '<span class="pill-stat" id="pill-p" hidden title="People listening">' + icon('people', 15) + '<span></span></span>' +
       '<span class="pill-warn" title="Some songs are not in YouTube Music yet"></span>' +
+      '<span class="pill-chev">' + icon('chevronUp', 16) + '</span>' +
       '</button>' +
       // Panel.
       '<section id="panel" class="surface" role="dialog" aria-label="YTMQ">' +
@@ -234,7 +238,7 @@
       '<span class="chip conn"><i></i><span id="conn">Offline</span></span>' +
       '<span class="spacer"></span>' +
       '<button type="button" class="icon-btn" data-a="focus-app" title="Open YTMQ">' + icon('external') + '</button>' +
-      '<button type="button" class="icon-btn" id="close" title="Close (Esc)">' + icon('chevronUp') + '</button>' +
+      '<button type="button" class="icon-btn" id="close" title="Close (Esc)">' + icon('chevronDown') + '</button>' +
       '</div>' +
       '<div class="scroll">' +
       '<div class="lobby"><div class="lobby-text">' +
