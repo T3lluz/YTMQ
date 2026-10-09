@@ -35,6 +35,8 @@ does everything Supabase used to.
 | `~/docker/ytmq/repo` | deploy checkout of `main` (do not work in it) |
 | `~/docker/ytmq/build/current` | the live site, a symlink to `site-<sha>` |
 | `~/docker/ytmq/data/ytmq.db` | the database |
+| `~/docker/ytmq/amo.env` | Mozilla API key for signing the Firefox add-on (mode 600) |
+| `~/docker/ytmq/firefox/` | signed Firefox builds, kept across deploys |
 | `~/projects/ytmq` | the work clone |
 | `~/docker/caddy/Caddyfile` | `handle /ytmq*` for the tailnet |
 | `~/.config/systemd/user/ytmq-deploy.{service,timer}` | the deploy poller |
@@ -43,7 +45,8 @@ does everything Supabase used to.
 
 Push (or merge) to `main`. Within a minute `ytmq-deploy.timer` notices,
 `update.sh` runs `npm ci` if the lockfile moved, builds the app, the bridge
-and the extension zip, and swaps the build in. If `server/` changed it
+and the extension zip, has Mozilla sign the Firefox build when the extension
+changed, and swaps the build in. If `server/` changed it
 restarts the container. A failed build leaves the last good one live and is
 not retried until `main` moves again.
 
@@ -83,6 +86,24 @@ Plus, in `~/docker/caddy/Caddyfile` on the t3lluz.com site block:
 handle /ytmq* {
 	reverse_proxy ytmq:8080
 }
+```
+
+## Firefox signing
+
+Release Firefox installs only add-ons Mozilla signed. `update.sh` runs
+`scripts/sign-firefox.mjs`, which uploads a changed build to
+addons.mozilla.org as an unlisted add-on (signed, never listed), waits for
+the signature (usually a minute or two) and keeps the result in
+`~/docker/ytmq/firefox/`. Unchanged builds reuse it. A signing failure never
+fails the deploy; the last signed build stays up.
+
+One-time: create an API key at
+https://addons.mozilla.org/developers/addon/api/key/ and store it:
+
+```bash
+install -m 600 /dev/null ~/docker/ytmq/amo.env
+printf 'AMO_JWT_ISSUER=%s\nAMO_JWT_SECRET=%s\n' 'user:…' '…' > ~/docker/ytmq/amo.env
+~/docker/ytmq/repo/deploy/server/update.sh --force
 ```
 
 ## Backups

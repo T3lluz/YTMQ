@@ -1,8 +1,12 @@
-# YTMQ Chrome extension
+# YTMQ extension (Chrome and Firefox)
 
 Auto-connects YTMQ shared queues on [music.youtube.com](https://music.youtube.com). Once installed, every YouTube Music tab links to your room automatically — across reloads, navigations, and browser restarts.
 
-## Install (Load unpacked)
+## Install
+
+Firefox: one click on [t3lluz.com/ytmq/setup](https://t3lluz.com/ytmq/setup). The Firefox build is these files with a manifest from `scripts/extension-files.mjs`; see the main README.
+
+Chrome (Load unpacked):
 
 1. Open `chrome://extensions` in Chrome.
 2. Enable **Developer mode** (toggle, top right).

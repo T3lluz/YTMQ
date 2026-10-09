@@ -20,6 +20,7 @@ import {
   ytmExtensionZipUrl,
   ytmUserscriptInstallUrl,
 } from '../lib/ytmusicConnect'
+import { isFirefox, useFirefoxExtension } from '../lib/firefoxExtension'
 
 type YtMusicConnectProps = {
   roomId: string
@@ -31,7 +32,10 @@ function doneKey(roomId: string) {
   return `ytmq_ytm_connected_${roomId}`
 }
 
-/** One-time Chrome extension install: download the zip, load unpacked. */
+/**
+ * One-time extension install. Chrome: download the zip, load unpacked.
+ * Firefox: one click on the signed .xpi.
+ */
 function ExtensionInstall({
   zipUrl,
   userscriptUrl,
@@ -41,6 +45,8 @@ function ExtensionInstall({
   userscriptUrl: string | null
   defaultOpen?: boolean
 }) {
+  const onFirefox = isFirefox()
+  const firefox = useFirefoxExtension(onFirefox)
   if (!zipUrl && !userscriptUrl) return null
 
   return (
@@ -51,7 +57,34 @@ function ExtensionInstall({
       <summary className="cursor-pointer font-medium text-violet-300">
         Install the YTMQ helper (one time)
       </summary>
-      {zipUrl && (
+      {onFirefox && (
+        <div className="mt-2">
+          <p className="text-xs font-medium text-zinc-300">
+            Option A — Firefox add-on (recommended)
+          </p>
+          {firefox?.xpiUrl ? (
+            <ol className="mt-1 list-decimal space-y-1 pl-5 text-xs text-zinc-500">
+              <li>
+                <a href={firefox.xpiUrl} className="text-violet-300 underline">
+                  Add YTMQ to Firefox
+                </a>
+                , then click <strong className="text-zinc-300">Continue to installation</strong>{' '}
+                and <strong className="text-zinc-300">Add</strong>.
+              </li>
+              <li>Reload this page.</li>
+            </ol>
+          ) : (
+            <p className="mt-1 text-xs text-zinc-500">
+              The{' '}
+              <a href={`${import.meta.env.BASE_URL}setup`} className="text-violet-300 underline">
+                setup guide
+              </a>{' '}
+              has the Firefox build and how to load it.
+            </p>
+          )}
+        </div>
+      )}
+      {zipUrl && !onFirefox && (
         <div className="mt-2">
           <p className="text-xs font-medium text-zinc-300">
             Option A — Chrome extension (recommended)
@@ -360,12 +393,12 @@ export function YtMusicConnect({ roomId }: YtMusicConnectProps) {
         <>
           <p className="text-sm text-zinc-400">
             One click opens <strong className="text-zinc-300">music.youtube.com</strong> and
-            links your queue. Use Chrome on desktop (not the phone app).
+            links your queue. Use Chrome or Firefox on desktop (not the phone app).
           </p>
           <ol className="list-decimal space-y-1 pl-5 text-xs text-zinc-500">
             {!hostInitialized && (
               <li>
-                Install the YTMQ helper once — Chrome extension or userscript (see
+                Install the YTMQ helper once — the extension or the userscript (see
                 below).
               </li>
             )}

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "YTMQ",
-  "version": "1.9.1",
+  "version": "1.10.0",
   "description": "Host companion for YTMQ: links YouTube Music to your lobby, shows the shared queue on YouTube Music, and puts the lobby in your toolbar.",
   "minimum_chrome_version": "102",
   "permissions": [

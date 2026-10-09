@@ -8,7 +8,7 @@
  *   view.applyUpdate(update) // extension update info, or null
  *
  * `phase` picks what the body shows: 'unlinked', 'no-tab', 'connecting',
- * 'ended' or 'live'. Everything that comes from guests (titles, names) is
+ * 'ended', 'access' (site access switched off) or 'live'. Everything that comes from guests (titles, names) is
  * set with textContent, never parsed as markup.
  *
  * Plain script, no modules: content scripts and the popup both load it as a
@@ -378,9 +378,9 @@
       // Extension update.
       '<div class="fold" data-r="upd"><div><div class="banner upd">' +
       '<strong data-r="upd-title">Extension update ready</strong>' +
-      '<p>Download the zip, unzip it over your YTMQ extension folder, then press Reload.</p>' +
-      '<div class="row-btns"><button type="button" class="pri" data-a="update-download">Download</button>' +
-      '<button type="button" data-a="update-reload">Reload</button></div></div></div></div>' +
+      '<p data-r="upd-text">Download the zip, unzip it over your YTMQ extension folder, then press Reload.</p>' +
+      '<div class="row-btns"><button type="button" class="pri" data-a="update-download" data-r="upd-get">Download</button>' +
+      '<button type="button" data-a="update-reload" data-r="upd-reload">Reload</button></div></div></div></div>' +
       // Status states.
       '<div class="empty-state pane" data-r="state" hidden>' +
       '<div class="empty-icon" data-r="state-icon"></div>' +
@@ -461,6 +461,13 @@
       title: 'Connecting to your lobby…',
       text: 'Linking this YouTube Music tab to the shared queue. It usually takes a second or two.',
       actions: [],
+    },
+    access: {
+      icon: 'warn',
+      chip: 'No access',
+      title: 'YTMQ cannot reach its sites',
+      text: 'Site access for YouTube Music and t3lluz.com is switched off, so YTMQ cannot link your lobby. Allow it once and it stays on.',
+      actions: [['grant-access', 'Allow access', true]],
     },
     ended: {
       icon: 'power',
@@ -853,6 +860,13 @@
       var available = Boolean(update && update.available)
       r.upd.classList.toggle('on', available)
       if (available) {
+        // Firefox installs the signed .xpi over the old copy and restarts it.
+        var xpi = update.kind === 'xpi'
+        r['upd-text'].textContent = xpi
+          ? 'Install it and confirm in Firefox. YTMQ restarts by itself.'
+          : 'Download the zip, unzip it over your YTMQ extension folder, then press Reload.'
+        r['upd-get'].textContent = xpi ? 'Install' : 'Download'
+        r['upd-reload'].hidden = xpi
         r['upd-title'].textContent =
           'Extension update ready' +
           (update.version && update.current ? ' (v' + update.current + ' → v' + update.version + ')' : '')

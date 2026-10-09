@@ -12,6 +12,11 @@ const YTM_ORIGIN = 'https://music.youtube.com'
 const YTMQ_SITE_ORIGIN = 'https://t3lluz.com'
 const YTMQ_SITE_PATH = '/ytmq'
 const SESSION_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000
+// The Firefox build (scripts/extension-files.mjs) is signed by Mozilla and
+// updated by Firefox itself. Mozilla does not allow code loaded from a
+// server, so it runs the bridge it shipped with and never the live one.
+const FIREFOX = Boolean(chrome.runtime.getManifest().browser_specific_settings)
+const HOST_ORIGINS = chrome.runtime.getManifest().host_permissions || []
 
 function isValidSession(session) {
   return Boolean(
@@ -139,8 +144,11 @@ async function buildPopupSnapshot() {
       }
     }
   }
+  // Firefox lets people switch off an add-on's site access after install.
+  const access = await chrome.permissions.contains({ origins: HOST_ORIGINS }).catch(() => true)
   return {
     session: valid ? session : null,
+    access,
     update: data.ytmq_update || null,
     roomUrl: valid ? ytmqRoomUrl(session.roomId) : '',
     ytm,
@@ -289,7 +297,7 @@ async function injectBridge(tabId, session) {
   }
 
   try {
-    const live = await injectLiveBridge(tabId)
+    const live = !FIREFOX && (await injectLiveBridge(tabId))
     console.info('[YTMQ] bridge injected:', live ? 'live from the site' : 'bundled copy')
     if (!live) {
       await chrome.scripting.executeScript({
@@ -536,8 +544,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 // An unpacked extension cannot update itself. The site publishes a
 // fingerprint of the extension's files (scripts/pack-extension.mjs); when
 // ours differs, the panel and popup offer the new zip and a Reload button.
+// Firefox updates its signed copy by itself about once a day; until then the
+// panel and popup offer the new .xpi, which installs over this one.
 
 const UPDATE_INFO_URL = YTMQ_SITE_ORIGIN + YTMQ_SITE_PATH + '/ytmq-extension.json'
+const FIREFOX_INFO_URL = YTMQ_SITE_ORIGIN + YTMQ_SITE_PATH + '/ytmq-firefox.json'
 const UPDATE_CHECK_MS = 30 * 60 * 1000
 
 async function sha256Hex(data) {
@@ -570,18 +581,43 @@ async function checkForUpdate(force) {
   if (!force && last && Date.now() - (last.checkedAt || 0) < UPDATE_CHECK_MS) return last
   let info
   try {
-    const res = await fetch(UPDATE_INFO_URL, { cache: 'no-cache' })
+    const res = await fetch(FIREFOX ? FIREFOX_INFO_URL : UPDATE_INFO_URL, { cache: 'no-cache' })
     if (!res.ok) return last || null
     info = await res.json()
   } catch (e) {
     return last || null
   }
+  const current = chrome.runtime.getManifest().version
+  const update = FIREFOX ? firefoxUpdate(info, current) : await chromeUpdate(info, current)
+  if (!update) return last || null
+  await chrome.storage.local.set({ ytmq_update: update })
+  await chrome.action.setBadgeText({ text: update.available ? 'NEW' : '' })
+  if (update.available) await chrome.action.setBadgeBackgroundColor({ color: '#8b5cf6' })
+  return update
+}
+
+/** A signed build newer than this one (scripts/sign-firefox.mjs). */
+function firefoxUpdate(info, current) {
+  if (!info || typeof info.version !== 'string') return null
+  const signed = typeof info.xpi === 'string' && info.xpi
+  return {
+    kind: 'xpi',
+    available: Boolean(signed) && versionAbove(info.version, current),
+    version: info.version,
+    current,
+    zip: signed
+      ? YTMQ_SITE_ORIGIN + YTMQ_SITE_PATH + '/' + info.xpi + '?v=' + encodeURIComponent(info.version)
+      : '',
+    checkedAt: Date.now(),
+  }
+}
+
+async function chromeUpdate(info, current) {
   if (!info || !Array.isArray(info.files) || typeof info.fingerprint !== 'string') {
-    return last || null
+    return null
   }
   const mine = await localFingerprint(info.files.filter((f) => typeof f === 'string'))
-  const current = chrome.runtime.getManifest().version
-  const update = {
+  return {
     // Different files, and not a build newer than the site's (a dev copy).
     available: Boolean(mine) && mine !== info.fingerprint && !versionAbove(current, String(info.version || '0')),
     version: String(info.version || ''),
@@ -592,10 +628,6 @@ async function checkForUpdate(force) {
       '?v=' + encodeURIComponent(String(info.version || '') + '-' + info.fingerprint.slice(0, 12)),
     checkedAt: Date.now(),
   }
-  await chrome.storage.local.set({ ytmq_update: update })
-  await chrome.action.setBadgeText({ text: update.available ? 'NEW' : '' })
-  if (update.available) await chrome.action.setBadgeBackgroundColor({ color: '#8b5cf6' })
-  return update
 }
 
 // The service worker starts often (every message wakes it), which makes this
@@ -615,7 +647,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
   if (message && message.type === 'ytmq-download-update') {
     chrome.storage.local.get('ytmq_update', (data) => {
-      const zip = (data && data.ytmq_update && data.ytmq_update.zip) || UPDATE_INFO_URL.replace(/\.json$/, '.zip')
+      const zip =
+        (data && data.ytmq_update && data.ytmq_update.zip) ||
+        (FIREFOX ? YTMQ_SITE_ORIGIN + YTMQ_SITE_PATH + '/setup' : UPDATE_INFO_URL.replace(/\.json$/, '.zip'))
       chrome.tabs.create({ url: zip })
       sendResponse({ ok: true })
     })

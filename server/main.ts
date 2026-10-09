@@ -126,6 +126,8 @@ const TYPES: Record<string, string> = {
   ".woff2": "font/woff2",
   ".txt": "text/plain; charset=utf-8",
   ".zip": "application/zip",
+  // Firefox offers to install an add-on served with this type.
+  ".xpi": "application/x-xpinstall",
 };
 
 async function fileResponse(file: string, req: Request, cache: string): Promise<Response | null> {

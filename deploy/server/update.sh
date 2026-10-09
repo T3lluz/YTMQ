@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Publish origin/main to t3lluz.com/ytmq: build the app, the YouTube Music
-# bridge and the extension zip, swap the new build in at once, and restart
+# bridge and the extension (Chrome zip, signed Firefox .xpi), swap the new build in at once, and restart
 # the server when its code moved.
 #
 # ytmq-deploy.timer runs this every minute; it does nothing unless main has
@@ -48,6 +48,7 @@ main() {
     exit 1
   fi
   rm -f "$home/.failed"
+  sign_firefox "$home" "$repo"
 
   local stage="$build/.site-$sha.tmp"
   rm -rf "$stage" "$build/site-$sha"
@@ -88,6 +89,23 @@ build_site() {
     npm run --silent build >/dev/null &&
       node scripts/verify-dist-bridge.mjs >/dev/null
   )
+}
+
+# sign_firefox HOME REPO: have Mozilla sign the Firefox build, or keep the
+# last signed one. Keys live in HOME/amo.env (AMO_JWT_ISSUER, AMO_JWT_SECRET).
+# Never fails the deploy: Chrome and the app do not depend on it.
+sign_firefox() {
+  local home="$1" repo="$2"
+  (
+    if [[ -f "$home/amo.env" ]]; then
+      set -a
+      # shellcheck disable=SC1091
+      source "$home/amo.env"
+      set +a
+    fi
+    cd "$repo"
+    YTMQ_FIREFOX_DIR="$home/firefox" timeout 20m node scripts/sign-firefox.mjs
+  ) || echo "firefox signing did not finish; the last signed build stays up" >&2
 }
 
 main "$@"

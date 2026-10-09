@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { YtmqLogo } from '../components/YtmqLogo'
 import { installedExtensionVersion, isExtensionInstalled } from '../lib/extensionBridge'
+import { isFirefox, useFirefoxExtension, type FirefoxExtension } from '../lib/firefoxExtension'
 
 type ExtensionInfo = { version: string; zip: string; fingerprint?: string }
 
@@ -69,10 +70,101 @@ function CopyAddress({ value }: { value: string }) {
   )
 }
 
+const DOWNLOAD_ICON = (
+  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    <path d="M12 3v12" />
+    <path d="m7 10 5 5 5-5" />
+    <path d="M5 21h14" />
+  </svg>
+)
+
+function BrowserTab({ active, onClick, children }: { active: boolean; onClick: () => void; children: ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={`ytmq-press rounded-lg px-3 py-1.5 text-sm font-medium ${
+        active ? 'bg-violet-500/20 text-violet-200 ring-1 ring-violet-500/40' : 'text-zinc-400 hover:text-zinc-200'
+      }`}
+    >
+      {children}
+    </button>
+  )
+}
+
+function FirefoxSteps({ firefox }: { firefox: FirefoxExtension | null }) {
+  if (firefox && !firefox.xpiUrl) {
+    return (
+      <div className="mt-6 space-y-3 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm leading-relaxed text-amber-100/90">
+        <p className="font-semibold text-amber-100">The signed Firefox build is not out yet.</p>
+        <p>
+          Regular Firefox only installs add-ons Mozilla has signed. Until that is in place you
+          can still use YTMQ:
+        </p>
+        <ul className="list-disc space-y-1 pl-5">
+          <li>
+            For this session only: open <Kbd>about:debugging#/runtime/this-firefox</Kbd>, click{' '}
+            <strong>Load Temporary Add-on</strong> and pick the file below. Firefox drops it when
+            it closes.
+          </li>
+          <li>
+            For good, in Developer Edition, Nightly, LibreWolf and other forks that allow it: set{' '}
+            <Kbd>xpinstall.signatures.required</Kbd> to <Kbd>false</Kbd> in{' '}
+            <Kbd>about:config</Kbd>, then open the file below.
+          </li>
+        </ul>
+        <a
+          href={firefox.unsignedUrl}
+          className="ytmq-press inline-flex min-h-10 items-center gap-2 rounded-xl bg-amber-400 px-4 text-sm font-semibold text-zinc-950 hover:bg-amber-300"
+        >
+          {DOWNLOAD_ICON}
+          ytmq-firefox-unsigned.xpi <span className="opacity-70">v{firefox.version}</span>
+        </a>
+      </div>
+    )
+  }
+  return (
+    <ol className="mt-6 space-y-6">
+      <Step n={1} title="Add YTMQ to Firefox">
+        <a
+          href={firefox?.xpiUrl ?? `${BASE}ytmq-firefox.xpi`}
+          className="ytmq-press inline-flex min-h-11 items-center gap-2 rounded-xl bg-gradient-to-br from-violet-500 to-violet-700 px-5 font-medium text-white shadow-lg shadow-violet-900/30 hover:brightness-110"
+        >
+          {DOWNLOAD_ICON}
+          Add to Firefox
+          {firefox && <span className="text-violet-200/80">v{firefox.version}</span>}
+        </a>
+        <p>
+          Firefox asks twice: <strong className="text-zinc-200">Continue to installation</strong>{' '}
+          (it is from t3lluz.com, not the add-ons site), then{' '}
+          <strong className="text-zinc-200">Add</strong>. That is the whole install.
+        </p>
+      </Step>
+      <Step n={2} title="Pin it">
+        <p>
+          Click the puzzle piece in the toolbar, then the gear next to YTMQ, and pick{' '}
+          <strong className="text-zinc-200">Pin to Toolbar</strong>. Its popup is your lobby at
+          a glance: the code and QR, what is playing with controls, and the queue.
+        </p>
+      </Step>
+      <Step n={3} title="Reload this page">
+        <p>
+          The green box at the top shows up once Firefox has it. Updates come by themselves,
+          like any other add-on.
+        </p>
+      </Step>
+    </ol>
+  )
+}
+
 export function Setup() {
   const [info, setInfo] = useState<ExtensionInfo | null>(null)
   const installed = isExtensionInstalled()
   const installedVersion = installedExtensionVersion()
+  const [browser, setBrowser] = useState<'chrome' | 'firefox'>(isFirefox() ? 'firefox' : 'chrome')
+  const onFirefox = isFirefox()
+  const firefox = useFirefoxExtension()
 
   useEffect(() => {
     let cancelled = false
@@ -87,9 +179,11 @@ export function Setup() {
     }
   }, [])
 
-  // Installs from before 1.8.1 do not report a version.
+  // Installs from before 1.8.1 do not report a version. Firefox compares
+  // against the signed build, which is all it can install.
+  const latest = onFirefox ? (firefox?.xpiUrl ? firefox.version : null) : info?.version
   const outdated =
-    installed && info != null && (!installedVersion || newer(info.version, installedVersion))
+    installed && latest != null && (!installedVersion || newer(latest, installedVersion))
 
   return (
     <main className="mx-auto w-full max-w-2xl px-4 py-10 sm:px-6 sm:py-14">
@@ -114,7 +208,24 @@ export function Setup() {
           }`}
           role="status"
         >
-          {outdated ? (
+          {outdated && onFirefox ? (
+            <>
+              <p className="font-semibold">
+                Your extension{installedVersion ? ` (v${installedVersion})` : ''} is out of
+                date. v{latest} is out.
+              </p>
+              <p className="mt-1 text-amber-100/80">
+                Firefox updates it on its own within a day. To get it now, install it over
+                the old one; YTMQ restarts by itself.
+              </p>
+              <a
+                href={firefox?.xpiUrl ?? undefined}
+                className="ytmq-press mt-3 inline-flex min-h-10 items-center gap-2 rounded-xl bg-amber-400 px-4 text-sm font-semibold text-zinc-950 hover:bg-amber-300"
+              >
+                Install v{latest}
+              </a>
+            </>
+          ) : outdated ? (
             <>
               <p className="font-semibold">
                 Your extension{installedVersion ? ` (v${installedVersion})` : ''} is out of
@@ -152,13 +263,25 @@ export function Setup() {
       )}
 
       <section className="mt-10">
-        <h2 className="text-lg font-bold">1. Install the Chrome extension</h2>
+        <h2 className="text-lg font-bold">1. Install the extension</h2>
         <p className="mt-1 text-sm text-zinc-400">
           It links YouTube Music to your lobby by itself and adds the YTMQ panel there: the
-          lobby code and QR, who is listening, and the queue with who added what. Works in
-          desktop Chrome, Edge and Brave.
+          lobby code and QR, who is listening, and the queue with who added what. Same
+          extension in both browsers.
         </p>
+        <div className="mt-4 flex flex-wrap gap-2" role="group" aria-label="Browser">
+          <BrowserTab active={browser === 'chrome'} onClick={() => setBrowser('chrome')}>
+            Chrome, Edge, Brave
+          </BrowserTab>
+          <BrowserTab active={browser === 'firefox'} onClick={() => setBrowser('firefox')}>
+            Firefox, LibreWolf, Zen
+          </BrowserTab>
+        </div>
 
+        {browser === 'firefox' ? (
+          <FirefoxSteps firefox={firefox} />
+        ) : (
+        <>
         <ol className="mt-6 space-y-6">
           <Step n={1} title="Download the extension">
             <a
@@ -166,11 +289,7 @@ export function Setup() {
               download="ytmq-extension.zip"
               className="ytmq-press inline-flex min-h-11 items-center gap-2 rounded-xl bg-gradient-to-br from-violet-500 to-violet-700 px-5 font-medium text-white shadow-lg shadow-violet-900/30 hover:brightness-110"
             >
-              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                <path d="M12 3v12" />
-                <path d="m7 10 5 5 5-5" />
-                <path d="M5 21h14" />
-              </svg>
+              {DOWNLOAD_ICON}
               Download ytmq-extension.zip
               {info && <span className="text-violet-200/80">v{info.version}</span>}
             </a>
@@ -215,6 +334,8 @@ export function Setup() {
           Had the old YTMQ extension from <Kbd>t3lluz.github.io</Kbd>? Remove it on the
           extensions page first; it no longer connects.
         </p>
+        </>
+        )}
       </section>
 
       <section className="mt-12">
@@ -246,6 +367,10 @@ export function Setup() {
 
       <section className="mt-12">
         <h2 className="text-lg font-bold">Updates</h2>
+        <p className="mt-2 text-sm leading-relaxed text-zinc-400">
+          In Firefox there is nothing to do: it updates YTMQ like any other add-on, and the
+          popup offers the new version in the meantime. In Chrome:
+        </p>
         <p className="mt-2 text-sm leading-relaxed text-zinc-400">
           Most fixes reach you on their own: the extension loads the newest YouTube Music
           bridge from this site every time it connects. When the extension itself changes, its

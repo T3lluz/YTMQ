@@ -251,6 +251,10 @@
 
   function render() {
     view.applyUpdate(snap && snap.update)
+    if (snap && snap.access === false) {
+      view.apply({ phase: 'access' })
+      return
+    }
     if (!snap || !snap.session) {
       view.apply({ phase: 'unlinked' })
       return
@@ -297,6 +301,13 @@
         return
       case 'update-download':
         void send({ type: 'ytmq-download-update' })
+        return
+      case 'grant-access':
+        // Straight from the click: browsers only ask inside a user gesture.
+        chrome.permissions
+          .request({ origins: chrome.runtime.getManifest().host_permissions || [] })
+          .catch(function () {})
+          .then(loadSnapshot)
         return
       case 'update-reload':
         void send({ type: 'ytmq-reload-extension' })

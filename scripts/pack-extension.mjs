@@ -1,32 +1,29 @@
 /**
- * Packages the Chrome extension into dist/ytmq-extension.zip so hosts can
- * download it straight from the deployed site. Run after `vite build`.
+ * Packages the extension so hosts can download it straight from the
+ * deployed site. Run after `vite build`.
+ *
+ *   dist/ytmq-extension.zip            Chrome, Edge, Brave (Load unpacked)
+ *   dist/ytmq-extension.json           what installed Chrome copies compare against
+ *   dist/ytmq-firefox-unsigned.xpi     Firefox build before signing
+ *   dist/ytmq-firefox.json             what the setup page offers Firefox
+ *
+ * scripts/sign-firefox.mjs adds the signed ytmq-firefox.xpi on t3lluz.
  */
-import { execFileSync } from 'node:child_process'
-import { createHash } from 'node:crypto'
 import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
+import {
+  chromeManifest,
+  distDir,
+  extensionDir,
+  extensionFiles,
+  firefoxFingerprint,
+  packFirefox,
+  root,
+  sha256,
+  zipFiles,
+} from './extension-files.mjs'
 
-const root = resolve(import.meta.dirname, '..')
-const extensionDir = resolve(root, 'extension')
-const distDir = resolve(root, 'dist')
 const zipPath = resolve(distDir, 'ytmq-extension.zip')
-
-const requiredFiles = [
-  'manifest.json',
-  'background.js',
-  'content.js',
-  'site.js',
-  'popup.html',
-  'popup.js',
-  'ui.js',
-  'ytm-panel.js',
-  'ytmusic-bridge.js',
-  'icons/icon16.png',
-  'icons/icon32.png',
-  'icons/icon48.png',
-  'icons/icon128.png',
-]
 
 // The bundled bridge is a build artifact; make sure it's fresh.
 copyFileSync(
@@ -34,7 +31,7 @@ copyFileSync(
   resolve(extensionDir, 'ytmusic-bridge.js'),
 )
 
-for (const file of requiredFiles) {
+for (const file of extensionFiles) {
   if (!existsSync(resolve(extensionDir, file))) {
     console.error(`FAIL: extension/${file} missing`)
     process.exit(1)
@@ -43,42 +40,35 @@ for (const file of requiredFiles) {
 
 mkdirSync(distDir, { recursive: true })
 rmSync(zipPath, { force: true })
-
-// `zip` where it exists (CI), Python's zipfile where it doesn't (t3lluz).
-try {
-  execFileSync('zip', ['-r', '-q', zipPath, ...requiredFiles], {
-    cwd: extensionDir,
-    stdio: 'inherit',
-  })
-} catch (err) {
-  if (err?.code !== 'ENOENT') throw err
-  // Not `python3 -m zipfile -c`: that stores icons/icon16.png as icon16.png,
-  // and Chrome then refuses the extension for a missing icon.
-  const script =
-    'import sys, zipfile\n' +
-    'with zipfile.ZipFile(sys.argv[1], "w", zipfile.ZIP_DEFLATED) as z:\n' +
-    '    for f in sys.argv[2:]: z.write(f, f)\n'
-  execFileSync('python3', ['-c', script, zipPath, ...requiredFiles], {
-    cwd: extensionDir,
-    stdio: 'inherit',
-  })
-}
-
+zipFiles(extensionDir, extensionFiles, zipPath)
 console.log('OK: packed dist/ytmq-extension.zip')
 
 // What installed copies compare themselves against (extension/background.js,
 // checkForUpdate). The bridge is left out: the extension loads the live one
 // from the site, so a bridge-only change needs no reinstall.
-const fingerprinted = requiredFiles.filter((file) => file !== 'ytmusic-bridge.js').sort()
-const sha256 = (data) => createHash('sha256').update(data).digest('hex')
+const fingerprinted = extensionFiles.filter((file) => file !== 'ytmusic-bridge.js').sort()
 const fingerprint = sha256(
   fingerprinted
     .map((file) => `${file}\n${sha256(readFileSync(resolve(extensionDir, file)))}\n`)
     .join(''),
 )
-const { version } = JSON.parse(readFileSync(resolve(extensionDir, 'manifest.json'), 'utf8'))
+const { version } = chromeManifest()
 writeFileSync(
   resolve(distDir, 'ytmq-extension.json'),
   JSON.stringify({ version, fingerprint, files: fingerprinted, zip: 'ytmq-extension.zip' }, null, 2) + '\n',
 )
 console.log(`OK: dist/ytmq-extension.json (v${version}, ${fingerprint.slice(0, 12)})`)
+
+// Firefox. Release Firefox only installs signed add-ons, so this copy is for
+// Developer Edition, Nightly and forks that allow unsigned ones. `xpi` stays
+// null until sign-firefox.mjs has a signed build to offer.
+packFirefox(resolve(distDir, 'ytmq-firefox-unsigned.xpi'), version)
+writeFileSync(
+  resolve(distDir, 'ytmq-firefox.json'),
+  JSON.stringify(
+    { version, fingerprint: firefoxFingerprint(), xpi: null, unsigned: 'ytmq-firefox-unsigned.xpi' },
+    null,
+    2,
+  ) + '\n',
+)
+console.log(`OK: packed dist/ytmq-firefox-unsigned.xpi (v${version})`)
