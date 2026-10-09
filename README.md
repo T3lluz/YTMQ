@@ -32,7 +32,7 @@ No secrets anywhere: search scrapes YouTube Music's own web API server-side, and
 Spotify uses the official Web API (PKCE) from the host's YTMQ tab. No extension, no Client ID prompt. After login, YTMQ reads the active Spotify player and shows that track on lyrics, now playing, and recently played. It does not push the shared queue onto Spotify.
 
 The app already ships a public Client ID. On the Spotify dashboard, add these exact redirect URIs (trailing slash included):
-- `http://localhost:5173/ytmq/`
+- `http://127.0.0.1:5173/ytmq/` (Spotify rejects `localhost`; open the dev server at 127.0.0.1 when testing Spotify)
 - `https://t3lluz.com/ytmq/`
 
 Then play something in the Spotify app, click **Connect Spotify** in Admin, and approve access. Keep the YTMQ host tab open.
