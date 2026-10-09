@@ -586,7 +586,10 @@ async function checkForUpdate(force) {
     available: Boolean(mine) && mine !== info.fingerprint && !versionAbove(current, String(info.version || '0')),
     version: String(info.version || ''),
     current,
-    zip: YTMQ_SITE_ORIGIN + YTMQ_SITE_PATH + '/' + String(info.zip || 'ytmq-extension.zip'),
+    // Stamped, so no cache along the way can hand out an older zip.
+    zip:
+      YTMQ_SITE_ORIGIN + YTMQ_SITE_PATH + '/' + String(info.zip || 'ytmq-extension.zip') +
+      '?v=' + encodeURIComponent(String(info.version || '') + '-' + info.fingerprint.slice(0, 12)),
     checkedAt: Date.now(),
   }
   await chrome.storage.local.set({ ytmq_update: update })

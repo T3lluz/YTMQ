@@ -66,7 +66,7 @@ export function buildYtmConnectSnippet(
 
   const urlsJson = JSON.stringify(urls)
 
-  return `(function(){var p=${params},urls=${urlsJson};window.__YTMQ_BRIDGE_PARAMS__=p;function load(i){if(i>=urls.length){console.error('[YTMQ] Could not load bridge from',urls);return}fetch(urls[i]).then(function(r){if(!r.ok)throw new Error('load '+r.status);return r.text()}).then(function(c){var s=document.createElement('script'),t=window.trustedTypes;if(t&&t.createPolicy){s.text=t.createPolicy('ytmq',{createScript:function(x){return x}}).createScript(c)}else{s.textContent=c}document.head.appendChild(s)}).catch(function(){load(i+1)})}load(0)})();`
+  return `(function(){var p=${params},urls=${urlsJson};window.__YTMQ_BRIDGE_PARAMS__=p;function load(i){if(i>=urls.length){console.error('[YTMQ] Could not load bridge from',urls);return}fetch(urls[i],{cache:'no-cache'}).then(function(r){if(!r.ok)throw new Error('load '+r.status);return r.text()}).then(function(c){var s=document.createElement('script'),t=window.trustedTypes;if(t&&t.createPolicy){s.text=t.createPolicy('ytmq',{createScript:function(x){return x}}).createScript(c)}else{s.textContent=c}document.head.appendChild(s)}).catch(function(){load(i+1)})}load(0)})();`
 }
 
 /** Open on music.youtube.com; YTMQ userscript auto-loads the bridge when installed. */
@@ -130,7 +130,8 @@ export function ytmUserscriptInstallUrl(): string | null {
 export function ytmExtensionZipUrl(): string | null {
   const root = bridgeSiteRoot()
   if (!root) return null
-  return `${root}/ytmq-extension.zip`
+  // Stamped per page load so no cache hands out an older zip.
+  return `${root}/ytmq-extension.zip?v=${Date.now().toString(36)}`
 }
 
 export function needsHttpsBridgeOrigin(): boolean {

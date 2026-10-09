@@ -155,10 +155,12 @@ async function site(req: Request, path: string): Promise<Response> {
   if (!file.startsWith(normalize(SITE_DIR))) return json({ error: "Not found" }, 404);
 
   // Hashed bundles never change; everything else is checked every load so a
-  // deploy shows up on the next refresh.
+  // deploy shows up on the next refresh. "private" keeps Cloudflare from
+  // swapping no-cache for its 4-hour browser TTL on .js and .zip files (it
+  // did, so the extension zip and the bridge could be hours stale).
   const cache = rel.startsWith("/assets/")
     ? "public, max-age=31536000, immutable"
-    : "no-cache";
+    : "private, no-cache";
   const hit = rel !== "/" && (await fileResponse(file, req, cache));
   if (hit) return hit;
   if (extname(rel) && rel.startsWith("/assets/")) return json({ error: "Not found" }, 404);

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         YTMQ — YouTube Music connect
 // @namespace    https://github.com/T3lluz/YTMQ
-// @version      1.6.0
+// @version      1.6.1
 // @description  Auto-connects YTMQ on music.youtube.com (from host link or saved session)
 // @match        https://music.youtube.com/*
 // @run-at       document-start
@@ -111,7 +111,7 @@
         delete window.__YTMQ_BRIDGE_LOADING__
         return
       }
-      fetch(urls[i])
+      fetch(urls[i], { cache: 'no-cache' })
         .then(function (r) {
           if (!r.ok) throw new Error('load ' + r.status)
           return r.text()

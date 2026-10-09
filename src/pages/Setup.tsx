@@ -3,10 +3,18 @@ import { Link } from 'react-router-dom'
 import { YtmqLogo } from '../components/YtmqLogo'
 import { installedExtensionVersion, isExtensionInstalled } from '../lib/extensionBridge'
 
-type ExtensionInfo = { version: string; zip: string }
+type ExtensionInfo = { version: string; zip: string; fingerprint?: string }
 
 const BASE = import.meta.env.BASE_URL
 const ZIP_URL = `${BASE}ytmq-extension.zip`
+
+/** The zip, stamped with the build it is, so no cache serves an older one. */
+function zipHref(info: ExtensionInfo | null): string {
+  const stamp = info
+    ? `${info.version}-${(info.fingerprint ?? '').slice(0, 12)}`
+    : Date.now().toString(36)
+  return `${ZIP_URL}?v=${encodeURIComponent(stamp)}`
+}
 const USERSCRIPT_URL = `${BASE}ytmq-connect.user.js`
 
 function newer(a: string, b: string): boolean {
@@ -113,9 +121,21 @@ export function Setup() {
                 date{info ? `. v${info.version} is out.` : '.'}
               </p>
               <p className="mt-1 text-amber-100/80">
-                Download it below, unzip it over the same folder, then press Reload in the
-                YTMQ panel or the extension popup.
+                Download it, unzip it over the same folder, then press{' '}
+                <strong>Reload</strong> in the YTMQ popup. Copies older than v1.8 have no
+                Reload button: use the reload arrow on the YTMQ card in{' '}
+                <code className="rounded bg-black/30 px-1 font-mono text-[0.85em]">
+                  chrome://extensions
+                </code>{' '}
+                instead. From v1.8 on it updates itself as far as Chrome allows.
               </p>
+              <a
+                href={zipHref(info)}
+                download="ytmq-extension.zip"
+                className="ytmq-press mt-3 inline-flex min-h-10 items-center gap-2 rounded-xl bg-amber-400 px-4 text-sm font-semibold text-zinc-950 hover:bg-amber-300"
+              >
+                Download v{info?.version ?? 'latest'}
+              </a>
             </>
           ) : (
             <>
@@ -142,8 +162,8 @@ export function Setup() {
         <ol className="mt-6 space-y-6">
           <Step n={1} title="Download the extension">
             <a
-              href={ZIP_URL}
-              download
+              href={zipHref(info)}
+              download="ytmq-extension.zip"
               className="ytmq-press inline-flex min-h-11 items-center gap-2 rounded-xl bg-gradient-to-br from-violet-500 to-violet-700 px-5 font-medium text-white shadow-lg shadow-violet-900/30 hover:brightness-110"
             >
               <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -154,6 +174,11 @@ export function Setup() {
               Download ytmq-extension.zip
               {info && <span className="text-violet-200/80">v{info.version}</span>}
             </a>
+            <p className="text-xs text-zinc-500">
+              Always the newest build. From v1.8 on the extension keeps itself current: the
+              YouTube Music bridge loads live from this site, and the popup offers new
+              versions with a one-click Reload.
+            </p>
           </Step>
           <Step n={2} title="Unzip it into a folder you keep">
             <p>
@@ -223,10 +248,12 @@ export function Setup() {
         <h2 className="text-lg font-bold">Updates</h2>
         <p className="mt-2 text-sm leading-relaxed text-zinc-400">
           Most fixes reach you on their own: the extension loads the newest YouTube Music
-          bridge from this site every time it connects. When the extension itself changes, the
-          YTMQ panel and the popup show <strong className="text-zinc-200">Download</strong> and{' '}
+          bridge from this site every time it connects. When the extension itself changes, its
+          icon says <strong className="text-zinc-200">NEW</strong> and the YTMQ panel and the
+          popup show <strong className="text-zinc-200">Download</strong> and{' '}
           <strong className="text-zinc-200">Reload</strong>. Unzip the download over the same
-          folder and press Reload.
+          folder and press Reload. (That needs v1.8 or newer; older copies need the download
+          above once.)
         </p>
       </section>
 
