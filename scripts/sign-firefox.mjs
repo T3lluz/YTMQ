@@ -90,14 +90,23 @@ function token() {
 }
 
 async function amo(method, path, body) {
-  const res = await fetch(/^https?:/.test(path) ? path : AMO + path, {
-    method,
-    headers: {
-      Authorization: `JWT ${token()}`,
-      ...(body && !(body instanceof FormData) ? { 'Content-Type': 'application/json' } : {}),
-    },
-    body: body instanceof FormData ? body : body ? JSON.stringify(body) : undefined,
-  })
+  let res
+  for (let attempt = 0; ; attempt++) {
+    res = await fetch(/^https?:/.test(path) ? path : AMO + path, {
+      method,
+      headers: {
+        Authorization: `JWT ${token()}`,
+        ...(body && !(body instanceof FormData) ? { 'Content-Type': 'application/json' } : {}),
+      },
+      body: body instanceof FormData ? body : body ? JSON.stringify(body) : undefined,
+    })
+    if (res.status !== 429 || attempt >= 5) break
+    // Throttled: Mozilla says how long ("Expected available in 55 seconds").
+    const text = await res.text()
+    const wait = Number(res.headers.get('retry-after')) || Number(text.match(/in (\d+) second/)?.[1]) || 60
+    console.log(`sign-firefox: Mozilla asks to wait ${wait}s`)
+    await sleep((wait + 2) * 1000)
+  }
   if (res.status === 404 && method === 'GET') return null
   if (!res.ok) throw new Error(`AMO ${method} ${path}: ${res.status} ${(await res.text()).slice(0, 500)}`)
   return res
