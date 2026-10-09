@@ -62,26 +62,28 @@ export function NowPlaying({
 
   if (!nowPlaying && !connected) {
     return (
-      <section className="ytmq-anim-fade-up rounded-2xl border border-zinc-800 bg-zinc-900/50 p-4">
-        <div className="flex items-center gap-2">
-          <span className="flex h-2 w-2 shrink-0 rounded-full bg-zinc-600">
-            <span className="h-2 w-2 animate-ping rounded-full bg-zinc-500" />
-          </span>
-          <p className="text-sm font-medium text-zinc-300">Now playing</p>
+      <section className="ytmq-anim-fade-up flex items-center gap-3 rounded-2xl bg-white/[0.04] p-3">
+        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-white/[0.06] text-neutral-500">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5" aria-hidden>
+            <path d="M9 18V5l12-2v13" />
+            <circle cx="6" cy="18" r="3" />
+            <circle cx="18" cy="16" r="3" />
+          </svg>
+        </span>
+        <div className="min-w-0">
+          <p className="text-sm font-bold text-neutral-200">Nothing playing yet</p>
+          <p className="text-xs text-neutral-500">The song shows here once the host&apos;s player starts.</p>
         </div>
-        <p className="mt-1 text-sm text-zinc-500">
-          Waiting for playback from a connected player…
-        </p>
       </section>
     )
   }
 
   if (!nowPlaying) {
     return (
-      <section className="ytmq-anim-fade-up rounded-2xl border border-zinc-800 bg-zinc-900/50 p-4">
-        <p className="text-sm font-medium text-zinc-300">Now playing</p>
-        <p className="mt-1 text-sm text-zinc-500">
-          No recent updates — keep music.youtube.com open and playing.
+      <section className="ytmq-anim-fade-up rounded-2xl bg-white/[0.04] p-4">
+        <p className="text-sm font-bold text-neutral-200">Paused or idle</p>
+        <p className="mt-0.5 text-xs text-neutral-500">
+          No update from the player in a while. The host&apos;s YouTube Music tab needs to stay open.
         </p>
       </section>
     )
@@ -91,8 +93,8 @@ export function NowPlaying({
 
   return (
     <section
-      className={`ytmq-now-playing-card ytmq-anim-fade-up relative isolate overflow-hidden rounded-2xl border bg-zinc-900 ${
-        stale ? 'border-zinc-800 opacity-90' : ''
+      className={`ytmq-now-playing-card ytmq-anim-fade-up relative isolate overflow-hidden rounded-2xl border bg-neutral-900 ${
+        stale ? 'border-white/10 opacity-90' : ''
       }`}
       style={{
         ...themeStyle,
@@ -125,11 +127,11 @@ export function NowPlaying({
       </div>
       <div
         aria-hidden
-        className="absolute inset-0 -z-10 bg-gradient-to-br from-zinc-950/40 via-zinc-950/30 to-zinc-950/55"
+        className="absolute inset-0 -z-10 bg-gradient-to-br from-neutral-950/40 via-neutral-950/30 to-neutral-950/55"
       />
       <div
         aria-hidden
-        className="absolute inset-0 -z-[5] bg-zinc-950/5 backdrop-blur-[6px]"
+        className="absolute inset-0 -z-[5] bg-neutral-950/5 backdrop-blur-[6px]"
       />
 
       <div
@@ -158,7 +160,7 @@ export function NowPlaying({
             {nowPlaying.title}
           </p>
           {nowPlaying.artist && (
-            <p className="truncate text-xs text-zinc-300 sm:text-sm">
+            <p className="truncate text-xs text-neutral-300 sm:text-sm">
               {nowPlaying.artist}
             </p>
           )}

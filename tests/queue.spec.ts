@@ -60,9 +60,9 @@ test.describe('Queue', () => {
     await selectTab(page, 'Queue')
 
     const row = page.locator('ul li').first()
-    await row.getByRole('button', { name: 'Remove' }).click()
+    await row.getByRole('button', { name: /^Remove/ }).click()
 
-    await expect(page.getByText('Queue is empty')).toBeVisible({
+    await expect(page.getByText('Nothing queued yet')).toBeVisible({
       timeout: 10_000,
     })
   })

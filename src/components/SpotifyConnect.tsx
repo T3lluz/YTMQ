@@ -8,6 +8,7 @@ import {
   subscribeSpotifyAuth,
 } from '../lib/spotifyAuth'
 import { fetchSpotifyProfile } from '../lib/spotifyApi'
+import { PlayerCard, SpotifyIcon, secondaryButton, textButton } from './PlayerCard'
 
 type SpotifyConnectProps = {
   roomId: string
@@ -47,6 +48,8 @@ export function SpotifyConnect({ roomId, playerStatus }: SpotifyConnectProps) {
     setError(null)
   }, [])
 
+  const icon = <SpotifyIcon />
+
   if (linked) {
     const statusMessage =
       playerStatus.state === 'no_device' || playerStatus.state === 'error'
@@ -56,69 +59,38 @@ export function SpotifyConnect({ roomId, playerStatus }: SpotifyConnectProps) {
       playerStatus.state === 'running' || playerStatus.state === 'idle'
 
     return (
-      <section
-        className={`rounded-xl border px-4 py-3 ${
-          following
-            ? 'border-emerald-500/30 bg-emerald-500/10'
-            : 'border-amber-500/30 bg-amber-500/10'
-        }`}
-        aria-label="Spotify connected"
+      <PlayerCard
+        icon={icon}
+        name="Spotify"
+        status={following ? 'live' : 'warn'}
+        statusLabel={`Linked${displayName ? ` as ${displayName}` : ''}`}
       >
-        <div className="flex items-start gap-3">
-          <span
-            className={`text-lg ${following ? 'text-emerald-400' : 'text-amber-300'}`}
-            aria-hidden
-          >
-            {following ? '✓' : '!'}
-          </span>
-          <div className="min-w-0 flex-1">
-            <p
-              className={`font-medium ${
-                following ? 'text-emerald-200' : 'text-amber-100'
-              }`}
-            >
-              Spotify linked
-              {displayName ? ` · ${displayName}` : ''}
-            </p>
-            <p className="text-sm text-zinc-400">
-              {playerStatus.deviceName
-                ? `Following ${playerStatus.deviceName}. Lyrics show whatever is playing.`
-                : 'Play something in the Spotify app and this lobby will follow it.'}
-            </p>
-            {statusMessage && (
-              <p className="mt-1 text-sm text-amber-200">{statusMessage}</p>
-            )}
-            <div className="mt-2 flex flex-wrap gap-3">
-              <a
-                href="https://open.spotify.com"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-xs font-medium text-[#1db954] underline"
-              >
-                Open Spotify
-              </a>
-              <button
-                type="button"
-                onClick={disconnect}
-                className="text-xs text-zinc-500 underline"
-              >
-                Disconnect
-              </button>
-            </div>
-          </div>
+        <p>
+          {playerStatus.deviceName
+            ? `Following ${playerStatus.deviceName}. Now playing and lyrics show whatever plays there.`
+            : 'Play something in any Spotify app and this lobby follows it.'}
+        </p>
+        {statusMessage && <p className="text-amber-200">{statusMessage}</p>}
+        <div className="flex flex-wrap items-center gap-3">
+          <a href="https://open.spotify.com" target="_blank" rel="noopener noreferrer" className={secondaryButton}>
+            Open Spotify
+          </a>
+          <button type="button" onClick={disconnect} className={textButton}>
+            Disconnect
+          </button>
         </div>
-      </section>
+      </PlayerCard>
     )
   }
 
   return (
-    <section className="space-y-3 rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
-      <p className="text-sm text-zinc-400">
-        Log in with Spotify. This lobby then follows whatever is already playing
-        on your phone or computer.
+    <PlayerCard icon={icon} name="Spotify" status="off" statusLabel="Optional">
+      <p>
+        Log in and the lobby follows what you play on Spotify, on any device. Guests see it in now
+        playing and lyrics. The shared queue still goes to YouTube Music.
       </p>
       {error && (
-        <p className="text-sm text-red-400" role="alert">
+        <p className="text-accent-300" role="alert">
           {error}
         </p>
       )}
@@ -126,11 +98,11 @@ export function SpotifyConnect({ roomId, playerStatus }: SpotifyConnectProps) {
         type="button"
         onClick={() => void startLogin()}
         disabled={busy}
-        className="ytmq-press inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#1db954] py-3.5 text-base font-medium text-black hover:brightness-110 disabled:opacity-60"
+        className="ytmq-press inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full bg-[#1ed760] px-5 text-sm font-bold text-black hover:bg-[#3be477] disabled:opacity-60"
       >
         {busy && <span className="ytmq-spinner h-4 w-4" aria-hidden />}
         Connect Spotify
       </button>
-    </section>
+    </PlayerCard>
   )
 }

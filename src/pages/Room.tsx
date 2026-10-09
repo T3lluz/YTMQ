@@ -31,12 +31,14 @@ import {
   announceSessionToExtension,
 } from '../lib/extensionBridge'
 import {
+  clearHostToken,
   endLobby,
   fetchRoom,
   getHostToken,
   verifyRoomPassword,
   type RoomInfo,
 } from '../lib/room'
+import { forgetLobby, rememberLobby } from '../lib/recentLobbies'
 
 // Left-to-right order of the dock tabs. Used to decide which way a panel should
 // slide in: tapping a tab further right slides in from the right, and vice
@@ -83,22 +85,54 @@ function loadSidebarWidth() {
 
 function CenteredScreen({ children }: { children: React.ReactNode }) {
   return (
-    <main className="ytmq-anim-pop mx-auto flex min-h-dvh max-w-lg flex-col items-center justify-center gap-4 p-6 text-center">
+    <main className="ytmq-anim-pop mx-auto flex min-h-dvh max-w-sm flex-col items-center justify-center gap-5 p-6 text-center">
       {children}
     </main>
+  )
+}
+
+function StateIcon({ children, tone = 'neutral' }: { children: React.ReactNode; tone?: 'neutral' | 'accent' }) {
+  return (
+    <div
+      className={`flex h-16 w-16 items-center justify-center rounded-[22px] ${
+        tone === 'accent' ? 'bg-accent-500/15 text-accent-400' : 'bg-white/[0.06] text-neutral-300'
+      }`}
+    >
+      {children}
+    </div>
+  )
+}
+
+function HomeButton() {
+  return (
+    <Link
+      to="/"
+      className="ytmq-press inline-flex min-h-11 items-center rounded-full bg-white px-5 text-sm font-semibold text-neutral-950 hover:bg-neutral-200"
+    >
+      Back to YTMQ
+    </Link>
   )
 }
 
 function RoomUnavailable({ message }: { message: string }) {
   return (
     <CenteredScreen>
-      <p className="text-red-400">{message}</p>
-      <Link
-        to="/"
-        className="ytmq-press text-violet-400 underline underline-offset-2"
-      >
-        Back home
-      </Link>
+      <StateIcon>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-7 w-7" aria-hidden>
+          <path d="M9 18V5l12-2v13" />
+          <circle cx="6" cy="18" r="3" />
+          <circle cx="18" cy="16" r="3" />
+          <path d="m3 3 18 18" />
+        </svg>
+      </StateIcon>
+      <div className="space-y-1.5">
+        <h1 className="text-xl font-bold text-white">{message}</h1>
+        <p className="text-sm text-neutral-400">
+          Lobbies close when the host ends them, or 24 hours after they started. Ask the host
+          for a new code.
+        </p>
+      </div>
+      <HomeButton />
     </CenteredScreen>
   )
 }
@@ -136,8 +170,8 @@ function PasswordGate({
   return (
     <CenteredScreen>
       <form onSubmit={submit} className="ytmq-anim-pop w-full max-w-sm space-y-4">
-        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-500 to-fuchsia-600 shadow-lg shadow-violet-900/40">
-          <svg viewBox="0 0 20 20" fill="currentColor" className="h-7 w-7 text-white" aria-hidden>
+        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-[22px] bg-accent-500/15 text-accent-400">
+          <svg viewBox="0 0 20 20" fill="currentColor" className="h-7 w-7" aria-hidden>
             <path
               fillRule="evenodd"
               d="M10 1.5A3.5 3.5 0 0 0 6.5 5v2H6a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-.5V5A3.5 3.5 0 0 0 10 1.5Zm2 5.5V5a2 2 0 1 0-4 0v2h4Z"
@@ -146,36 +180,35 @@ function PasswordGate({
           </svg>
         </div>
         <div className="space-y-1">
-          <h1 className="text-xl font-semibold">Password required</h1>
-          <p className="text-sm text-zinc-400">
-            Lobby <span className="font-mono">{code}</span> is protected by the
-            host.
+          <h1 className="text-xl font-bold text-white">This lobby has a password</h1>
+          <p className="text-sm text-neutral-400">
+            Ask the host of <span className="font-mono tracking-wider text-neutral-200">{code}</span> for it.
           </p>
         </div>
         <input
           type="password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          placeholder="Enter password"
+          placeholder="Password"
           autoFocus
-          className="min-h-12 w-full rounded-xl border border-zinc-700 bg-zinc-900 px-4 text-center outline-none transition-colors focus:border-violet-500"
+          className="min-h-12 w-full rounded-xl border border-white/10 bg-neutral-900 px-4 text-center outline-none transition-colors focus:border-white/40"
         />
         {error && (
-          <p className="ytmq-anim-fade text-sm text-red-400" role="alert">
+          <p className="ytmq-anim-fade text-sm text-accent-300" role="alert">
             {error}
           </p>
         )}
         <button
           type="submit"
           disabled={busy}
-          className="ytmq-press inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-br from-violet-500 to-violet-700 px-4 text-lg font-medium text-white shadow-lg shadow-violet-900/30 hover:brightness-110 disabled:opacity-60"
+          className="ytmq-press inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-full bg-accent-600 px-4 text-base font-semibold text-white hover:bg-accent-500 disabled:opacity-60"
         >
           {busy && <span className="ytmq-spinner h-4 w-4" aria-hidden />}
-          {busy ? 'Checking…' : 'Enter'}
+          {busy ? 'Checking…' : 'Go in'}
         </button>
         <Link
           to="/"
-          className="block text-sm text-zinc-500 underline underline-offset-2 hover:text-zinc-300"
+          className="block text-sm text-neutral-500 underline underline-offset-2 hover:text-neutral-300"
         >
           Back home
         </Link>
@@ -360,6 +393,7 @@ export function Room() {
           return
         }
         setRoom(info)
+        rememberLobby(roomId, info.code, Boolean(getHostToken(roomId)))
         // Hosts are always "HOST" — never prompt them for a name.
         let stored = getNickname(roomId)
         if (!stored && getHostToken(roomId)) {
@@ -410,8 +444,8 @@ export function Room() {
   if (roomLoading) {
     return (
       <main className="mx-auto flex min-h-dvh max-w-lg flex-col items-center justify-center gap-3 p-6">
-        <span className="ytmq-spinner h-7 w-7 text-violet-400" aria-hidden />
-        <p className="ytmq-anim-fade text-zinc-400">Loading lobby…</p>
+        <span className="ytmq-spinner h-6 w-6 text-neutral-400" aria-hidden />
+        <p className="ytmq-anim-fade text-sm text-neutral-500">Opening the lobby…</p>
       </main>
     )
   }
@@ -442,21 +476,21 @@ export function Room() {
   if (status === 'kicked') {
     return (
       <CenteredScreen>
-        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-red-500/15 text-2xl">
-          👋
-        </div>
-        <div className="space-y-1">
-          <h1 className="text-xl font-semibold">Removed from the lobby</h1>
-          <p className="text-sm text-zinc-400">
-            The host removed you from this session.
+        <StateIcon tone="accent">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-7 w-7" aria-hidden>
+            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+            <circle cx="9" cy="7" r="4" />
+            <path d="m17 8 5 5" />
+            <path d="m22 8-5 5" />
+          </svg>
+        </StateIcon>
+        <div className="space-y-1.5">
+          <h1 className="text-xl font-bold text-white">The host removed you</h1>
+          <p className="text-sm text-neutral-400">
+            You can&apos;t add songs to this lobby any more.
           </p>
         </div>
-        <Link
-          to="/"
-          className="ytmq-press text-violet-400 underline underline-offset-2"
-        >
-          Back home
-        </Link>
+        <HomeButton />
       </CenteredScreen>
     )
   }
@@ -464,21 +498,19 @@ export function Room() {
   if (status === 'locked' && !isHost) {
     return (
       <CenteredScreen>
-        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-500/15 text-2xl">
-          🔒
-        </div>
-        <div className="space-y-1">
-          <h1 className="text-xl font-semibold">Lobby is locked</h1>
-          <p className="text-sm text-zinc-400">
-            The host has stopped new people from joining.
+        <StateIcon>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-7 w-7" aria-hidden>
+            <rect x="4" y="11" width="16" height="10" rx="2.5" />
+            <path d="M8 11V7a4 4 0 1 1 8 0v4" />
+          </svg>
+        </StateIcon>
+        <div className="space-y-1.5">
+          <h1 className="text-xl font-bold text-white">This lobby is locked</h1>
+          <p className="text-sm text-neutral-400">
+            The host stopped new people from joining. Ask them to unlock it in Admin.
           </p>
         </div>
-        <Link
-          to="/"
-          className="ytmq-press text-violet-400 underline underline-offset-2"
-        >
-          Back home
-        </Link>
+        <HomeButton />
       </CenteredScreen>
     )
   }
@@ -509,7 +541,8 @@ export function Room() {
           showToast('Could not end lobby', 'error')
           return
         }
-        sessionStorage.removeItem(`ytmq_host_${activeRoomId}`)
+        clearHostToken(activeRoomId)
+        forgetLobby(activeRoomId)
         sessionStorage.removeItem(`ytmq_ytm_connected_${activeRoomId}`)
         clearPlaybackSession(activeRoomId)
         // Stop the extension from re-linking YouTube Music to a dead lobby.
@@ -534,8 +567,10 @@ export function Room() {
   // owns its own internal scroll regions and lays content out to fill the space.
   // Mobile keeps the original scrolling page.
   const onAdd = async (track: AddTrackInput, mode: QueueInsertMode) => {
-    await addTrack(track, mode)
+    await addTrack(hostToken ? { ...track, host_token: hostToken } : track, mode)
   }
+  // The host can always add; the switch in Admin is for guests.
+  const canAdd = isHost || settings.allow_guest_add
   const onAdded = (title: string, mode: QueueInsertMode) =>
     showToast(
       mode === 'queue'
@@ -572,7 +607,7 @@ export function Room() {
             <SearchTab
               fillHeight={showSidebar}
               nickname={nickname}
-              canAdd={settings.allow_guest_add}
+              canAdd={canAdd}
               onAdd={onAdd}
               onAdded={onAdded}
             />
@@ -588,7 +623,7 @@ export function Room() {
             loading={loading}
             busyId={busyId}
             editable={isHost || settings.allow_guest_remove}
-            allowGuestAdd={settings.allow_guest_add}
+            allowGuestAdd={canAdd}
             deskScroll={showSidebar ? deskScroll : undefined}
             onRemove={handleQueueRemove}
             onAdd={onAdd}
@@ -647,8 +682,8 @@ export function Room() {
     <main
       className={
         showSidebar
-          ? 'h-dvh overflow-hidden'
-          : `pb-[calc(6rem+env(safe-area-inset-bottom))] ${
+          ? 'ytmq-app h-dvh overflow-hidden'
+          : `ytmq-app pb-[calc(6rem+env(safe-area-inset-bottom))] ${
               lyricsPanelHeight ? 'h-dvh' : 'min-h-dvh'
             }`
       }
@@ -701,7 +736,7 @@ export function Room() {
               onClick={() => setSidebarCollapsed(true)}
               aria-label="Hide now playing panel"
               title="Hide panel"
-              className="ytmq-press absolute right-3 top-3 z-10 flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-zinc-950/60 text-zinc-300 backdrop-blur-md hover:bg-zinc-900/80 hover:text-white"
+              className="ytmq-press absolute right-3 top-3 z-10 flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-neutral-950/60 text-neutral-300 backdrop-blur-md hover:bg-neutral-900/80 hover:text-white"
             >
               <CollapseSidebarIcon className="h-5 w-5" />
             </button>
@@ -713,7 +748,7 @@ export function Room() {
               onPointerDown={startSidebarResize}
               className="ytmq-resize-handle group absolute inset-y-0 right-0 z-10 flex w-3 cursor-col-resize items-center justify-center"
             >
-              <span className="h-12 w-1 rounded-full bg-white/15 transition-colors group-hover:bg-violet-400/70" />
+              <span className="h-12 w-1 rounded-full bg-white/15 transition-colors group-hover:bg-white/50" />
             </div>
           </div>
         )}
@@ -727,7 +762,7 @@ export function Room() {
         >
           <div className="mb-3 flex shrink-0 items-center justify-end gap-2">
             {isHost && (
-              <span className="rounded-full border border-violet-500/40 bg-violet-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-violet-200">
+              <span className="rounded-full bg-accent-500/15 px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.08em] text-accent-300">
                 Host
               </span>
             )}
@@ -775,7 +810,7 @@ export function Room() {
           onClick={() => setSidebarCollapsed(false)}
           aria-label="Show now playing panel"
           title="Show panel"
-          className="ytmq-anim-fade ytmq-press fixed left-4 top-4 z-30 flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-zinc-950/60 text-zinc-300 shadow-lg shadow-black/30 backdrop-blur-md hover:bg-zinc-900/80 hover:text-white lg:left-6"
+          className="ytmq-anim-fade ytmq-press fixed left-4 top-4 z-30 flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-neutral-950/60 text-neutral-300 shadow-lg shadow-black/30 backdrop-blur-md hover:bg-neutral-900/80 hover:text-white lg:left-6"
         >
           <OpenSidebarIcon className="h-5 w-5" />
         </button>

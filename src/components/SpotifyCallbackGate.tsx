@@ -60,7 +60,7 @@ export function SpotifyCallbackGate({ children }: { children: ReactNode }) {
     return (
       <main className="mx-auto flex min-h-dvh max-w-lg flex-col items-center justify-center gap-3 p-6 text-center">
         <span className="ytmq-spinner h-7 w-7 text-[#1db954]" aria-hidden />
-        <p className="text-zinc-300">Connecting Spotify…</p>
+        <p className="text-neutral-300">Connecting Spotify…</p>
       </main>
     )
   }

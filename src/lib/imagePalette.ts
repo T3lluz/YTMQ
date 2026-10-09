@@ -7,11 +7,11 @@ export type ImagePalette = {
 }
 
 export const DEFAULT_IMAGE_PALETTE: ImagePalette = {
-  accent: '#8b5cf6',
-  accentRgb: [139, 92, 246],
-  accentLight: '#a78bfa',
-  accentMuted: 'rgba(139, 92, 246, 0.22)',
-  accentSoft: 'rgba(139, 92, 246, 0.12)',
+  accent: '#f5492f',
+  accentRgb: [245, 73, 47],
+  accentLight: '#ff8a73',
+  accentMuted: 'rgba(245, 73, 47, 0.22)',
+  accentSoft: 'rgba(245, 73, 47, 0.12)',
 }
 
 type Rgb = { r: number; g: number; b: number }

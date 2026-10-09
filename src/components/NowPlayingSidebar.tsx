@@ -114,17 +114,21 @@ export function NowPlayingSidebar({
   if (!nowPlaying) {
     return (
       <aside
-        className={`relative isolate flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900/40 ${className}`}
+        className={`relative isolate flex h-full min-h-0 flex-col overflow-hidden rounded-3xl bg-neutral-900/60 ${className}`}
       >
         <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-zinc-800/70 text-2xl">
-            ♪
+          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/[0.06] text-neutral-400">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6" aria-hidden>
+              <path d="M9 18V5l12-2v13" />
+              <circle cx="6" cy="18" r="3" />
+              <circle cx="18" cy="16" r="3" />
+            </svg>
           </div>
-          <p className="text-sm font-medium text-zinc-300">Nothing playing</p>
-          <p className="max-w-[14rem] text-sm text-zinc-500">
+          <p className="text-base font-bold text-white">Nothing playing yet</p>
+          <p className="max-w-[15rem] text-sm text-neutral-500">
             {connected
-              ? 'Album art and lyrics will appear here once a song starts.'
-              : 'Connect YouTube Music or Spotify as host to follow along here.'}
+              ? 'Art, progress and controls show up here when the next song starts.'
+              : 'When the host links YouTube Music or Spotify, the current song shows up here.'}
           </p>
         </div>
       </aside>
@@ -224,7 +228,7 @@ export function NowPlayingSidebar({
               {nowPlaying.title}
             </p>
             {nowPlaying.artist && (
-              <p className="truncate text-sm text-zinc-300">
+              <p className="truncate text-sm text-neutral-300">
                 {nowPlaying.artist}
               </p>
             )}

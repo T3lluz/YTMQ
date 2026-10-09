@@ -11,10 +11,10 @@ export async function enterNickname(
   page: Page,
   nickname = 'TestGuest',
 ) {
-  const dialog = page.getByRole('dialog', { name: 'Choose a nickname' })
+  const dialog = page.getByRole('dialog', { name: 'What should we call you?' })
   await dialog.waitFor({ state: 'visible', timeout: 5_000 })
-  await dialog.getByPlaceholder('Your name on the queue').fill(nickname)
-  await dialog.getByRole('button', { name: 'Continue' }).click()
+  await dialog.getByPlaceholder('Your name').fill(nickname)
+  await dialog.getByRole('button', { name: 'Start adding songs' }).click()
   await dialog.waitFor({ state: 'hidden', timeout: 5_000 })
 }
 
@@ -40,8 +40,8 @@ export async function joinLobbyWithNickname(
   code: string,
   nickname = 'TestGuest',
 ) {
-  await page.getByPlaceholder('ABC123').fill(code)
-  await page.getByPlaceholder('Your name on the queue').fill(nickname)
+  await page.getByLabel('Lobby code').fill(code)
+  await page.getByLabel('Your name').fill(nickname)
   await page.getByRole('button', { name: 'Join' }).click()
 }
 
@@ -51,7 +51,7 @@ export async function goToGuestRoom(
   nickname = 'TestGuest',
 ) {
   await gotoApp(page, `room/${roomId}`)
-  const dialog = page.getByRole('dialog', { name: 'Choose a nickname' })
+  const dialog = page.getByRole('dialog', { name: 'What should we call you?' })
   if (await dialog.isVisible().catch(() => false)) {
     await enterNickname(page, nickname)
   }
@@ -88,7 +88,7 @@ export async function searchAndAddFirstResult(
   mode: 'Play next' | 'Add to queue' = 'Play next',
 ) {
   await selectTab(page, 'Search')
-  const input = page.getByPlaceholder(/search songs/i)
+  const input = page.getByPlaceholder(/songs or artists/i)
   await input.fill(query)
   const addButton = page.getByRole('button', { name: mode }).first()
   await addButton.waitFor({ state: 'visible', timeout: 20_000 })

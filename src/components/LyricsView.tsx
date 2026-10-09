@@ -75,11 +75,11 @@ export function LyricsBackdrop({
       </div>
       <div
         aria-hidden
-        className="absolute inset-0 -z-10 bg-gradient-to-b from-zinc-950/55 via-zinc-950/45 to-zinc-950/70"
+        className="absolute inset-0 -z-10 bg-gradient-to-b from-neutral-950/55 via-neutral-950/45 to-neutral-950/70"
       />
       <div
         aria-hidden
-        className="absolute inset-0 -z-[5] bg-zinc-950/10 backdrop-blur-md"
+        className="absolute inset-0 -z-[5] bg-neutral-950/10 backdrop-blur-md"
       />
     </>
   )
@@ -368,7 +368,7 @@ export function LyricsScreen({
         ref={sectionRef}
         className={`ytmq-lyrics ytmq-tab-panel isolate flex min-h-[24rem] flex-1 flex-col overflow-hidden border ${
           fullscreen
-            ? 'ytmq-lyrics-fullscreen fixed inset-0 z-40 rounded-none bg-zinc-950'
+            ? 'ytmq-lyrics-fullscreen fixed inset-0 z-40 rounded-none bg-neutral-950'
             : 'relative rounded-2xl'
         }`}
         style={{ ...themeStyle, borderColor: 'var(--np-accent-border)' }}
@@ -398,7 +398,7 @@ export function LyricsScreen({
             <h2 className="font-lyrics text-2xl font-extrabold tracking-tight text-white drop-shadow sm:text-3xl">
               Nothing playing
             </h2>
-            <p className="mx-auto max-w-sm text-sm text-zinc-300/90">
+            <p className="mx-auto max-w-sm text-sm text-neutral-300/90">
               {connected
                 ? 'Press play in YouTube Music or Spotify and the lyrics will light up here.'
                 : 'Connect YouTube Music or Spotify as host to follow along with synced lyrics.'}
@@ -415,7 +415,7 @@ export function LyricsScreen({
           >
             <span
               className={`h-2 w-2 rounded-full ${
-                connected ? 'bg-emerald-400' : 'bg-zinc-500'
+                connected ? 'bg-emerald-400' : 'bg-neutral-500'
               }`}
             />
             {connected ? 'Connected · waiting for playback' : 'Not connected'}
@@ -463,7 +463,7 @@ export function LyricsScreen({
       ref={sectionRef}
       className={`ytmq-lyrics ytmq-tab-panel isolate flex min-h-0 flex-1 flex-col overflow-hidden border ${
         fullscreen
-          ? 'ytmq-lyrics-fullscreen fixed inset-0 z-40 rounded-none bg-zinc-950'
+          ? 'ytmq-lyrics-fullscreen fixed inset-0 z-40 rounded-none bg-neutral-950'
           : 'relative rounded-2xl'
       }`}
       style={
@@ -598,7 +598,7 @@ function ArtPanel({
             {title}
           </p>
           {artist && (
-            <p className="truncate text-base text-zinc-300 lg:text-lg">{artist}</p>
+            <p className="truncate text-base text-neutral-300 lg:text-lg">{artist}</p>
           )}
         </div>
 
@@ -650,7 +650,7 @@ function ArtPanel({
           {title}
         </p>
         {artist && (
-          <p className="truncate text-xs text-zinc-300 sm:text-sm">{artist}</p>
+          <p className="truncate text-xs text-neutral-300 sm:text-sm">{artist}</p>
         )}
       </div>
       {hasDuration && (
@@ -1382,10 +1382,10 @@ function SyncedLyrics({ lines, position, dim }: SyncedLyricsProps) {
 function PlainLyrics({ text }: { text: string }) {
   return (
     <div className="ytmq-lyrics-scroll h-full overflow-y-auto px-1 py-2">
-      <p className="mb-3 text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
+      <p className="mb-3 text-[10px] font-semibold uppercase tracking-wider text-neutral-400">
         Live sync unavailable for this track
       </p>
-      <pre className="ytmq-lyrics-plain whitespace-pre-wrap font-sans leading-relaxed text-zinc-200">
+      <pre className="ytmq-lyrics-plain whitespace-pre-wrap font-sans leading-relaxed text-neutral-200">
         {text}
       </pre>
     </div>

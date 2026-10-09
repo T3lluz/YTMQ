@@ -23,6 +23,8 @@ export type AddTrackInput = {
   thumbnail_url?: string
   added_by?: string
   insert_mode?: QueueInsertMode
+  /** The host's token, so the host can add while guest adds are off. */
+  host_token?: string
 }
 
 export async function fetchQueueItems(roomId: string): Promise<QueueItem[]> {
@@ -45,6 +47,7 @@ export async function addTrackToQueue(
     thumbnail_url: track.thumbnail_url ?? '',
     added_by: track.added_by ?? '',
     insert_mode: track.insert_mode ?? 'play_next',
+    ...(track.host_token ? { host_token: track.host_token } : {}),
   })
 }
 
@@ -71,7 +74,7 @@ export function defaultThumbnail(videoId: string) {
 /** Placeholder avatar for artists when YT Music omits thumbnail art. */
 export function defaultArtistThumbnail(name = '?'): string {
   const initial = (name.trim()[0] ?? '?').toUpperCase()
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128"><rect fill="#3f3f46" width="128" height="128"/><text x="50%" y="54%" dominant-baseline="middle" text-anchor="middle" fill="#a78bfa" font-family="system-ui,sans-serif" font-size="52" font-weight="600">${initial}</text></svg>`
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128"><rect fill="#262626" width="128" height="128"/><text x="50%" y="54%" dominant-baseline="middle" text-anchor="middle" fill="#ff6b52" font-family="system-ui,sans-serif" font-size="52" font-weight="600">${initial}</text></svg>`
   return `data:image/svg+xml,${encodeURIComponent(svg)}`
 }
 

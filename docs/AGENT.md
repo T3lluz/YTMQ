@@ -72,7 +72,12 @@ No secrets. `VITE_API_URL` is optional (defaults to the app's own origin + `/ytm
 |------|---------|
 | `/ytmq/` | Create lobby \| Join with code |
 | `/ytmq/room/:roomId` | Guest (and host) room: Search \| Queue \| Lyrics \| Room \| Admin |
-| `/ytmq/host/:roomId` | Host entry; `host_token` lives in `sessionStorage` |
+| `/ytmq/host/:roomId` | Old host entry, forwards to the room |
+| `/ytmq/join?code=` | Join form (code prefilled from the homepage) |
+| `/ytmq/docs`, `/ytmq/docs/:slug` | Public docs (`src/pages/docs/`), its own lazy chunk |
+| `/ytmq/setup` | Redirects to `/ytmq/docs/install` (old links and extension builds before 1.11) |
+
+The host token lives in `localStorage` for 24 hours (`src/lib/room.ts`), so closing the tab keeps Admin. Lobbies this device was in are listed on the homepage (`src/lib/recentLobbies.ts`).
 
 ---
 

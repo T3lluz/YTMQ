@@ -1,13 +1,14 @@
 import { useAnimatedList } from '../hooks/useAnimatedList'
 import type { PresenceParticipant } from '../hooks/useRoomPresence'
 
+// Flat, muted tones; the name carries the identity, not a gradient.
 const AVATAR_COLORS = [
-  'from-violet-500 to-fuchsia-600',
-  'from-sky-500 to-indigo-600',
-  'from-emerald-500 to-teal-600',
-  'from-amber-500 to-orange-600',
-  'from-rose-500 to-pink-600',
-  'from-cyan-500 to-blue-600',
+  'bg-[#3b4a6b] text-[#c9d6f5]',
+  'bg-[#4a3b2a] text-[#f2d2a9]',
+  'bg-[#2f4d3f] text-[#bfe8d2]',
+  'bg-[#553040] text-[#f5c6d6]',
+  'bg-[#3d3a5c] text-[#d5d1f7]',
+  'bg-[#4d4a2a] text-[#ece5a8]',
 ]
 
 function avatarColor(seed: string) {
@@ -62,7 +63,7 @@ export function ParticipantList({
 
   if (participants.length === 0) {
     return (
-      <p className="ytmq-anim-fade rounded-xl border border-dashed border-zinc-800 bg-zinc-900/30 px-4 py-6 text-center text-sm text-zinc-500">
+      <p className="ytmq-anim-fade rounded-2xl bg-white/[0.03] px-4 py-6 text-center text-sm text-neutral-500">
         {emptyHint}
       </p>
     )
@@ -73,21 +74,21 @@ export function ParticipantList({
       {entries.map(({ key, item, leaving }) => (
         <li
           key={key}
-          className={`mb-2 flex items-center gap-3 rounded-xl border border-zinc-800 bg-zinc-900/70 p-2.5 ${
+          className={`mb-1 flex items-center gap-3 rounded-xl px-2 py-2 transition-colors hover:bg-white/[0.04] ${
             leaving ? 'ytmq-leaving' : 'ytmq-anim-row'
           }`}
         >
           <div className="relative shrink-0">
             <span
-              className={`flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br ${avatarColor(
+              className={`flex h-9 w-9 items-center justify-center rounded-full ${avatarColor(
                 item.client_id,
-              )} text-xs font-bold text-white`}
+              )} text-xs font-bold`}
             >
               {initials(item.nickname)}
             </span>
             <span
-              className={`absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-zinc-900 ${
-                item.online ? 'bg-emerald-400' : 'bg-zinc-600'
+              className={`absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-neutral-950 ${
+                item.online ? 'bg-emerald-400' : 'bg-neutral-600'
               }`}
               title={item.online ? 'Online' : 'Away'}
             />
@@ -96,12 +97,12 @@ export function ParticipantList({
             <p className="truncate text-sm font-medium">
               {item.nickname || 'Guest'}
               {item.isSelf && (
-                <span className="ml-1.5 text-xs font-normal text-zinc-500">
+                <span className="ml-1.5 text-xs font-normal text-neutral-500">
                   (you)
                 </span>
               )}
             </p>
-            <p className="text-xs text-zinc-500">
+            <p className="text-xs text-neutral-500">
               {item.online ? 'Listening now' : 'Away'}
             </p>
           </div>
@@ -110,7 +111,7 @@ export function ParticipantList({
               type="button"
               disabled={busyId === item.client_id}
               onClick={() => onKick(item.client_id, item.nickname)}
-              className="ytmq-press inline-flex items-center gap-1.5 rounded-lg border border-red-900/60 px-2.5 py-1.5 text-xs font-medium text-red-300 hover:border-red-700 hover:bg-red-950/50 disabled:opacity-40"
+              className="ytmq-press inline-flex items-center gap-1.5 rounded-full bg-white/[0.06] px-3 py-1.5 text-xs font-semibold text-neutral-300 hover:bg-accent-500/15 hover:text-accent-300 disabled:opacity-40"
               aria-label={`Remove ${item.nickname || 'guest'}`}
             >
               {busyId === item.client_id ? (
@@ -135,7 +136,7 @@ type ListenersBadgeProps = {
 export function ListenersBadge({ count, className = '' }: ListenersBadgeProps) {
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded-full border border-zinc-700/70 bg-zinc-900/70 px-2.5 py-1 text-xs font-medium text-zinc-300 backdrop-blur ${className}`}
+      className={`inline-flex items-center gap-1.5 rounded-full bg-white/[0.06] px-2.5 py-1 text-xs font-semibold text-neutral-300 ${className}`}
       aria-label={`${count} listening`}
     >
       <span className="relative flex h-2 w-2">
@@ -144,11 +145,11 @@ export function ListenersBadge({ count, className = '' }: ListenersBadgeProps) {
         )}
         <span
           className={`relative inline-flex h-2 w-2 rounded-full ${
-            count > 0 ? 'bg-emerald-400' : 'bg-zinc-600'
+            count > 0 ? 'bg-emerald-400' : 'bg-neutral-600'
           }`}
         />
       </span>
-      {count} {count === 1 ? 'listening' : 'listening'}
+      {count} listening
     </span>
   )
 }

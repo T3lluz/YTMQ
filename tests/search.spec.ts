@@ -8,7 +8,7 @@ test.describe('Search', () => {
     await goToGuestRoom(page, lobby.room_id)
 
     await selectTab(page, 'Search')
-    await page.getByPlaceholder(/search songs/i).fill('daft punk')
+    await page.getByPlaceholder(/songs or artists/i).fill('daft punk')
 
     await expect(
       page.getByRole('button', { name: 'Play next' }).first(),
@@ -28,7 +28,7 @@ test.describe('Search', () => {
       'aria-selected',
       'true',
     )
-    await expect(page.getByPlaceholder(/search songs/i)).toBeVisible()
+    await expect(page.getByPlaceholder(/songs or artists/i)).toBeVisible()
 
     await page.getByRole('tab', { name: 'Artists' }).click()
     await expect(page.getByRole('tab', { name: 'Artists' })).toHaveAttribute(
@@ -38,7 +38,7 @@ test.describe('Search', () => {
     await expect(page.getByPlaceholder(/search artists/i)).toBeVisible()
 
     await page.getByRole('tab', { name: 'Songs' }).click()
-    await expect(page.getByPlaceholder(/search songs/i)).toBeVisible()
+    await expect(page.getByPlaceholder(/songs or artists/i)).toBeVisible()
   })
 
   test('artist view lists popular songs', async ({ page }) => {

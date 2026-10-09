@@ -1,10 +1,25 @@
 @import 'tailwindcss';
 
 @theme {
-  --font-sans: system-ui, 'Segoe UI', Roboto, sans-serif;
-  /* Spotify ships the proprietary "Circular" typeface; Montserrat is the
-     closest free geometric sans and is used for lyric display. */
-  --font-lyrics: 'Montserrat', system-ui, 'Segoe UI', Roboto, sans-serif;
+  /* Figtree is the closest free cousin of Spotify's Circular: round, a bit
+     wide, holds up at 800 for lyrics. One family for the whole app. */
+  --font-sans: 'Figtree', system-ui, 'Segoe UI', Roboto, sans-serif;
+  --font-lyrics: 'Figtree', system-ui, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* YTMQ red. 600 carries white text at 4.6:1; 400 is the one for text and
+     icons on the dark background. */
+  --color-accent-50: #fff3f1;
+  --color-accent-100: #ffe3de;
+  --color-accent-200: #ffc9bf;
+  --color-accent-300: #ffa392;
+  --color-accent-400: #ff6b52;
+  --color-accent-500: #f5492f;
+  --color-accent-600: #d93a26;
+  --color-accent-700: #b52d1c;
+  --color-accent-800: #93281b;
+  --color-accent-900: #79251b;
+  --color-accent-950: #42100a;
   --ease-spring: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-out-soft: cubic-bezier(0.16, 1, 0.3, 1);
 }
@@ -24,18 +39,14 @@ html {
 body {
   margin: 0;
   overflow-x: clip;
-  @apply bg-zinc-950 text-zinc-100 font-sans antialiased;
-  background-image:
-    radial-gradient(60rem 60rem at 100% -10%, rgba(139, 92, 246, 0.08), transparent 60%),
-    radial-gradient(50rem 50rem at -10% 110%, rgba(139, 92, 246, 0.06), transparent 55%);
-  background-attachment: fixed;
+  @apply bg-neutral-950 text-neutral-100 font-sans antialiased;
 }
 
 * {
   -webkit-tap-highlight-color: transparent;
 }
 
-/* Desktop dock: shrinks when idle, springs up on hover / keyboard focus. */
+/* The floating tab dock at the bottom of a room. */
 .ytmq-dock-nav {
   transform-origin: bottom center;
   transition:
@@ -49,62 +60,51 @@ body {
   overflow: visible;
 }
 
+/* Desktop: a touch larger, since it is the only navigation on screen. */
 @media (min-width: 768px) and (hover: hover) {
   .ytmq-dock-nav {
-    transform: scale(1.12);
-    opacity: 0.6;
-  }
-
-  /* Invisible proximity zone so the dock wakes up before the cursor lands on it. */
-  .ytmq-dock::before {
-    content: '';
-    position: absolute;
-    inset: -2.25rem -2.75rem;
-    z-index: -1;
-  }
-
-  .ytmq-dock:hover .ytmq-dock-nav,
-  .ytmq-dock:has(:focus-visible) .ytmq-dock-nav {
-    transform: scale(1.2);
-    opacity: 1;
+    transform: scale(1.08);
   }
 }
 
-/* Disable text/element selection app-wide so nothing picks up a browser
-   selection highlight on click — except real text-entry fields. */
-*,
-*::before,
-*::after {
+/* The room is an app, not a document: taps on rows and buttons should not
+   leave a selection behind. Docs and the landing page keep normal text
+   selection so people can copy commands and API examples. */
+.ytmq-app,
+.ytmq-app *,
+.ytmq-app *::before,
+.ytmq-app *::after {
   -webkit-user-select: none;
   user-select: none;
 }
 
-input,
-textarea,
-[contenteditable='true'] {
+.ytmq-app input,
+.ytmq-app textarea,
+.ytmq-app [contenteditable='true'] {
   -webkit-user-select: text;
   user-select: text;
 }
 
 ::selection {
-  background: rgba(139, 92, 246, 0.35);
+  background: rgba(245, 73, 47, 0.4);
+  color: #fff;
 }
 
 /* Subtle, app-wide custom scrollbar */
 * {
   scrollbar-width: thin;
-  scrollbar-color: rgba(113, 113, 122, 0.4) transparent;
+  scrollbar-color: rgba(115, 115, 115, 0.4) transparent;
 }
 *::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 *::-webkit-scrollbar-thumb {
-  background: rgba(113, 113, 122, 0.35);
+  background: rgba(115, 115, 115, 0.35);
   border-radius: 9999px;
 }
 *::-webkit-scrollbar-thumb:hover {
-  background: rgba(113, 113, 122, 0.55);
+  background: rgba(115, 115, 115, 0.55);
 }
 
 /* Horizontal filter rails hide their scrollbar but stay swipe/scrollable. */
@@ -120,7 +120,7 @@ textarea,
    their own coloured border on focus, so the extra browser outline is redundant
    and reads like a stray "selection" box. */
 :focus-visible:not(input):not(textarea) {
-  outline: 2px solid rgba(139, 92, 246, 0.7);
+  outline: 2px solid rgba(255, 255, 255, 0.85);
   outline-offset: 2px;
   border-radius: 0.5rem;
 }
@@ -549,7 +549,7 @@ textarea,
 .ytmq-skeleton {
   position: relative;
   overflow: hidden;
-  background: rgba(39, 39, 42, 0.7);
+  background: rgba(38, 38, 38, 0.7);
 }
 .ytmq-skeleton::after {
   content: '';

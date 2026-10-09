@@ -19,7 +19,7 @@ export function SharePanel({ roomId, code, onCopied }: SharePanelProps) {
         <img
           src={qrDataUrl}
           alt={`QR code for room ${code}`}
-          className="ytmq-anim-pop max-w-full rounded-xl bg-white p-2"
+          className="ytmq-anim-pop max-w-full rounded-2xl bg-white p-2.5"
           width={220}
           height={220}
         />
@@ -32,11 +32,11 @@ export function SharePanel({ roomId, code, onCopied }: SharePanelProps) {
       )}
 
       <div className="w-full min-w-0 space-y-2 text-center">
-        <p className="text-sm text-zinc-500">Room code</p>
-        <p className="font-mono text-2xl tracking-widest sm:text-3xl">{code}</p>
+        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-neutral-500">Lobby code</p>
+        <p className="font-mono text-3xl font-medium tracking-[0.25em] text-white">{code}</p>
       </div>
 
-      <p className="w-full min-w-0 break-all rounded-lg bg-zinc-900 p-3 text-center text-sm text-zinc-300">
+      <p className="w-full min-w-0 break-all rounded-xl bg-white/[0.04] px-3 py-2.5 text-center font-mono text-xs text-neutral-400 select-text">
         {link}
       </p>
 
@@ -44,18 +44,18 @@ export function SharePanel({ roomId, code, onCopied }: SharePanelProps) {
         <button
           type="button"
           onClick={() => void copy('code')}
-          className="ytmq-press inline-flex min-h-12 items-center justify-center gap-1.5 rounded-xl border border-zinc-700 px-3 text-sm font-medium hover:border-zinc-600 hover:bg-zinc-900"
+          className="ytmq-press inline-flex min-h-11 items-center justify-center gap-1.5 rounded-full bg-white/[0.08] px-3 text-sm font-semibold text-white hover:bg-white/[0.14]"
         >
           {copied === 'code' && <CopiedCheck />}
-          {copied === 'code' ? 'Copied!' : 'Copy code'}
+          {copied === 'code' ? 'Copied' : 'Copy code'}
         </button>
         <button
           type="button"
           onClick={() => void copy('link')}
-          className="ytmq-press inline-flex min-h-12 items-center justify-center gap-1.5 rounded-xl bg-violet-600 px-3 text-sm font-medium text-white hover:bg-violet-500"
+          className="ytmq-press inline-flex min-h-11 items-center justify-center gap-1.5 rounded-full bg-white px-3 text-sm font-semibold text-neutral-950 hover:bg-neutral-200"
         >
           {copied === 'link' && <CopiedCheck />}
-          {copied === 'link' ? 'Copied!' : 'Copy link'}
+          {copied === 'link' ? 'Copied' : 'Copy link'}
         </button>
       </div>
     </div>

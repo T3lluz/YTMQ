@@ -5,33 +5,31 @@ test.describe('Home', () => {
   test('shows branding and navigation actions', async ({ page }) => {
     await gotoApp(page)
 
-    await expect(page.getByRole('heading', { name: 'YTMQ' })).toBeVisible()
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText(/Everyone picks/)
     await expect(
-      page.getByText('Shared queue for YouTube Music and Spotify'),
+      page.getByRole('button', { name: 'Host a lobby' }),
     ).toBeVisible()
-    await expect(
-      page.getByRole('button', { name: 'Create lobby' }),
-    ).toBeVisible()
-    await expect(page.getByRole('link', { name: 'Join with code' })).toBeVisible()
+    await expect(page.getByLabel('Lobby code')).toBeVisible()
   })
 
-  test('navigates to join page', async ({ page }) => {
+  test('a code on the homepage opens the join form with it filled in', async ({ page }) => {
     await gotoApp(page)
-    await page.getByRole('link', { name: 'Join with code' }).click()
-    await expect(page).toHaveURL(/\/ytmq\/join\/?$/)
-    await expect(page.getByRole('heading', { name: 'Join lobby' })).toBeVisible()
+    await page.getByLabel('Lobby code').fill('abc123')
+    await page.getByRole('button', { name: 'Join' }).click()
+    await expect(page).toHaveURL(/\/ytmq\/join\?code=ABC123$/)
+    await expect(page.getByRole('heading', { name: 'Join a lobby' })).toBeVisible()
+    await expect(page.getByLabel('Lobby code')).toHaveValue('ABC123')
   })
 
   test('create lobby opens host view without asking for a name', async ({
     page,
   }) => {
     await gotoApp(page)
-    await page.getByRole('button', { name: 'Create lobby' }).click()
+    await page.getByRole('button', { name: 'Host a lobby' }).click()
 
     await expect(page).toHaveURL(/\/ytmq\/room\/[0-9a-f-]{36}\/?$/, {
       timeout: 15_000,
     })
-    await expect(page.getByText('Queue mirror')).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Copy link' })).toBeVisible()
+    await expect(page.getByRole('button', { name: /^Admin/ })).toBeVisible()
   })
 })

@@ -17,3 +17,24 @@ export function setNickname(roomId: string, nickname: string) {
     sessionStorage.removeItem(nicknameKey(roomId))
   }
 }
+
+const LAST_NICKNAME_KEY = 'ytmq_last_nickname'
+
+/** The name this device used last time, to fill in the next join form. */
+export function lastNickname(): string {
+  try {
+    return localStorage.getItem(LAST_NICKNAME_KEY) ?? ''
+  } catch {
+    return ''
+  }
+}
+
+export function rememberNickname(nickname: string) {
+  const trimmed = nickname.trim()
+  if (!trimmed || trimmed === HOST_NICKNAME) return
+  try {
+    localStorage.setItem(LAST_NICKNAME_KEY, trimmed)
+  } catch {
+    /* private mode */
+  }
+}

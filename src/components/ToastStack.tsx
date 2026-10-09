@@ -6,9 +6,9 @@ type ToastStackProps = {
 }
 
 const VARIANT_STYLES: Record<ToastVariant, string> = {
-  success: 'border-emerald-400/30 bg-emerald-950/80 text-emerald-50',
-  info: 'border-zinc-600/60 bg-zinc-800/90 text-zinc-100',
-  error: 'border-red-400/30 bg-red-950/85 text-red-50',
+  success: 'border-white/10 bg-neutral-800 text-white',
+  info: 'border-white/10 bg-neutral-800 text-white',
+  error: 'border-accent-500/40 bg-[#2a1210] text-accent-100',
 }
 
 function ToastIcon({ variant }: { variant: ToastVariant }) {
@@ -25,7 +25,7 @@ function ToastIcon({ variant }: { variant: ToastVariant }) {
   }
   if (variant === 'error') {
     return (
-      <svg viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4 text-red-400">
+      <svg viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4 text-accent-400">
         <path
           fillRule="evenodd"
           d="M10 1.8a8.2 8.2 0 1 0 0 16.4A8.2 8.2 0 0 0 10 1.8ZM9 6a1 1 0 0 1 2 0v4a1 1 0 1 1-2 0V6Zm1 9.2a1.2 1.2 0 1 0 0-2.4 1.2 1.2 0 0 0 0 2.4Z"
@@ -35,7 +35,7 @@ function ToastIcon({ variant }: { variant: ToastVariant }) {
     )
   }
   return (
-    <svg viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4 text-zinc-300">
+    <svg viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4 text-neutral-300">
       <path
         fillRule="evenodd"
         d="M10 1.8a8.2 8.2 0 1 0 0 16.4A8.2 8.2 0 0 0 10 1.8ZM11 6a1 1 0 1 1-2 0 1 1 0 0 1 2 0Zm-1 2.8a1 1 0 0 1 1 1V14a1 1 0 1 1-2 0V9.8a1 1 0 0 1 1-1Z"
@@ -50,7 +50,7 @@ export function ToastStack({ toasts, onDismiss }: ToastStackProps) {
 
   return (
     <div
-      className="pointer-events-none fixed inset-x-0 bottom-20 z-50 flex flex-col items-center gap-2 px-4"
+      className="pointer-events-none fixed inset-x-0 bottom-[calc(6.25rem+env(safe-area-inset-bottom))] z-50 flex flex-col items-center gap-2 px-4 md:bottom-[7rem]"
       aria-live="polite"
     >
       {toasts.map((toast) => (
@@ -63,7 +63,7 @@ export function ToastStack({ toasts, onDismiss }: ToastStackProps) {
               ? 'ytmq-toast-out 0.3s var(--ease-out-soft) both'
               : 'ytmq-toast-in 0.32s var(--ease-spring) both',
           }}
-          className={`pointer-events-auto flex max-w-[22rem] items-center gap-2.5 rounded-full border px-4 py-2.5 text-sm font-medium shadow-lg shadow-black/40 backdrop-blur-md ${VARIANT_STYLES[toast.variant]}`}
+          className={`pointer-events-auto flex max-w-[24rem] items-center gap-2.5 rounded-full border px-4 py-2.5 text-sm font-semibold shadow-[0_12px_32px_rgba(0,0,0,0.5)] ${VARIANT_STYLES[toast.variant]}`}
         >
           <ToastIcon variant={toast.variant} />
           <span className="truncate">{toast.text}</span>

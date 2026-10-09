@@ -49,12 +49,43 @@ function hostTokenKey(roomId: string) {
   return `ytmq_host_${roomId}`
 }
 
+// The host token used to live in sessionStorage, so closing the tab turned
+// the host into a guest of their own lobby. It now stays on the device until
+// the lobby could not exist any more (lobbies last 24 hours).
+const HOST_TOKEN_TTL_MS = 24 * 60 * 60 * 1000
+
 export function setHostToken(roomId: string, token: string) {
-  sessionStorage.setItem(hostTokenKey(roomId), token)
+  try {
+    localStorage.setItem(
+      hostTokenKey(roomId),
+      JSON.stringify({ token, until: Date.now() + HOST_TOKEN_TTL_MS }),
+    )
+  } catch {
+    sessionStorage.setItem(hostTokenKey(roomId), token)
+  }
 }
 
 export function getHostToken(roomId: string): string | null {
+  try {
+    const raw = localStorage.getItem(hostTokenKey(roomId))
+    if (raw) {
+      const saved = JSON.parse(raw) as { token?: string; until?: number }
+      if (saved.token && (saved.until ?? 0) > Date.now()) return saved.token
+      localStorage.removeItem(hostTokenKey(roomId))
+    }
+  } catch {
+    /* storage blocked or an old value; fall through */
+  }
   return sessionStorage.getItem(hostTokenKey(roomId))
+}
+
+export function clearHostToken(roomId: string) {
+  try {
+    localStorage.removeItem(hostTokenKey(roomId))
+  } catch {
+    /* ignore */
+  }
+  sessionStorage.removeItem(hostTokenKey(roomId))
 }
 
 export async function createLobby(): Promise<CreateRoomResult> {

@@ -17,10 +17,10 @@ import {
   needsHttpsBridgeOrigin,
   openYtmMusicWindow,
   YTMQ_CONNECTED_MESSAGE,
-  ytmExtensionZipUrl,
   ytmUserscriptInstallUrl,
 } from '../lib/ytmusicConnect'
-import { isFirefox, useFirefoxExtension } from '../lib/firefoxExtension'
+import { isFirefox } from '../lib/firefoxExtension'
+import { PlayerCard, YouTubeMusicIcon, primaryButton, secondaryButton, textButton } from './PlayerCard'
 
 type YtMusicConnectProps = {
   roomId: string
@@ -32,127 +32,16 @@ function doneKey(roomId: string) {
   return `ytmq_ytm_connected_${roomId}`
 }
 
-/**
- * One-time extension install. Chrome: download the zip, load unpacked.
- * Firefox: one click on the signed .xpi.
- */
-function ExtensionInstall({
-  zipUrl,
+const BASE = import.meta.env.BASE_URL
+
+/** The ways to connect without the extension, folded away. */
+function OtherWays({
+  snippet,
   userscriptUrl,
   defaultOpen = false,
 }: {
-  zipUrl: string | null
-  userscriptUrl: string | null
-  defaultOpen?: boolean
-}) {
-  const onFirefox = isFirefox()
-  const firefox = useFirefoxExtension(onFirefox)
-  if (!zipUrl && !userscriptUrl) return null
-
-  return (
-    <details
-      open={defaultOpen}
-      className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-3 text-sm text-zinc-400"
-    >
-      <summary className="cursor-pointer font-medium text-violet-300">
-        Install the YTMQ helper (one time)
-      </summary>
-      {onFirefox && (
-        <div className="mt-2">
-          <p className="text-xs font-medium text-zinc-300">
-            Option A — Firefox add-on (recommended)
-          </p>
-          {firefox?.xpiUrl ? (
-            <ol className="mt-1 list-decimal space-y-1 pl-5 text-xs text-zinc-500">
-              <li>
-                <a href={firefox.xpiUrl} className="text-violet-300 underline">
-                  Add YTMQ to Firefox
-                </a>
-                , then click <strong className="text-zinc-300">Continue to installation</strong>{' '}
-                and <strong className="text-zinc-300">Add</strong>.
-              </li>
-              <li>Reload this page.</li>
-            </ol>
-          ) : (
-            <p className="mt-1 text-xs text-zinc-500">
-              The{' '}
-              <a href={`${import.meta.env.BASE_URL}setup`} className="text-violet-300 underline">
-                setup guide
-              </a>{' '}
-              has the Firefox build and how to load it.
-            </p>
-          )}
-        </div>
-      )}
-      {zipUrl && !onFirefox && (
-        <div className="mt-2">
-          <p className="text-xs font-medium text-zinc-300">
-            Option A — Chrome extension (recommended)
-          </p>
-          <ol className="mt-1 list-decimal space-y-1 pl-5 text-xs text-zinc-500">
-            <li>
-              <a
-                href={zipUrl}
-                className="text-violet-300 underline"
-                download
-              >
-                Download the extension
-              </a>{' '}
-              and unzip it into a folder you keep (not Downloads).
-            </li>
-            <li>
-              Open <code className="rounded bg-zinc-800 px-1">chrome://extensions</code>{' '}
-              (paste it in the address bar) and turn on{' '}
-              <strong className="text-zinc-300">Developer mode</strong> (top right).
-            </li>
-            <li>
-              Click <strong className="text-zinc-300">Load unpacked</strong> and pick the
-              unzipped folder, then reload this page.
-            </li>
-          </ol>
-          <p className="mt-1 text-xs text-zinc-500">
-            After that, every music.youtube.com tab connects automatically, even after
-            reloads and restarts.{' '}
-            <a
-              href={`${import.meta.env.BASE_URL}setup`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-violet-300 underline"
-            >
-              Full setup guide
-            </a>
-          </p>
-        </div>
-      )}
-      {userscriptUrl && (
-        <div className="mt-3">
-          <p className="text-xs font-medium text-zinc-300">
-            Option B — Tampermonkey userscript
-          </p>
-          <p className="mt-1 text-xs text-zinc-500">
-            Have Tampermonkey/Violentmonkey?{' '}
-            <a
-              href={userscriptUrl}
-              className="text-violet-300 underline"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Install the YTMQ userscript
-            </a>{' '}
-            instead.
-          </p>
-        </div>
-      )}
-    </details>
-  )
-}
-
-/** Always-available manual connect: copy a script to paste into the YT Music console. */
-function ManualConnect({
-  snippet,
-  defaultOpen = false,
-}: {
   snippet: string | null
+  userscriptUrl: string | null
   defaultOpen?: boolean
 }) {
   const [copied, setCopied] = useState(false)
@@ -164,46 +53,57 @@ function ManualConnect({
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
     } catch {
-      /* fall back to selecting the code block below */
+      /* the code block below is selectable */
     }
   }, [snippet])
 
-  if (!snippet) return null
+  if (!snippet && !userscriptUrl) return null
 
   return (
-    <details
-      open={defaultOpen}
-      className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-3 text-sm text-zinc-400"
-    >
-      <summary className="cursor-pointer font-medium text-violet-300">
-        Connect manually (paste a script)
+    <details open={defaultOpen} className="group rounded-xl bg-black/20 px-3 py-2.5">
+      <summary className="flex cursor-pointer list-none items-center justify-between text-xs font-semibold text-neutral-300 [&::-webkit-details-marker]:hidden">
+        Other ways to connect
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 transition-transform group-open:rotate-180" aria-hidden>
+          <path d="m5 8 5 5 5-5" />
+        </svg>
       </summary>
-      <ol className="mt-2 list-decimal space-y-1 pl-5 text-xs text-zinc-500">
-        <li>
-          Open <strong className="text-zinc-300">music.youtube.com</strong> in a
-          desktop Chrome tab and sign in.
-        </li>
-        <li>
-          Open DevTools (<kbd className="rounded bg-zinc-800 px-1">F12</kbd>) and
-          go to the <strong className="text-zinc-300">Console</strong> tab.
-        </li>
-        <li>
-          If the console blocks pasting, type{' '}
-          <code className="rounded bg-zinc-800 px-1">allow pasting</code> and
-          press Enter.
-        </li>
-        <li>Paste the script below, press Enter, then open the queue panel.</li>
-      </ol>
-      <button
-        type="button"
-        onClick={() => void copy()}
-        className="ytmq-press mt-3 inline-flex items-center gap-1.5 rounded-lg border border-violet-500/50 bg-violet-500/10 px-3 py-2 text-xs font-medium text-violet-200 hover:bg-violet-500/20"
-      >
-        {copied ? '✓ Copied' : 'Copy connect script'}
-      </button>
-      <pre className="mt-2 max-h-32 select-all overflow-auto rounded-lg bg-black/40 p-2 text-[10px] leading-relaxed text-zinc-300">
-        {snippet}
-      </pre>
+      <div className="mt-3 space-y-4 text-xs leading-relaxed text-neutral-400">
+        {userscriptUrl && (
+          <div>
+            <p className="font-semibold text-neutral-200">Userscript</p>
+            <p className="mt-0.5">
+              Already use Tampermonkey or Violentmonkey?{' '}
+              <a href={userscriptUrl} target="_blank" rel="noopener noreferrer" className="text-white underline decoration-neutral-600 underline-offset-2">
+                Install the YTMQ userscript
+              </a>
+              . It links YouTube Music the same way, without the panel.
+            </p>
+          </div>
+        )}
+        {snippet && (
+          <div>
+            <p className="font-semibold text-neutral-200">Paste into the console</p>
+            <p className="mt-0.5">
+              Works for this tab only, until it reloads. On music.youtube.com press{' '}
+              <kbd className="rounded bg-white/10 px-1 font-mono">F12</kbd>, open Console, type{' '}
+              <code className="rounded bg-white/10 px-1 font-mono">allow pasting</code> if asked, then paste this and press Enter.
+            </p>
+            <button type="button" onClick={() => void copy()} className={`${secondaryButton} mt-2`}>
+              {copied ? 'Copied' : 'Copy the script'}
+            </button>
+            <pre className="mt-2 max-h-28 overflow-auto rounded-lg bg-black/40 p-2 font-mono text-[10px] leading-relaxed text-neutral-400 select-all">
+              {snippet}
+            </pre>
+          </div>
+        )}
+        <p>
+          More in the{' '}
+          <a href={`${BASE}docs/troubleshooting`} target="_blank" rel="noopener noreferrer" className="text-white underline decoration-neutral-600 underline-offset-2">
+            troubleshooting guide
+          </a>
+          .
+        </p>
+      </div>
     </details>
   )
 }
@@ -216,7 +116,6 @@ export function YtMusicConnect({ roomId }: YtMusicConnectProps) {
 
   const httpsRequired = needsHttpsBridgeOrigin()
   const userscriptUrl = useMemo(() => ytmUserscriptInstallUrl(), [])
-  const extensionZipUrl = useMemo(() => ytmExtensionZipUrl(), [])
   // Always have a snippet ready for manual pasting, even before (or instead of)
   // clicking Connect — auto-connect doesn't work in every browser.
   const snippet = useMemo(() => {
@@ -303,41 +202,28 @@ export function YtMusicConnect({ roomId }: YtMusicConnectProps) {
     openYtmMusicWindow(roomId)
   }, [roomId])
 
+  const icon = <YouTubeMusicIcon />
+
   if (httpsRequired || !bridgeSiteRoot()) {
     return (
-      <section className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-100">
-        <p className="font-medium">HTTPS URL needed for YouTube Music connect</p>
-        <p className="mt-1 text-amber-200/80">
-          Add to <code className="text-xs">.env.local</code>:
+      <PlayerCard icon={icon} name="YouTube Music" status="warn" statusLabel="Needs an HTTPS address">
+        <p>
+          The bridge has to load from HTTPS. For local development, add this to{' '}
+          <code className="font-mono text-xs text-neutral-200">.env.local</code>:
         </p>
-        <pre className="mt-2 overflow-x-auto rounded-lg bg-black/30 p-2 text-xs text-zinc-200">
+        <pre className="overflow-x-auto rounded-lg bg-black/40 p-2 font-mono text-xs text-neutral-200">
           VITE_PUBLIC_SITE_URL=https://t3lluz.com/ytmq
         </pre>
-      </section>
+      </PlayerCard>
     )
   }
 
   if (step === 'done') {
     return (
-      <section
-        className="flex items-center gap-3 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3"
-        aria-label="YouTube Music connected"
-      >
-        <span className="text-lg text-emerald-400" aria-hidden>
-          ✓
-        </span>
-        <div className="min-w-0 flex-1">
-          <p className="font-medium text-emerald-200">YouTube Music linked</p>
-          <p className="text-sm text-zinc-400">
-            Guest picks play next in YouTube Music. Keep this tab and YouTube Music open.
-          </p>
-        </div>
-        <div className="flex shrink-0 flex-col items-end gap-1">
-          <button
-            type="button"
-            onClick={() => void reopenYtm()}
-            className="text-xs font-medium text-violet-300 underline"
-          >
+      <PlayerCard icon={icon} name="YouTube Music" status="live" statusLabel="Linked to this lobby">
+        <p>Guest picks go straight into your YouTube Music queue. Keep YouTube Music open in this browser.</p>
+        <div className="flex flex-wrap items-center gap-3">
+          <button type="button" onClick={() => void reopenYtm()} className={secondaryButton}>
             Open YouTube Music
           </button>
           <button
@@ -347,90 +233,73 @@ export function YtMusicConnect({ roomId }: YtMusicConnectProps) {
               setPlaybackSince(null)
               setStep('connect')
             }}
-            className="text-xs text-zinc-500 underline"
+            className={textButton}
           >
-            Reconnect
+            Connect again
           </button>
         </div>
-      </section>
+      </PlayerCard>
     )
   }
 
   if (step === 'waiting') {
     return (
-      <section className="space-y-3 rounded-xl border border-violet-500/30 bg-violet-500/5 p-4">
-        <p className="font-medium">Connecting…</p>
-        <p className="text-sm text-zinc-400">
-          On the YouTube Music tab, open the <strong className="text-zinc-300">queue panel</strong>,
-          wait for <strong className="text-zinc-300">YTMQ connected</strong>, then add a test song
-          from a guest. This page updates automatically.
+      <PlayerCard icon={icon} name="YouTube Music" status="pending" statusLabel="Waiting for YouTube Music">
+        <p>
+          On the YouTube Music tab, look for the YTMQ pill above the player. It turns green once the
+          tab is linked, and this card updates by itself.
         </p>
-        <button
-          type="button"
-          onClick={() => void markDone()}
-          className="w-full rounded-xl bg-violet-600 py-3 font-medium text-white active:bg-violet-500"
-        >
-          It&apos;s connected
+        <button type="button" onClick={() => void markDone()} className={primaryButton}>
+          It&apos;s linked
         </button>
-        <p className="text-xs text-zinc-500">
-          Auto-connect not working? Install the helper or use manual setup below.
+        <p className="text-xs text-neutral-500">
+          Nothing happening? The extension is probably not installed in this browser.{' '}
+          <a href={`${BASE}docs/install`} target="_blank" rel="noopener noreferrer" className="text-neutral-200 underline decoration-neutral-600 underline-offset-2">
+            Install it
+          </a>{' '}
+          or use one of the other ways.
         </p>
-        <ExtensionInstall zipUrl={extensionZipUrl} userscriptUrl={userscriptUrl} />
-        <ManualConnect snippet={snippet} defaultOpen />
-      </section>
+        <OtherWays snippet={snippet} userscriptUrl={userscriptUrl} defaultOpen />
+      </PlayerCard>
+    )
+  }
+
+  if (!extensionInstalled && !hostInitialized) {
+    return (
+      <PlayerCard icon={icon} name="YouTube Music" status="off" statusLabel="Extension not found">
+        <p>
+          The YTMQ extension links YouTube Music to this lobby. It is a one-time install on the
+          computer that plays the music{isFirefox() ? ': one click in Firefox.' : ', about two minutes in Chrome.'}
+        </p>
+        <a href={`${BASE}docs/install`} target="_blank" rel="noopener noreferrer" className={primaryButton}>
+          Install the extension
+        </a>
+        <div className="flex flex-wrap items-center gap-3">
+          <button type="button" onClick={() => void startConnect()} className={textButton}>
+            I have it, connect anyway
+          </button>
+        </div>
+        <OtherWays snippet={snippet} userscriptUrl={userscriptUrl} />
+      </PlayerCard>
     )
   }
 
   return (
-    <section className="space-y-3 rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
-      {extensionInstalled ? (
-        <p className="text-sm text-zinc-400">
-          Extension detected — Connect links your{' '}
-          <strong className="text-zinc-300">open YouTube Music tab</strong> (or
-          opens one for you).
-        </p>
-      ) : (
-        <>
-          <p className="text-sm text-zinc-400">
-            One click opens <strong className="text-zinc-300">music.youtube.com</strong> and
-            links your queue. Use Chrome or Firefox on desktop (not the phone app).
-          </p>
-          <ol className="list-decimal space-y-1 pl-5 text-xs text-zinc-500">
-            {!hostInitialized && (
-              <li>
-                Install the YTMQ helper once — the extension or the userscript (see
-                below).
-              </li>
-            )}
-            <li>Click Connect — a YouTube Music tab opens and links automatically.</li>
-            <li>Open the queue panel on YouTube Music and wait for &quot;YTMQ connected&quot;.</li>
-            <li>
-              After that, every YouTube Music tab in this browser reconnects on its
-              own.
-            </li>
-          </ol>
-          {hostInitialized && (
-            <p className="text-xs text-emerald-400/90">
-              Helper already set up on this browser — just click Connect.
-            </p>
-          )}
-        </>
-      )}
-      <button
-        type="button"
-        onClick={() => void startConnect()}
-        className="w-full rounded-xl bg-violet-600 py-3.5 text-base font-medium text-white active:bg-violet-500"
-      >
+    <PlayerCard
+      icon={icon}
+      name="YouTube Music"
+      status="off"
+      statusLabel={extensionInstalled ? 'Extension ready' : 'Not linked yet'}
+    >
+      <p>
+        {extensionInstalled
+          ? 'Links the YouTube Music tab you have open, or opens one. Sign in there if it asks.'
+          : 'Opens music.youtube.com and links it to this lobby.'}
+      </p>
+      <button type="button" onClick={() => void startConnect()} className={primaryButton}>
         Connect YouTube Music
       </button>
-      {!extensionInstalled && (
-        <ExtensionInstall
-          zipUrl={extensionZipUrl}
-          userscriptUrl={userscriptUrl}
-          defaultOpen={!hostInitialized}
-        />
-      )}
-      <ManualConnect snippet={snippet} />
-    </section>
+      <OtherWays snippet={snippet} userscriptUrl={userscriptUrl} />
+    </PlayerCard>
   )
 }

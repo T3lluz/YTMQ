@@ -126,7 +126,7 @@ export function LyricsUpNext({
             className="h-12 w-12 shrink-0 rounded-lg object-cover shadow-lg ring-1 ring-white/15"
           />
         ) : (
-          <div className="h-12 w-12 shrink-0 rounded-lg bg-zinc-800 ring-1 ring-white/10" />
+          <div className="h-12 w-12 shrink-0 rounded-lg bg-neutral-800 ring-1 ring-white/10" />
         )}
         <div className="min-w-0 flex-1">
           <p
@@ -140,7 +140,7 @@ export function LyricsUpNext({
             {shown.title}
           </p>
           {shown.artist && (
-            <p className="truncate text-xs text-zinc-300">{shown.artist}</p>
+            <p className="truncate text-xs text-neutral-300">{shown.artist}</p>
           )}
         </div>
         <div

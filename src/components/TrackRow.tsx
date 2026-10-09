@@ -108,7 +108,7 @@ export function TrackRow({
 
   return (
     <li
-      className="ytmq-anim-row relative flex items-center gap-3 overflow-hidden rounded-xl border border-zinc-800/80 bg-zinc-900/60 px-3 py-2.5 transition-colors hover:border-zinc-700"
+      className="ytmq-anim-row group/row relative flex items-center gap-3 overflow-hidden rounded-xl px-2 py-2 transition-colors hover:bg-white/[0.05]"
     >
       {justAdded && (
         <span
@@ -118,7 +118,7 @@ export function TrackRow({
         />
       )}
       {rank != null && (
-        <span className="relative z-10 w-5 shrink-0 text-center text-sm tabular-nums text-zinc-500">
+        <span className="relative z-10 w-5 shrink-0 text-center text-sm tabular-nums text-neutral-500">
           {rank}
         </span>
       )}
@@ -126,18 +126,18 @@ export function TrackRow({
         src={thumbnail}
         alt=""
         loading="lazy"
-        className={`relative z-10 h-12 w-12 shrink-0 object-cover ${
-          roundedThumb ? 'rounded-full' : 'rounded-lg'
+        className={`relative z-10 h-12 w-12 shrink-0 bg-neutral-800 object-cover ${
+          roundedThumb ? 'rounded-full' : 'rounded-md'
         }`}
       />
       <div className="relative z-10 min-w-0 flex-1">
-        <p className="truncate font-medium">{title}</p>
+        <p className="truncate font-semibold text-neutral-100">{title}</p>
         {subtitle && (
-          <p className="truncate text-sm text-zinc-400">{subtitle}</p>
+          <p className="truncate text-sm text-neutral-400">{subtitle}</p>
         )}
       </div>
       {meta && (
-        <span className="relative z-10 shrink-0 text-xs tabular-nums text-zinc-500">
+        <span className="relative z-10 shrink-0 text-xs tabular-nums text-neutral-500">
           {meta}
         </span>
       )}
@@ -148,7 +148,7 @@ export function TrackRow({
           onClick={onPlayNext}
           aria-label="Play next"
           title="Play next"
-          className="ytmq-press inline-flex min-h-9 items-center justify-center gap-1.5 rounded-lg bg-violet-600 px-2.5 text-xs font-medium text-white hover:bg-violet-500 disabled:opacity-60"
+          className="ytmq-press inline-flex min-h-9 min-w-9 items-center justify-center gap-1.5 rounded-full bg-white/[0.08] px-2.5 text-xs font-semibold text-white hover:bg-accent-600 disabled:opacity-50 sm:px-3"
         >
           {pendingMode === 'play_next' ? (
             <Spinner />
@@ -165,7 +165,7 @@ export function TrackRow({
           onClick={onQueue}
           aria-label="Add to queue"
           title="Add to queue"
-          className="ytmq-press inline-flex min-h-9 items-center justify-center gap-1.5 rounded-lg border border-violet-500/70 px-2.5 text-xs font-medium text-violet-200 hover:bg-violet-500/10 disabled:opacity-60"
+          className="ytmq-press inline-flex min-h-9 min-w-9 items-center justify-center gap-1.5 rounded-full bg-white/[0.08] px-2.5 text-xs font-semibold text-white hover:bg-white/[0.16] disabled:opacity-50 sm:px-3"
         >
           {pendingMode === 'queue' ? (
             <Spinner />

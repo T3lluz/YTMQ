@@ -592,7 +592,7 @@ async function checkForUpdate(force) {
   if (!update) return last || null
   await chrome.storage.local.set({ ytmq_update: update })
   await chrome.action.setBadgeText({ text: update.available ? 'NEW' : '' })
-  if (update.available) await chrome.action.setBadgeBackgroundColor({ color: '#8b5cf6' })
+  if (update.available) await chrome.action.setBadgeBackgroundColor({ color: '#d93a26' })
   return update
 }
 
@@ -649,7 +649,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     chrome.storage.local.get('ytmq_update', (data) => {
       const zip =
         (data && data.ytmq_update && data.ytmq_update.zip) ||
-        (FIREFOX ? YTMQ_SITE_ORIGIN + YTMQ_SITE_PATH + '/setup' : UPDATE_INFO_URL.replace(/\.json$/, '.zip'))
+        (FIREFOX ? YTMQ_SITE_ORIGIN + YTMQ_SITE_PATH + '/docs/install' : UPDATE_INFO_URL.replace(/\.json$/, '.zip'))
       chrome.tabs.create({ url: zip })
       sendResponse({ ok: true })
     })

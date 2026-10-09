@@ -21,7 +21,7 @@ test.describe('Full flow', () => {
     const guestPage = await guestContext.newPage()
 
     await gotoApp(hostPage)
-    await hostPage.getByRole('button', { name: 'Create lobby' }).click()
+    await hostPage.getByRole('button', { name: 'Host a lobby' }).click()
     await expect(hostPage).toHaveURL(/\/ytmq\/room\/[0-9a-f-]{36}\/?$/, {
       timeout: 15_000,
     })
@@ -52,7 +52,7 @@ test.describe('Full flow', () => {
       /^https:\/\/music\.youtube\.com\/watch\?v=[\w-]+$/,
     )
 
-    await guestRows.nth(1).getByRole('button', { name: 'Remove' }).click()
+    await guestRows.nth(1).getByRole('button', { name: /^Remove/ }).click()
     await expect(guestRows).toHaveCount(1, { timeout: 10_000 })
     await expect(hostPage.locator('ul li')).toHaveCount(1, { timeout: 15_000 })
 

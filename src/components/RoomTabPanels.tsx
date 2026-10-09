@@ -44,7 +44,7 @@ export function QueueTabContent({
   const queueList = (
     <>
       {showGuestRemoveHint && (
-        <p className={`${deskScroll ? 'mb-2 shrink-0' : ''} text-xs text-zinc-500`}>
+        <p className={`${deskScroll ? 'mb-2 shrink-0' : ''} text-xs text-neutral-500`}>
           The host has disabled removing tracks.
         </p>
       )}
@@ -73,8 +73,8 @@ export function QueueTabContent({
       <section className="ytmq-tab-panel flex min-h-0 flex-1 flex-col gap-5 lg:grid lg:grid-cols-2 lg:grid-rows-1">
         <div className="flex min-h-0 flex-1 flex-col">
           <div className="mb-3 flex shrink-0 items-center justify-between gap-2">
-            <h2 className="text-lg font-semibold">Queue</h2>
-            <span className="text-xs text-zinc-500">
+            <h2 className="text-lg font-bold text-white">Up next</h2>
+            <span className="text-xs font-semibold text-neutral-500">
               {items.length} {items.length === 1 ? 'track' : 'tracks'}
             </span>
           </div>
@@ -82,7 +82,6 @@ export function QueueTabContent({
         </div>
 
         <div className="flex min-h-0 flex-1 flex-col">
-          <h2 className="mb-3 shrink-0 text-lg font-semibold">History</h2>
           <div className={`${deskScroll} pr-1`}>{history}</div>
         </div>
       </section>
@@ -91,7 +90,7 @@ export function QueueTabContent({
 
   return (
     <section className="ytmq-tab-panel flex flex-1 flex-col gap-3">
-      <h2 className="text-lg font-semibold">Queue</h2>
+      <h2 className="text-lg font-bold text-white">Up next</h2>
       {queueList}
       {history}
     </section>
@@ -114,27 +113,25 @@ function RoomMembersSection({
   return (
     <>
       <label className="block space-y-1">
-        <span className="text-sm text-zinc-500">Nickname</span>
+        <span className="text-sm font-medium text-neutral-300">Your name</span>
         <input
           type="text"
           value={nickname}
           onChange={(e) => onNicknameChange(e.target.value)}
           placeholder="Your name on the queue"
           maxLength={32}
-          className="min-h-11 w-full rounded-xl border border-zinc-700 bg-zinc-900 px-3 outline-none transition-colors focus:border-violet-500"
+          className="min-h-11 w-full rounded-xl border border-white/10 bg-neutral-900 px-4 outline-none transition-colors placeholder:text-neutral-600 focus:border-white/40"
         />
       </label>
 
       <div className="space-y-2">
         <div className="flex items-center justify-between gap-2">
-          <h3 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">
-            In this room
-          </h3>
-          <span className="shrink-0 text-xs text-zinc-500">{onlineCount} online</span>
+          <h3 className="text-lg font-bold text-white">In this lobby</h3>
+          <span className="shrink-0 text-xs text-neutral-500">{onlineCount} online</span>
         </div>
         <ParticipantList
           participants={participants}
-          emptyHint="You're the first one here. Share the code below!"
+          emptyHint="Just you so far. Share the code or the QR to bring people in."
         />
       </div>
     </>
@@ -158,13 +155,13 @@ export function RoomTabContent({
   if (deskScroll) {
     return (
       <section className="ytmq-tab-panel flex min-h-0 flex-1 flex-col">
-        <h2 className="mb-4 shrink-0 text-lg font-semibold">Room</h2>
+        <h2 className="mb-4 shrink-0 text-2xl font-extrabold tracking-[-0.02em] text-white">Room</h2>
         <div className={`${deskScroll} pr-1`}>
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             <div className="min-w-0 space-y-5">
               <RoomMembersSection {...members} />
             </div>
-            <div className="min-w-0 rounded-2xl border border-zinc-800 bg-zinc-900/40 p-5">
+            <div className="min-w-0 rounded-3xl bg-white/[0.04] p-6">
               <SharePanel roomId={roomId} code={code} onCopied={onCopied} />
             </div>
           </div>
@@ -175,7 +172,7 @@ export function RoomTabContent({
 
   return (
     <section className="ytmq-tab-panel flex flex-1 flex-col gap-4">
-      <h2 className="text-lg font-semibold">Room</h2>
+      <h2 className="text-2xl font-extrabold tracking-[-0.02em] text-white">Room</h2>
       <RoomMembersSection {...members} />
       <SharePanel roomId={roomId} code={code} onCopied={onCopied} />
     </section>
@@ -212,10 +209,10 @@ export function AdminTabContent({
       type="button"
       disabled={ending}
       onClick={onEndLobby}
-      className="ytmq-press inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-red-500/40 px-4 text-sm font-medium text-red-300 hover:bg-red-500/10 disabled:opacity-60"
+      className="ytmq-press inline-flex min-h-11 items-center justify-center gap-2 rounded-full border border-accent-500/40 px-5 text-sm font-semibold text-accent-300 hover:bg-accent-500/10 disabled:opacity-60"
     >
       {ending && <span className="ytmq-spinner h-4 w-4" aria-hidden />}
-      {ending ? 'Ending…' : 'End lobby & delete queue'}
+      {ending ? 'Ending…' : 'End the lobby for everyone'}
     </button>
   )
 
@@ -224,7 +221,7 @@ export function AdminTabContent({
       <section className="ytmq-tab-panel grid min-h-0 flex-1 grid-cols-1 grid-rows-2 gap-6 lg:grid-cols-2 lg:grid-rows-1">
         <div className={`${deskScroll} flex flex-col gap-6 pr-1`}>
           <div className="space-y-3">
-            <h2 className="text-lg font-semibold">Players</h2>
+            <h2 className="text-lg font-bold text-white">Players</h2>
             <YtMusicConnect roomId={roomId} />
             <SpotifyConnect roomId={roomId} playerStatus={spotifyStatus} />
           </div>
@@ -258,7 +255,7 @@ export function AdminTabContent({
   return (
     <section className="ytmq-tab-panel flex flex-1 flex-col gap-6">
       <div className="space-y-3">
-        <h2 className="text-lg font-semibold">Players</h2>
+        <h2 className="text-lg font-bold text-white">Players</h2>
         <YtMusicConnect roomId={roomId} />
         <SpotifyConnect roomId={roomId} playerStatus={spotifyStatus} />
       </div>

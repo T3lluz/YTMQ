@@ -171,10 +171,13 @@ async function installMocks(page: Page) {
 
 async function gotoRoom(page: Page) {
   await page.goto(`./room/${ROOM_ID}`)
-  const dialog = page.getByRole('dialog', { name: 'Choose a nickname' })
+  const dialog = page.getByRole('dialog', { name: 'What should we call you?' })
+  const nav = page.getByRole('navigation', { name: 'Room navigation' })
+  // The name prompt shows once the room has loaded; wait for whichever comes.
+  await dialog.or(nav).first().waitFor({ timeout: 15_000 })
   if (await dialog.isVisible().catch(() => false)) {
-    await dialog.getByPlaceholder('Your name on the queue').fill('SmokeGuest')
-    await dialog.getByRole('button', { name: 'Continue' }).click()
+    await dialog.getByPlaceholder('Your name').fill('SmokeGuest')
+    await dialog.getByRole('button', { name: 'Start adding songs' }).click()
   }
   // Tab bar appears after the room loads.
   await page
@@ -191,7 +194,7 @@ test.describe('Queue insert modes (mocked API)', () => {
     await installMocks(page)
     await gotoRoom(page)
 
-    await page.getByPlaceholder(/search songs/i).fill('daft punk')
+    await page.getByPlaceholder(/songs or artists/i).fill('daft punk')
 
     const firstRow = page.locator('ul li').first()
     await expect(firstRow).toBeVisible({ timeout: 10_000 })
@@ -204,7 +207,7 @@ test.describe('Queue insert modes (mocked API)', () => {
 
     // Title and buttons must share the row without clipping/overlap.
     const titleBox = await firstRow
-      .locator('p.font-medium')
+      .locator('p.font-semibold')
       .first()
       .boundingBox()
     const playNextBox = await playNextBtn.boundingBox()
@@ -239,7 +242,7 @@ test.describe('Queue insert modes (mocked API)', () => {
     await installMocks(page)
     await gotoRoom(page)
 
-    await page.getByPlaceholder(/search songs/i).fill('daft punk')
+    await page.getByPlaceholder(/songs or artists/i).fill('daft punk')
     await page
       .locator('ul li')
       .first()
@@ -260,7 +263,7 @@ test.describe('Queue insert modes (mocked API)', () => {
 
     // Badge must live below the title, not on the same baseline (otherwise
     // small mobile widths clip the title to ~2 chars).
-    const titleBox = await row.locator('p.font-medium').first().boundingBox()
+    const titleBox = await row.locator('p.font-semibold').first().boundingBox()
     const badgeBox = await row.getByText('Play next', { exact: true }).boundingBox()
     expect(titleBox).toBeTruthy()
     expect(badgeBox).toBeTruthy()
@@ -275,7 +278,7 @@ test.describe('Queue insert modes (mocked API)', () => {
     await installMocks(page)
     await gotoRoom(page)
 
-    await page.getByPlaceholder(/search songs/i).fill('daft punk')
+    await page.getByPlaceholder(/songs or artists/i).fill('daft punk')
     await page
       .locator('ul li')
       .first()
@@ -302,11 +305,13 @@ test.describe('Queue insert modes (mocked API)', () => {
     await installMocks(page)
     await gotoRoom(page)
 
-    await page.getByPlaceholder(/search songs/i).fill('daft punk')
+    await page.getByPlaceholder(/songs or artists/i).fill('daft punk')
+    // All puts the first song in a Top result card; Songs lists every row.
+    await page.getByRole('tab', { name: 'Songs' }).click()
     const longRow = page.locator('ul li').nth(2)
     await expect(longRow).toBeVisible()
 
-    const titleBox = await longRow.locator('p.font-medium').first().boundingBox()
+    const titleBox = await longRow.locator('p.font-semibold').first().boundingBox()
     const playNextBox = await longRow
       .getByRole('button', { name: 'Play next' })
       .boundingBox()
@@ -330,7 +335,7 @@ test.describe('Queue insert modes (mocked API)', () => {
     await installMocks(page)
     await gotoRoom(page)
 
-    const search = page.getByPlaceholder(/search songs/i)
+    const search = page.getByPlaceholder(/songs or artists/i)
     await search.fill('daft punk')
 
     const rows = page.locator('ul li')
@@ -355,7 +360,7 @@ test.describe('Queue insert modes (mocked API)', () => {
     ).toHaveCount(1)
 
     for (const row of await queueRows.all()) {
-      const title = row.locator('p.font-medium').first()
+      const title = row.locator('p.font-semibold').first()
       const titleBox = await title.boundingBox()
       const rowBox = await row.boundingBox()
       expect(titleBox).toBeTruthy()
@@ -374,8 +379,10 @@ test.describe('Queue insert modes (mocked API)', () => {
     await installMocks(page)
     await gotoRoom(page)
 
-    const search = page.getByPlaceholder(/search songs/i)
+    const search = page.getByPlaceholder(/songs or artists/i)
     await search.fill('daft punk')
+    // All puts the first song in a Top result card; Songs lists every row.
+    await page.getByRole('tab', { name: 'Songs' }).click()
 
     const searchRows = page.locator('ul li')
     await expect(searchRows).toHaveCount(3)
@@ -418,7 +425,7 @@ test.describe('Queue insert modes (mocked API)', () => {
     //   [Queue #2]     Get Lucky                (second queue item)
     async function readRow(index: number) {
       const row = queueRows.nth(index)
-      const title = await row.locator('p.font-medium').first().textContent()
+      const title = await row.locator('p.font-semibold').first().textContent()
       const badge = await row
         .locator('span', { hasText: /^(Play next|Queue)$/ })
         .first()
@@ -452,7 +459,7 @@ test.describe('Queue insert modes (mocked API)', () => {
     await installMocks(page)
     await gotoRoom(page)
 
-    await page.getByPlaceholder(/search songs/i).fill('daft punk')
+    await page.getByPlaceholder(/songs or artists/i).fill('daft punk')
     await page
       .locator('ul li')
       .first()

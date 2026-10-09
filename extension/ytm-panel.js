@@ -20,14 +20,13 @@
 
   var HOST_ID = 'ytmq-ext-host'
   var LEGACY_HOST_ID = 'ytmq-ytm-panel'
-  var PANEL_REV = '6'
+  var PANEL_REV = '7'
   var PANEL_GAP = 12
   var EDGE = 20
   var BRIDGE_SOURCE = 'ytmq-bridge'
   var PANEL_SOURCE = 'ytmq-panel-ui'
   var OPEN_KEY = 'ytmq_panel_open'
   var POS_KEY = 'ytmq_panel_pos'
-  var FONT_LINK_ID = 'ytmq-panel-font'
 
   var host = null
   var shadow = null
@@ -61,8 +60,8 @@
       '#pill .logo{width:32px;height:32px}',
       '#pill .logo svg{border-radius:9px}',
       '.pill-code{font-size:15px;font-weight:700;letter-spacing:.14em;color:#fafafa}',
-      '.pill-hint{font-size:13px;font-weight:500;color:#a1a1aa}',
-      '.pill-stat{display:inline-flex;align-items:center;gap:5px;font-size:13px;font-weight:600;color:#d4d4d8;font-variant-numeric:tabular-nums}',
+      '.pill-hint{font-size:13px;font-weight:500;color:#a3a3a3}',
+      '.pill-stat{display:inline-flex;align-items:center;gap:5px;font-size:13px;font-weight:600;color:#d4d4d4;font-variant-numeric:tabular-nums}',
       '.pill-stat svg{color:rgb(var(--ac-light))}',
       '.pill-stat b{font-weight:600;display:inline-block}',
       '.pill-sep{width:1px;height:18px;background:rgba(255,255,255,.12)}',
@@ -70,9 +69,9 @@
       '.playing .pill-eq{display:inline-flex;color:rgb(var(--ac-light))}',
       '.pill-flag{display:none;width:8px;height:8px;border-radius:50%}',
       '.has-pending .pill-flag{display:block;background:#fbbf24}',
-      '.pill-new{display:none;font-size:9px;font-weight:800;letter-spacing:.08em;padding:2px 6px;border-radius:999px;background:#8b5cf6;color:#fff}',
+      '.pill-new{display:none;font-size:9px;font-weight:800;letter-spacing:.08em;padding:2px 6px;border-radius:999px;background:#d93a26;color:#fff}',
       '.has-update .pill-new{display:inline-block}',
-      '.pill-chev{display:inline-flex;color:#a1a1aa;transition:color .15s,transform .2s}',
+      '.pill-chev{display:inline-flex;color:#a3a3a3;transition:color .15s,transform .2s}',
       '#pill:hover .pill-chev{color:#fafafa;transform:translateY(-1px)}',
       '#wrap.open #pill{opacity:0;transform:scale(.85) translateY(6px);pointer-events:none}',
 
@@ -381,16 +380,6 @@
 
   // --- mount ----------------------------------------------------------------
 
-  /** @font-face does not work inside shadow roots, so the font goes on the page. */
-  function ensureFont() {
-    if (document.getElementById(FONT_LINK_ID) || !document.head) return
-    var link = document.createElement('link')
-    link.id = FONT_LINK_ID
-    link.rel = 'stylesheet'
-    link.href = 'https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&display=swap'
-    document.head.appendChild(link)
-  }
-
   function destroyStaleHosts() {
     var legacy = document.getElementById(LEGACY_HOST_ID)
     if (legacy) legacy.remove()
@@ -478,7 +467,6 @@
       }
       parent.appendChild(host)
     }
-    ensureFont()
   }
 
   window.addEventListener('message', function (event) {

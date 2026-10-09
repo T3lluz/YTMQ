@@ -178,7 +178,7 @@ function LobbyShareCard({
     <div
       role="dialog"
       aria-label="Lobby share options"
-      className="ytmq-anim-pop absolute bottom-full left-1/2 mb-3 w-[min(17rem,calc(100vw-1.5rem))] max-w-[17rem] -translate-x-1/2 rounded-3xl border border-white/10 bg-zinc-950/85 p-4 shadow-[0_20px_60px_rgba(0,0,0,0.55)] backdrop-blur-2xl backdrop-saturate-150"
+      className="ytmq-anim-pop absolute bottom-full left-1/2 mb-3 w-[min(17rem,calc(100vw-1.5rem))] max-w-[17rem] -translate-x-1/2 rounded-3xl border border-white/10 bg-neutral-900 p-4 shadow-[0_20px_60px_rgba(0,0,0,0.6)]"
     >
       <div className="flex flex-col items-center gap-3">
         {qrDataUrl ? (
@@ -198,10 +198,10 @@ function LobbyShareCard({
         )}
 
         <div className="text-center">
-          <p className="text-[11px] font-medium uppercase tracking-wide text-zinc-500">
+          <p className="text-[11px] font-medium uppercase tracking-wide text-neutral-500">
             Lobby code
           </p>
-          <p className="font-mono text-xl tracking-widest text-zinc-100 sm:text-2xl">
+          <p className="font-mono text-xl tracking-widest text-neutral-100 sm:text-2xl">
             {code}
           </p>
         </div>
@@ -210,18 +210,18 @@ function LobbyShareCard({
           <button
             type="button"
             onClick={() => void copy('code')}
-            className="ytmq-press inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl border border-zinc-700 px-3 text-sm font-medium text-zinc-100 hover:border-zinc-600 hover:bg-zinc-900"
+            className="ytmq-press inline-flex min-h-10 items-center justify-center gap-1.5 rounded-full bg-white/[0.08] px-3 text-sm font-semibold text-neutral-100 hover:bg-white/[0.14]"
           >
             {copied === 'code' && <CopiedCheck />}
-            {copied === 'code' ? 'Copied!' : 'Copy code'}
+            {copied === 'code' ? 'Copied' : 'Copy code'}
           </button>
           <button
             type="button"
             onClick={() => void copy('link')}
-            className="ytmq-press inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl bg-violet-600 px-3 text-sm font-medium text-white hover:bg-violet-500"
+            className="ytmq-press inline-flex min-h-10 items-center justify-center gap-1.5 rounded-full bg-white px-3 text-sm font-semibold text-neutral-950 hover:bg-neutral-200"
           >
             {copied === 'link' && <CopiedCheck />}
-            {copied === 'link' ? 'Copied!' : 'Copy link'}
+            {copied === 'link' ? 'Copied' : 'Copy link'}
           </button>
         </div>
       </div>
@@ -229,13 +229,13 @@ function LobbyShareCard({
       {/* Little pointer notch toward the dock */}
       <span
         aria-hidden
-        className="absolute -bottom-1.5 left-1/2 h-3 w-3 -translate-x-1/2 rotate-45 rounded-[3px] border-b border-r border-white/10 bg-zinc-950/85"
+        className="absolute -bottom-1.5 left-1/2 h-3 w-3 -translate-x-1/2 rotate-45 rounded-[3px] border-b border-r border-white/10 bg-neutral-900"
       />
       <button
         type="button"
         onClick={onClose}
         aria-label="Close"
-        className="absolute right-3 top-3 rounded-full p-1 text-zinc-500 transition-colors hover:text-zinc-200"
+        className="absolute right-3 top-3 rounded-full p-1 text-neutral-500 transition-colors hover:text-neutral-200"
       >
         <svg viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
           <path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" />
@@ -329,15 +329,8 @@ export function TabBar({
   return (
     <div
       className="pointer-events-none fixed inset-x-0 bottom-0 z-50 flex justify-center overflow-visible px-2 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:px-3 sm:pb-[calc(1rem+env(safe-area-inset-bottom))]"
-      aria-label="Room navigation"
     >
       <div ref={dockRef} className="ytmq-dock pointer-events-auto relative max-w-full">
-        {/* Soft glow that lifts the dock off the content behind it */}
-        <div
-          aria-hidden
-          className="absolute -inset-x-6 -bottom-6 -top-3 -z-10 rounded-full bg-zinc-950/40 blur-2xl"
-        />
-
         {shareOpen && (
           <LobbyShareCard
             roomId={roomId}
@@ -347,11 +340,11 @@ export function TabBar({
           />
         )}
 
-        <nav className="ytmq-dock-nav relative flex max-w-full transform-gpu items-center gap-0.5 overflow-visible rounded-full border border-white/10 bg-zinc-950/70 p-1 shadow-[0_12px_40px_rgba(0,0,0,0.5)] backdrop-blur-2xl backdrop-saturate-150 ytmq-hide-scrollbar sm:p-1.5">
+        <nav aria-label="Room navigation" className="ytmq-dock-nav relative flex max-w-full items-center gap-0.5 overflow-visible rounded-full border border-white/10 bg-neutral-900/90 p-1 shadow-[0_16px_40px_-8px_rgba(0,0,0,0.7)] backdrop-blur-xl ytmq-hide-scrollbar sm:p-1.5">
           {indicator && (
             <span
               aria-hidden
-              className={`pointer-events-none absolute rounded-full bg-white/10 ${
+              className={`pointer-events-none absolute rounded-full bg-white/[0.09] ${
                 indicatorReady
                   ? 'transition-[left,top,width,height] duration-300 ease-[cubic-bezier(0.4,1.1,0.5,1)]'
                   : ''
@@ -375,12 +368,17 @@ export function TabBar({
                 }}
                 type="button"
                 onClick={() => handleChange(tab.id)}
-                className={`group relative z-10 flex min-h-11 w-[3.1rem] shrink-0 flex-col items-center justify-center gap-0.5 overflow-visible rounded-full px-0.5 text-[10px] font-medium transition-colors sm:min-h-12 sm:w-[3.75rem] sm:px-1 sm:text-[11px] ${
-                  isActive ? 'text-violet-300' : 'text-zinc-500 hover:text-zinc-200'
+                className={`group relative z-10 flex min-h-12 w-[3.2rem] shrink-0 flex-col items-center justify-center gap-0.5 overflow-visible rounded-full px-0.5 text-[10px] font-semibold transition-colors sm:min-h-[3.25rem] sm:w-[3.9rem] sm:px-1 sm:text-[11px] ${
+                  isActive ? 'text-white' : 'text-neutral-500 hover:text-neutral-200'
                 }`}
                 aria-current={isActive ? 'page' : undefined}
+                aria-label={
+                  tab.id === 'queue' && queueCount > 0
+                    ? `Queue, ${queueCount} ${queueCount === 1 ? 'song' : 'songs'}`
+                    : tab.label
+                }
               >
-                <span className="relative overflow-visible py-1">
+                <span className="relative overflow-visible pt-0.5">
                   <span
                     ref={(el) => {
                       iconWrapRefs.current[tab.id] = el
@@ -388,28 +386,20 @@ export function TabBar({
                     className="ytmq-tab-icon-wrap inline-flex items-center justify-center p-0.5"
                   >
                     <Icon
-                      className={`h-5 w-5 transition-transform duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] group-active:scale-90 ${
-                        isActive ? 'scale-[1.6]' : ''
+                      className={`h-5 w-5 transition-[transform,color] duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] group-active:scale-90 ${
+                        isActive ? 'text-accent-400' : ''
                       }`}
                     />
                   </span>
                   {tab.id === 'queue' && queueCount > 0 && (
                     <span
-                      className="ytmq-anim-pop absolute -right-2.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-violet-500 px-1 text-[10px] font-bold leading-none text-white"
+                      className="ytmq-anim-pop absolute -right-2.5 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent-600 px-1 text-[10px] font-bold leading-none text-white ring-2 ring-neutral-900"
                     >
                       {queueCount > 99 ? '99+' : queueCount}
                     </span>
                   )}
                 </span>
-                <span
-                  className={`grid transition-[grid-template-rows,opacity,transform] duration-300 ease-out ${
-                    isActive
-                      ? 'grid-rows-[0fr] translate-y-1 opacity-0'
-                      : 'grid-rows-[1fr] translate-y-0 opacity-100'
-                  }`}
-                >
-                  <span className="overflow-hidden">{tab.label}</span>
-                </span>
+                <span className="leading-none">{tab.label}</span>
               </button>
             )
           })}
@@ -425,16 +415,16 @@ export function TabBar({
             aria-label={`Lobby ${code} — show QR and share`}
             className={`group flex min-h-11 shrink-0 items-center gap-1.5 rounded-full py-1 pl-2 pr-2.5 transition-colors sm:min-h-12 sm:gap-2 sm:pl-2.5 sm:pr-3 ${
               shareOpen
-                ? 'bg-white/10 text-zinc-100'
-                : 'text-zinc-400 hover:bg-white/5 hover:text-zinc-100'
+                ? 'bg-white/[0.09] text-neutral-100'
+                : 'text-neutral-400 hover:bg-white/5 hover:text-neutral-100'
             }`}
           >
             <QrIcon className="h-5 w-5 shrink-0 transition-transform duration-100 group-active:scale-90" />
             <span className="flex flex-col items-start leading-tight">
-              <span className="text-[9px] font-medium uppercase tracking-wide text-zinc-500">
+              <span className="text-[9px] font-medium uppercase tracking-wide text-neutral-500">
                 Lobby
               </span>
-              <span className="max-w-[4.5rem] truncate font-mono text-xs font-semibold tracking-widest text-zinc-100 sm:max-w-none sm:text-sm">
+              <span className="max-w-[4.5rem] truncate font-mono text-xs font-semibold tracking-widest text-neutral-100 sm:max-w-none sm:text-sm">
                 {code}
               </span>
             </span>

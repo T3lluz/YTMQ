@@ -72,12 +72,14 @@ async function installMocks(page: Page, asHost: boolean) {
 
 async function gotoRoom(page: Page, nickname = 'SmokeGuest') {
   await page.goto(`./room/${ROOM_ID}`)
-  const dialog = page.getByRole('dialog', { name: 'Choose a nickname' })
+  const dialog = page.getByRole('dialog', { name: 'What should we call you?' })
+  const heading = page.getByRole('heading', { name: 'What should play next?' })
+  await dialog.or(heading).first().waitFor({ timeout: 15_000 })
   if (await dialog.isVisible().catch(() => false)) {
-    await dialog.getByPlaceholder('Your name on the queue').fill(nickname)
-    await dialog.getByRole('button', { name: 'Continue' }).click()
+    await dialog.getByPlaceholder('Your name').fill(nickname)
+    await dialog.getByRole('button', { name: 'Start adding songs' }).click()
   }
-  await page.getByRole('heading', { name: 'Search songs' }).waitFor({
+  await page.getByRole('heading', { name: 'What should play next?' }).waitFor({
     timeout: 15_000,
   })
 }
@@ -91,11 +93,14 @@ test.describe('Spotify connect (mocked API)', () => {
     await installMocks(page, true)
     await gotoRoom(page)
 
-    await expect(page.getByText('Host')).toBeVisible()
+    await expect(page.getByText('Host', { exact: true })).toBeVisible()
     await page.getByRole('button', { name: 'Admin' }).click()
 
+    // Without the extension the YouTube Music card offers the install first.
     await expect(
-      page.getByRole('button', { name: 'Connect YouTube Music' }),
+      page
+        .getByRole('button', { name: 'Connect YouTube Music' })
+        .or(page.getByRole('link', { name: 'Install the extension' })),
     ).toBeVisible()
     await expect(
       page.getByRole('button', { name: 'Connect Spotify' }),

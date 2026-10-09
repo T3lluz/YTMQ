@@ -28,7 +28,7 @@ function HistoryIcon() {
       strokeWidth="1.6"
       strokeLinecap="round"
       strokeLinejoin="round"
-      className="h-8 w-8 text-zinc-600"
+      className="h-8 w-8 text-neutral-600"
     >
       <path d="M3 3v5h5" />
       <path d="M3.05 13A9 9 0 1 0 6 5.3L3 8" />
@@ -49,12 +49,11 @@ export function RecentlyPlayed({
 
   if (items.length === 0) {
     return (
-      <div className="ytmq-anim-pop flex h-full min-h-[16rem] flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-zinc-800 bg-zinc-900/30 px-6 py-12 text-center">
+      <div className="ytmq-anim-pop flex h-full min-h-[14rem] flex-col items-center justify-center gap-2 rounded-2xl bg-white/[0.03] px-6 py-12 text-center">
         <HistoryIcon />
-        <p className="text-sm font-medium text-zinc-300">No history yet</p>
-        <p className="max-w-xs text-sm text-zinc-500">
-          Songs appear here as they play. Search above to add the first track,
-          then come back to replay favourites in one tap.
+        <p className="text-base font-bold text-white">Nothing played yet</p>
+        <p className="max-w-xs text-sm text-neutral-500">
+          Songs collect here as they play, so you can queue one again with a tap.
         </p>
       </div>
     )
@@ -63,13 +62,11 @@ export function RecentlyPlayed({
   return (
     <section className="flex flex-col gap-2 pb-4">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">
-          Recently played
-        </h3>
+        <h2 className="text-lg font-bold text-white">Played</h2>
         <button
           type="button"
           onClick={() => clearRecentlyPlayed(roomId)}
-          className="text-xs font-medium text-zinc-500 underline-offset-2 hover:text-zinc-300 hover:underline"
+          className="text-xs font-medium text-neutral-500 underline-offset-2 hover:text-neutral-300 hover:underline"
         >
           Clear
         </button>

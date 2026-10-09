@@ -1141,7 +1141,7 @@ async function removeVideoFromQueueWithRetry(
   return false
 }
 
-/** A pill like the app's toasts: dark glass, a violet dot, fades in and out. */
+/** A pill like the app's toasts: dark, a red dot, fades in and out. */
 function showToast(message: string) {
   document.getElementById('ytmq-bridge-toast')?.remove()
 
@@ -1150,7 +1150,7 @@ function showToast(message: string) {
   el.setAttribute('role', 'status')
   const dot = document.createElement('span')
   dot.style.cssText =
-    'width:7px;height:7px;border-radius:50%;flex:none;background:#a78bfa;box-shadow:0 0 0 3px rgba(139,92,246,.22)'
+    'width:7px;height:7px;border-radius:50%;flex:none;background:#ff6b52;box-shadow:0 0 0 3px rgba(245,73,47,.22)'
   const text = document.createElement('span')
   text.textContent = message
   text.style.cssText = 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap'
@@ -1164,9 +1164,7 @@ function showToast(message: string) {
     'display:flex',
     'align-items:center',
     'gap:10px',
-    'background:rgba(15,15,18,.86)',
-    'backdrop-filter:blur(16px) saturate(160%)',
-    '-webkit-backdrop-filter:blur(16px) saturate(160%)',
+    'background:rgba(28,28,28,.96)',
     'color:#f4f4f5',
     'padding:10px 18px 10px 14px',
     'border-radius:999px',

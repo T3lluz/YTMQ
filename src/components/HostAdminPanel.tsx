@@ -31,7 +31,7 @@ function Toggle({
       disabled={disabled}
       onClick={() => onChange(!checked)}
       className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors disabled:opacity-50 ${
-        checked ? 'bg-violet-600' : 'bg-zinc-700'
+        checked ? 'bg-accent-600' : 'bg-white/15'
       }`}
     >
       <span
@@ -59,8 +59,8 @@ function SettingRow({
   return (
     <div className="flex items-center justify-between gap-4 py-3">
       <div className="min-w-0">
-        <p className="text-sm font-medium text-zinc-100">{title}</p>
-        <p className="text-xs text-zinc-500">{description}</p>
+        <p className="text-sm font-semibold text-neutral-100">{title}</p>
+        <p className="text-xs text-neutral-500">{description}</p>
       </div>
       <Toggle checked={checked} disabled={disabled} onChange={onChange} />
     </div>
@@ -142,7 +142,7 @@ export function HostAdminPanel({
       const ok = await setRoomPassword(roomId, hostToken, value)
       if (!ok) throw new Error('Not authorised')
       setPassword('')
-      onToast('Password set — guests need it to join', 'success')
+      onToast('Password set. Guests need it to join.', 'success')
     } catch (err) {
       onToast(
         err instanceof Error ? err.message : 'Could not set password',
@@ -202,31 +202,31 @@ export function HostAdminPanel({
       {showControls && (
         <>
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold">Admin</h2>
+        <h2 className="text-lg font-bold text-white">Lobby settings</h2>
         {draft.locked && (
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/40 bg-amber-500/10 px-2.5 py-1 text-xs font-medium text-amber-200">
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/15 px-2.5 py-1 text-xs font-semibold text-amber-200">
             <LockIcon /> Locked
           </span>
         )}
       </div>
 
       {/* Session controls */}
-      <div className="rounded-2xl border border-zinc-800 bg-zinc-900/50 px-4 divide-y divide-zinc-800/70">
+      <div className="rounded-2xl bg-white/[0.04] px-4 divide-y divide-white/[0.06]">
         <SettingRow
-          title="Lock session"
-          description="Stop new people from joining. Current guests stay."
+          title="Lock the lobby"
+          description="Nobody new can join. People already in stay."
           checked={draft.locked}
           disabled={saving}
           onChange={(v) =>
             applySettings(
               { locked: v },
-              v ? 'Session locked' : 'Session unlocked',
+              v ? 'Lobby locked' : 'Lobby unlocked',
             )
           }
         />
         <SettingRow
           title="Guests can add songs"
-          description="Let guests queue and play-next tracks."
+          description="Play next and Add to queue. You can always add."
           checked={draft.allow_guest_add}
           disabled={saving}
           onChange={(v) =>
@@ -238,7 +238,7 @@ export function HostAdminPanel({
         />
         <SettingRow
           title="Guests can remove songs"
-          description="Let guests delete tracks from the queue."
+          description="Anyone can take a song out of the queue."
           checked={draft.allow_guest_remove}
           disabled={saving}
           onChange={(v) =>
@@ -250,7 +250,7 @@ export function HostAdminPanel({
         />
         <SettingRow
           title="Guests can control playback"
-          description="Let guests play, pause, and skip tracks."
+          description="Play, pause, skip and seek from guests' phones."
           checked={draft.allow_guest_controls}
           disabled={saving}
           onChange={(v) =>
@@ -263,18 +263,18 @@ export function HostAdminPanel({
       </div>
 
       {/* Password */}
-      <div className="space-y-3 rounded-2xl border border-zinc-800 bg-zinc-900/50 p-4">
+      <div className="space-y-3 rounded-2xl bg-white/[0.04] p-4">
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-sm font-medium text-zinc-100">Join password</p>
-            <p className="text-xs text-zinc-500">
+            <p className="text-sm font-semibold text-neutral-100">Password</p>
+            <p className="text-xs text-neutral-500">
               {settings.has_password
-                ? 'A password is required to join.'
-                : 'Optional — leave off for open joining.'}
+                ? 'Guests need it to join.'
+                : 'Optional. Without one, the code is enough.'}
             </p>
           </div>
           {settings.has_password && (
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-1 text-xs font-medium text-emerald-200">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/15 px-2.5 py-1 text-xs font-semibold text-emerald-200">
               <LockIcon /> On
             </span>
           )}
@@ -286,13 +286,13 @@ export function HostAdminPanel({
             onChange={(e) => setPassword(e.target.value)}
             placeholder={settings.has_password ? 'New password' : 'Set a password'}
             maxLength={64}
-            className="min-h-11 min-w-0 flex-1 rounded-xl border border-zinc-700 bg-zinc-900 px-3 text-sm outline-none transition-colors focus:border-violet-500"
+            className="min-h-11 min-w-0 flex-1 rounded-full border border-white/10 bg-neutral-950 px-4 text-sm outline-none transition-colors placeholder:text-neutral-600 focus:border-white/40"
           />
           <button
             type="button"
             disabled={savingPassword || !password.trim()}
             onClick={() => void savePassword()}
-            className="ytmq-press inline-flex min-h-11 items-center gap-1.5 rounded-xl bg-violet-600 px-4 text-sm font-medium text-white hover:bg-violet-500 disabled:opacity-50"
+            className="ytmq-press inline-flex min-h-11 items-center gap-1.5 rounded-full bg-white px-5 text-sm font-bold text-neutral-950 hover:bg-neutral-200 disabled:opacity-40"
           >
             {savingPassword && <span className="ytmq-spinner h-4 w-4" aria-hidden />}
             Save
@@ -303,7 +303,7 @@ export function HostAdminPanel({
             type="button"
             disabled={savingPassword}
             onClick={() => void clearPassword()}
-            className="ytmq-press text-xs font-medium text-zinc-400 underline underline-offset-2 hover:text-zinc-200 disabled:opacity-50"
+            className="ytmq-press text-xs font-medium text-neutral-400 underline underline-offset-2 hover:text-neutral-200 disabled:opacity-50"
           >
             Remove password
           </button>
@@ -316,10 +316,8 @@ export function HostAdminPanel({
       {showPeople && (
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">
-              People
-            </h3>
-            <span className="text-xs text-zinc-500">
+            <h2 className="text-lg font-bold text-white">People</h2>
+            <span className="text-xs text-neutral-500">
               {onlineCount} online · {participants.length} joined
             </span>
           </div>
