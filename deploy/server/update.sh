@@ -71,6 +71,7 @@ main() {
   fi
 
   echo "deployed $sha"
+  firefox_page "$home" "$repo"
 }
 
 # build_site REPO SHA: npm ci when the lockfile moved, then the full build.
@@ -106,6 +107,21 @@ sign_firefox() {
     cd "$repo"
     YTMQ_FIREFOX_DIR="$home/firefox" timeout 20m node scripts/sign-firefox.mjs
   ) || echo "firefox signing did not finish; the last signed build stays up" >&2
+}
+
+# firefox_page HOME REPO: bring the add-on's page on addons.mozilla.org in
+# line with store/firefox/. Mozilla throttles screenshot uploads for up to
+# an hour, so it runs as its own unit (journalctl --user -u ytmq-firefox-page)
+# and never holds up a deploy. With nothing changed it only reads.
+firefox_page() {
+  local home="$1" repo="$2"
+  [[ -f "$home/amo.env" ]] || return 0
+  systemctl --user is-active --quiet ytmq-firefox-page && return 0
+  systemd-run --user --quiet --collect --unit=ytmq-firefox-page \
+    -p WorkingDirectory="$repo" -p EnvironmentFile="$home/amo.env" \
+    --setenv=YTMQ_FIREFOX_DIR="$home/firefox" \
+    "$(command -v node)" scripts/firefox-page.mjs ||
+    echo "could not start the add-on page sync" >&2
 }
 
 main "$@"
