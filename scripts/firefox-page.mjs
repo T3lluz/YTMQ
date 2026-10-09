@@ -20,6 +20,9 @@ const cacheDir = process.env.YTMQ_FIREFOX_DIR || join(homedir(), 'docker/ytmq/fi
 const statePath = join(cacheDir, 'page.json')
 // Long enough for Mozilla's longest throttle; this runs on its own.
 const MAX_WAIT_S = 2 * 60 * 60
+// Every call gets it: Mozilla throttles reads and text edits too, not only
+// screenshot uploads (a PATCH was told to wait 1752s).
+const call = (method, path, body) => amo(method, path, body, { maxWait: MAX_WAIT_S })
 
 function readState() {
   try {
@@ -34,7 +37,7 @@ const saveState = (state) => writeFileSync(statePath, JSON.stringify(state, null
 async function main() {
   if (!hasKeys()) return console.log('firefox-page: no AMO keys, skipping')
   // Signing creates the add-on; until then there is no page to fill in.
-  if (!(await amo('GET', addonPath + '/'))) return console.log('firefox-page: add-on not on AMO yet')
+  if (!(await call('GET', addonPath + '/'))) return console.log('firefox-page: add-on not on AMO yet')
 
   const listing = JSON.parse(readFileSync(join(listingDir, 'listing.json'), 'utf8'))
   const icon = readFileSync(resolve(listingDir, listing.icon))
@@ -46,7 +49,7 @@ async function main() {
   const text = sha256(JSON.stringify([listing.name, listing.summary, listing.description, listing.homepage]))
   if (state.text !== text) {
     const en = (value) => ({ 'en-US': value })
-    await amo('PATCH', addonPath + '/', {
+    await call('PATCH', addonPath + '/', {
       name: en(listing.name),
       summary: en(listing.summary),
       description: en(listing.description),
@@ -61,7 +64,7 @@ async function main() {
   if (state.icon !== iconSha) {
     const form = new FormData()
     form.append('icon', new Blob([icon], { type: 'image/png' }), 'icon.png')
-    await amo('PATCH', addonPath + '/', form)
+    await call('PATCH', addonPath + '/', form)
     state.icon = iconSha
     saveState(state)
     console.log('firefox-page: icon updated')
@@ -69,7 +72,7 @@ async function main() {
 
   // Screenshots: drop what is not ours or no longer listed, upload what is missing.
   const wanted = new Set(shots.map((shot) => shot.sha))
-  const addon = await (await amo('GET', addonPath + '/')).json()
+  const addon = await (await call('GET', addonPath + '/')).json()
   const onAmo = new Set((addon.previews ?? []).map((preview) => preview.id))
   for (const [sha, id] of Object.entries(state.previews)) {
     if (!wanted.has(sha) || !onAmo.has(id)) delete state.previews[sha]
@@ -77,7 +80,7 @@ async function main() {
   const keep = new Set(Object.values(state.previews))
   for (const id of onAmo) {
     if (keep.has(id)) continue
-    await amo('DELETE', `${addonPath}/previews/${id}/`, undefined, { maxWait: MAX_WAIT_S })
+    await call('DELETE', `${addonPath}/previews/${id}/`)
   }
   saveState(state)
   for (const [i, shot] of shots.entries()) {
@@ -85,7 +88,7 @@ async function main() {
     const form = new FormData()
     form.append('image', new Blob([shot.png], { type: 'image/png' }), shot.file)
     form.append('position', String(i))
-    const res = await amo('POST', `${addonPath}/previews/`, form, { maxWait: MAX_WAIT_S })
+    const res = await call('POST', `${addonPath}/previews/`, form)
     state.previews[shot.sha] = (await res.json()).id
     saveState(state)
     console.log(`firefox-page: screenshot ${shot.file} uploaded`)
