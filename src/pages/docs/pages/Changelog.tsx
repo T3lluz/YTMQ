@@ -5,6 +5,17 @@ type Entry = { date: string; version?: string; items: string[] }
 const ENTRIES: Entry[] = [
   {
     date: 'October 2026',
+    version: 'Extension 1.11.1',
+    items: [
+      'A squiggly progress bar, after Android\'s media player: it waves while music plays and settles flat on pause. Hover it for the time under the pointer; drag to seek, in the app and in the extension.',
+      'A plain volume slider on the lyrics screen, without the glow.',
+      'The tab bar shows icons, and the open tab spells out its name.',
+      'Open YTMQ in the extension works without a YTMQ tab open, and lands on your lobby rather than any YTMQ page. Set up Spotify in the popup opens Admin directly.',
+      'The site icon refreshes in browsers that cached the old one, and YTMQ can be added to a phone home screen.',
+    ],
+  },
+  {
+    date: 'October 2026',
     version: 'Extension 1.11',
     items: [
       'New look everywhere: a new icon, red instead of purple, flat surfaces, one typeface.',

@@ -35,6 +35,8 @@ export type PanelBridgeDeps = {
   onPlayPause: () => void
   onNext: () => void
   onPrev: () => void
+  /** Jump to a position in seconds (the panel's progress bar). */
+  onSeek?: (seconds: number) => void
   showToast: (message: string) => void
 }
 
@@ -233,6 +235,7 @@ function handlePanelAction(data: Record<string, unknown>) {
   else if (action === 'next') deps.onNext()
   else if (action === 'prev') deps.onPrev()
   else if (action === 'retry-sync') deps.onRetrySync()
+  else if (action === 'seek' && typeof data.position === 'number') deps.onSeek?.(data.position)
   else if (action === 'remove' && typeof data.id === 'string') void removeRow(data.id)
   else if (action === 'copy-link') {
     const link = roomUrl(deps.roomId, deps.siteBase)
@@ -254,7 +257,7 @@ function handlePanelAction(data: Record<string, unknown>) {
       /* ignore */
     }
   }
-  if (action === 'toggle' || action === 'next' || action === 'prev') {
+  if (action === 'toggle' || action === 'next' || action === 'prev' || action === 'seek') {
     window.setTimeout(publishState, 250)
   }
 }

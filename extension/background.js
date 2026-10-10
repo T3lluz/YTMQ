@@ -82,28 +82,29 @@ function ytmqRoomUrl(roomId) {
     : `${YTMQ_SITE_ORIGIN}${YTMQ_SITE_PATH}/`
 }
 
-async function focusYtmqTab(roomId) {
+/**
+ * Bring the lobby forward. With a room: the tab already showing that room,
+ * else any YTMQ tab is not good enough (it may be the docs), so it opens
+ * the room. Without one: any YTMQ tab. Returns false when nothing matched.
+ */
+async function focusYtmqTab(roomId, tab) {
   const tabs = await chrome.tabs.query({ url: `${YTMQ_SITE_ORIGIN}${YTMQ_SITE_PATH}/*` })
-  if (tabs.length === 0) return false
   tabs.sort(byLastAccessed)
-  let target = tabs[0]
-  if (roomId) {
-    for (const tab of tabs) {
-      if (tab.url && tab.url.includes(roomId)) {
-        target = tab
-        break
-      }
-    }
-  }
+  const target = roomId
+    ? tabs.find((t) => t.url && t.url.includes('/room/' + roomId))
+    : tabs[0]
+  if (!target) return false
   await chrome.tabs.update(target.id, { active: true }).catch(() => {})
   await chrome.windows.update(target.windowId, { focused: true }).catch(() => {})
+  // Switch the open lobby to a tab (Admin, say) without reloading it.
+  if (tab) chrome.tabs.sendMessage(target.id, { type: 'ytmq-show-tab', tab }).catch(() => {})
   return true
 }
 
-async function openYtmqTab(roomId) {
-  const focused = await focusYtmqTab(roomId)
-  if (focused) return true
-  await chrome.tabs.create({ url: ytmqRoomUrl(roomId) })
+async function openYtmqTab(roomId, tab) {
+  if (await focusYtmqTab(roomId, tab)) return true
+  const url = ytmqRoomUrl(roomId) + (roomId && tab ? '?tab=' + encodeURIComponent(tab) : '')
+  await chrome.tabs.create({ url })
   return true
 }
 
@@ -483,8 +484,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true
   }
 
+  // Kept for overlays from before 1.11.1; they only knew how to focus.
   if (message && message.type === 'ytmq-focus-app') {
-    focusYtmqTab(message.roomId || '').then(
+    openYtmqTab(message.roomId || '', message.tab || '').then(
       (ok) => sendResponse({ ok }),
       () => sendResponse({ ok: false }),
     )
@@ -492,7 +494,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message && message.type === 'ytmq-open-app') {
-    openYtmqTab(message.roomId || '').then(
+    openYtmqTab(message.roomId || '', message.tab || '').then(
       (ok) => sendResponse({ ok }),
       () => sendResponse({ ok: false }),
     )

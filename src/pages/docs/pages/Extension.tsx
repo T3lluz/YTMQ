@@ -20,7 +20,7 @@ export default function Extension() {
       </P>
       <UL>
         <li>The code, a QR to scan, and a button that copies the lobby link.</li>
-        <li>What is playing, with play, pause, next and previous.</li>
+        <li>What is playing, with play, pause, next and previous. Drag the progress bar to seek.</li>
         <li>
           <B>Up next from guests</B>: the shared queue with who added each song. Hover a song and press
           the cross to remove it.

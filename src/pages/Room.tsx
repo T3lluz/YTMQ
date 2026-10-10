@@ -46,6 +46,14 @@ import { forgetLobby, rememberLobby } from '../lib/recentLobbies'
 const TAB_ORDER: RoomTab[] = ['search', 'queue', 'lyrics', 'room', 'admin']
 
 function consumeRestoreTab(): RoomTab | null {
+  // ?tab=admin from the extension's popup ("Set up" Spotify) or a shared link.
+  const fromUrl = new URLSearchParams(window.location.search).get('tab')
+  if (fromUrl && TAB_ORDER.includes(fromUrl as RoomTab)) {
+    const url = new URL(window.location.href)
+    url.searchParams.delete('tab')
+    window.history.replaceState(window.history.state, '', url)
+    return fromUrl as RoomTab
+  }
   try {
     const raw = sessionStorage.getItem(RESTORE_TAB_KEY)
     if (!raw) return null
@@ -419,6 +427,19 @@ export function Room() {
       cancelled = true
     }
   }, [roomId])
+
+  // The extension asks an already-open lobby to show a tab (popup → Admin).
+  useEffect(() => {
+    function onMessage(event: MessageEvent) {
+      if (event.source !== window) return
+      const data = event.data as { source?: string; type?: string; tab?: string } | null
+      if (data?.source !== 'ytmq-extension' || data.type !== 'ytmq:show-tab') return
+      const next = data.tab as RoomTab
+      if (TAB_ORDER.includes(next)) setTab(next)
+    }
+    window.addEventListener('message', onMessage)
+    return () => window.removeEventListener('message', onMessage)
+  }, [])
 
   // Keep the extension synced to this lobby whenever the host has the room
   // open — not only when they visit the Admin tab (YtMusicConnect).

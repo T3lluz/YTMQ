@@ -3,13 +3,10 @@ import { nowPlayingArtwork } from '../lib/queue'
 import { useNowPlaying } from '../hooks/useNowPlaying'
 import { usePlaybackPosition } from '../hooks/usePlaybackPosition'
 import { useImagePalette } from '../hooks/useImagePalette'
-import { sendPlaybackControl } from '../lib/bridgeChannel'
+import { sendPlaybackControl, sendPlaybackSeek } from '../lib/bridgeChannel'
 import { paletteCssVars } from '../lib/imagePalette'
-import {
-  formatPlaybackTime,
-  type PlaybackAction,
-  type PlaybackState,
-} from '../lib/playback'
+import type { PlaybackAction, PlaybackState } from '../lib/playback'
+import { SquigglyProgress } from './SquigglyProgress'
 
 type NowPlayingProps = {
   roomId: string
@@ -167,9 +164,7 @@ export function NowPlaying({
         </div>
 
         <div
-          className={`ytmq-now-controls flex shrink-0 items-center gap-1 rounded-full border px-1 py-1 backdrop-blur ${
-            compact ? '' : 'gap-1.5 px-1.5'
-          }`}
+          className={`ytmq-now-controls flex shrink-0 items-center ${compact ? 'gap-1' : 'gap-1.5'}`}
           title={!canControl ? 'The host has limited playback controls' : undefined}
         >
           <ControlButton
@@ -203,12 +198,19 @@ export function NowPlaying({
         </div>
       </div>
 
-      <PlaybackProgress
-        position={position}
-        duration={nowPlaying.duration}
-        compact={compact}
-        live={live}
-      />
+      <div className={compact ? 'px-3 pb-2.5' : 'px-4 pb-3'}>
+        <SquigglyProgress
+          position={position}
+          duration={nowPlaying.duration}
+          playing={live}
+          canSeek={!disabled && Boolean(nowPlaying.duration)}
+          onSeek={(v) => sendPlaybackSeek(roomId, v)}
+          updatedAt={nowPlaying.updatedAt}
+          trackKey={nowPlaying.videoId}
+          size="sm"
+          times="elapsed-remaining"
+        />
+      </div>
     </section>
   )
 }
@@ -221,61 +223,6 @@ function Equalizer() {
       <span className="ytmq-eq-bar" />
       <span className="ytmq-eq-bar" />
     </span>
-  )
-}
-
-type PlaybackProgressProps = {
-  position: number
-  duration?: number
-  compact?: boolean
-  live?: boolean
-}
-
-function PlaybackProgress({
-  position,
-  duration,
-  compact = false,
-  live = false,
-}: PlaybackProgressProps) {
-  const hasDuration = duration != null && duration > 0
-  const percent = hasDuration
-    ? Math.min(100, Math.max(0, (position / duration) * 100))
-    : 0
-  const remaining = hasDuration ? Math.max(0, duration - position) : 0
-  const inset = compact ? 'px-3' : 'px-4'
-
-  return (
-    <div
-      className={`pointer-events-none select-none border-t ${
-        compact ? 'pb-2.5 pt-2' : 'pb-3 pt-2.5'
-      }`}
-      style={{ borderColor: 'color-mix(in srgb, var(--np-accent) 18%, transparent)' }}
-      role="progressbar"
-      aria-valuenow={Math.floor(position)}
-      aria-valuemin={0}
-      aria-valuemax={hasDuration ? Math.floor(duration) : undefined}
-      aria-label="Track progress"
-    >
-      <div className={inset}>
-        <div className="ytmq-now-progress-track h-1.5 w-full overflow-visible rounded-full">
-          <div
-            className={`ytmq-now-progress-fill h-full rounded-full transition-[width] duration-300 ease-linear ${
-              live && percent > 1 && percent < 99 ? 'is-live' : ''
-            }`}
-            style={{ width: `${percent}%` }}
-          />
-        </div>
-        <div
-          className="mt-1.5 flex justify-between text-[10px] tabular-nums"
-          style={{ color: 'color-mix(in srgb, var(--np-accent-light) 55%, #a1a1aa)' }}
-        >
-          <span>{formatPlaybackTime(position)}</span>
-          <span>
-            {hasDuration ? `-${formatPlaybackTime(remaining)}` : '--:--'}
-          </span>
-        </div>
-      </div>
-    </div>
   )
 }
 
@@ -308,8 +255,8 @@ function ControlButton({
   const base =
     'inline-flex items-center justify-center rounded-full text-white transition active:scale-95 disabled:opacity-40 disabled:active:scale-100'
   const tone = primary
-    ? 'ytmq-now-control-primary'
-    : 'bg-white/10 hover:bg-white/20'
+    ? 'bg-white !text-neutral-950 hover:scale-105'
+    : 'hover:bg-white/15'
   const ring = active ? ' ytmq-now-control-active' : ''
   return (
     <button

@@ -290,11 +290,13 @@
   function onAction(action, extra) {
     switch (action) {
       case 'open-app':
+        void send({ type: 'ytmq-open-app', roomId: roomId() }).then(closePopup)
+        return
       case 'open-admin':
-        void send({ type: 'ytmq-focus-app', roomId: roomId() })
+        void send({ type: 'ytmq-open-app', roomId: roomId(), tab: 'admin' }).then(closePopup)
         return
       case 'open-ytm':
-        void send({ type: 'ytmq-open-ytm' })
+        void send({ type: 'ytmq-open-ytm' }).then(closePopup)
         return
       case 'open-url':
         void send({ type: 'ytmq-open-url', url: extra && extra.url })
@@ -325,6 +327,15 @@
           render()
         }
         return
+      case 'seek':
+        if (extra && typeof extra.position === 'number') {
+          broadcast('playback_control', { action: 'seek', position: extra.position })
+          if (playback.np) {
+            playback.np.currentTime = extra.position
+            playback.at = Date.now()
+          }
+        }
+        return
       case 'remove':
         removeRow(extra && extra.id)
         return
@@ -334,6 +345,15 @@
       case 'disconnect':
         void send({ type: 'ytmq-disconnect' }).then(loadSnapshot)
         return
+    }
+  }
+
+  /** The popup stays open over a tab it just switched to; close it like a link would. */
+  function closePopup() {
+    try {
+      window.close()
+    } catch (e) {
+      /* ignore */
     }
   }
 

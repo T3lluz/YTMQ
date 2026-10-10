@@ -1641,6 +1641,9 @@ async function runBridge() {
     onPrev: () => {
       doPrev()
     },
+    onSeek: (seconds) => {
+      doSeek(seconds)
+    },
     showToast,
   })
   refreshPanel = panelBridge.refresh

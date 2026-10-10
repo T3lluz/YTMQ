@@ -355,7 +355,7 @@
         els.pill.focus()
         return
       case 'open-app':
-        sendRuntime({ type: 'ytmq-focus-app', roomId: roomId })
+        sendRuntime({ type: 'ytmq-open-app', roomId: roomId })
         return
       case 'open-url':
         sendRuntime({ type: 'ytmq-open-url', url: extra && extra.url })
@@ -371,6 +371,9 @@
         return
       case 'remove':
         postAction('remove', { id: extra && extra.id })
+        return
+      case 'seek':
+        postAction('seek', { position: extra && extra.position })
         return
       default:
         // copy-link, toggle, prev, next, retry-sync: the bridge does these.

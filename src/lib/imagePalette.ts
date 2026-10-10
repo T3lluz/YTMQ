@@ -186,9 +186,11 @@ export function paletteCssVars(palette: ImagePalette): Record<string, string> {
     '--np-accent-muted': palette.accentMuted,
     '--np-accent-soft': palette.accentSoft,
     '--np-accent-rgb': `${r} ${g} ${b}`,
-    '--np-accent-glow': paletteGlow(palette.accentRgb, 0.42),
-    '--np-accent-glow-strong': paletteGlow(palette.accentRgb, 0.62),
-    '--np-accent-border': `rgba(${r}, ${g}, ${b}, 0.42)`,
-    '--np-accent-ring': `rgba(${r}, ${g}, ${b}, 0.18)`,
+    // Album colour lives in the art, the backdrop and the progress; edges and
+    // shadows stay neutral. Coloured glows read as generated, not designed.
+    '--np-accent-glow': paletteGlow(palette.accentRgb, 0),
+    '--np-accent-glow-strong': paletteGlow(palette.accentRgb, 0),
+    '--np-accent-border': 'rgba(255, 255, 255, 0.08)',
+    '--np-accent-ring': 'rgba(255, 255, 255, 0.12)',
   }
 }

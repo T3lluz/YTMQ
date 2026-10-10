@@ -45,6 +45,18 @@ function send(message, onResponse) {
   }
 }
 
+// The toolbar popup can ask an open lobby to show a tab (Admin for Spotify).
+try {
+  chrome.runtime.onMessage.addListener(function (message) {
+    if (message && message.type === 'ytmq-show-tab' && typeof message.tab === 'string') {
+      reply({ type: 'ytmq:show-tab', tab: message.tab })
+    }
+    return false
+  })
+} catch (e) {
+  /* ignore */
+}
+
 window.addEventListener('message', function (event) {
   if (event.source !== window) return
   var data = event.data

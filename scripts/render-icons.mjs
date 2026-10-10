@@ -15,6 +15,9 @@ const jobs = [
   ['design/brand/ytmq.svg', 48, 'extension/icons/icon48.png'],
   ['design/brand/ytmq.svg', 128, 'extension/icons/icon128.png'],
   ['design/brand/ytmq-tile.svg', 180, 'public/apple-touch-icon.png'],
+  ['design/brand/ytmq-small.svg', 32, 'public/favicon-32.png'],
+  ['design/brand/ytmq-tile.svg', 192, 'public/icon-192.png'],
+  ['design/brand/ytmq-tile.svg', 512, 'public/icon-512.png'],
 ]
 
 const browser = await chromium.launch(process.env.CHROMIUM ? { executablePath: process.env.CHROMIUM } : {})

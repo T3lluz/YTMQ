@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { CopiedCheck } from './CopiedCheck'
 import { useLobbyShare } from '../hooks/useLobbyShare'
 
@@ -277,38 +277,6 @@ export function TabBar({
 
   const dockRef = useRef<HTMLDivElement | null>(null)
 
-  // Sliding highlight pill that animates between the active tab.
-  const tabRefs = useRef<Record<string, HTMLButtonElement | null>>({})
-  const [indicator, setIndicator] = useState<{
-    left: number
-    top: number
-    width: number
-    height: number
-  } | null>(null)
-  // Suppress the slide transition for the very first placement.
-  const [indicatorReady, setIndicatorReady] = useState(false)
-
-  useLayoutEffect(() => {
-    const measure = () => {
-      const el = tabRefs.current[active]
-      if (!el) return
-      setIndicator({
-        left: el.offsetLeft,
-        top: el.offsetTop,
-        width: el.offsetWidth,
-        height: el.offsetHeight,
-      })
-    }
-    measure()
-    // Flip on the transition after the initial position is committed.
-    const raf = requestAnimationFrame(() => setIndicatorReady(true))
-    window.addEventListener('resize', measure)
-    return () => {
-      cancelAnimationFrame(raf)
-      window.removeEventListener('resize', measure)
-    }
-  }, [active, tabs.length])
-
   // Close the share popover on outside click / Escape.
   useEffect(() => {
     if (!shareOpen) return
@@ -340,36 +308,19 @@ export function TabBar({
           />
         )}
 
-        <nav aria-label="Room navigation" className="ytmq-dock-nav relative flex max-w-full items-center gap-0.5 overflow-visible rounded-full border border-white/10 bg-neutral-900/90 p-1 shadow-[0_16px_40px_-8px_rgba(0,0,0,0.7)] backdrop-blur-xl ytmq-hide-scrollbar sm:p-1.5">
-          {indicator && (
-            <span
-              aria-hidden
-              className={`pointer-events-none absolute rounded-full bg-white/[0.09] ${
-                indicatorReady
-                  ? 'transition-[left,top,width,height] duration-300 ease-[cubic-bezier(0.4,1.1,0.5,1)]'
-                  : ''
-              }`}
-              style={{
-                left: indicator.left,
-                top: indicator.top,
-                width: indicator.width,
-                height: indicator.height,
-              }}
-            />
-          )}
+        <nav aria-label="Room navigation" className="ytmq-dock-nav relative flex max-w-full items-center gap-1 overflow-visible rounded-full border border-white/10 bg-neutral-900/90 p-1 shadow-[0_16px_40px_-8px_rgba(0,0,0,0.7)] backdrop-blur-xl ytmq-hide-scrollbar sm:p-1.5">
           {tabs.map((tab) => {
             const isActive = active === tab.id
             const { Icon } = tab
             return (
               <button
                 key={tab.id}
-                ref={(el) => {
-                  tabRefs.current[tab.id] = el
-                }}
                 type="button"
                 onClick={() => handleChange(tab.id)}
-                className={`group relative z-10 flex min-h-12 w-[3.2rem] shrink-0 flex-col items-center justify-center gap-0.5 overflow-visible rounded-full px-0.5 text-[10px] font-semibold transition-colors sm:min-h-[3.25rem] sm:w-[3.9rem] sm:px-1 sm:text-[11px] ${
-                  isActive ? 'text-white' : 'text-neutral-500 hover:text-neutral-200'
+                className={`ytmq-tab group relative flex h-11 shrink-0 items-center justify-center rounded-full text-sm font-semibold transition-[background-color,color,padding] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] sm:h-[3.25rem] ${
+                  isActive
+                    ? 'is-active bg-white/[0.1] pl-3.5 pr-4 text-white sm:pl-4 sm:pr-5'
+                    : 'w-11 text-neutral-400 hover:bg-white/[0.05] hover:text-neutral-100 sm:w-[3.25rem]'
                 }`}
                 aria-current={isActive ? 'page' : undefined}
                 aria-label={
@@ -378,28 +329,32 @@ export function TabBar({
                     : tab.label
                 }
               >
-                <span className="relative overflow-visible pt-0.5">
+                <span className="relative shrink-0 overflow-visible">
                   <span
                     ref={(el) => {
                       iconWrapRefs.current[tab.id] = el
                     }}
-                    className="ytmq-tab-icon-wrap inline-flex items-center justify-center p-0.5"
+                    className="ytmq-tab-icon-wrap inline-flex items-center justify-center"
                   >
                     <Icon
-                      className={`h-5 w-5 transition-[transform,color] duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] group-active:scale-90 ${
+                      className={`h-[22px] w-[22px] transition-[transform,color] duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] group-active:scale-90 ${
                         isActive ? 'text-accent-400' : ''
                       }`}
                     />
                   </span>
                   {tab.id === 'queue' && queueCount > 0 && (
                     <span
-                      className="ytmq-anim-pop absolute -right-2.5 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent-600 px-1 text-[10px] font-bold leading-none text-white ring-2 ring-neutral-900"
+                      aria-hidden
+                      className="ytmq-anim-pop absolute -right-2.5 -top-2 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent-600 px-1 text-[10px] font-bold leading-none text-white ring-2 ring-neutral-900"
                     >
                       {queueCount > 99 ? '99+' : queueCount}
                     </span>
                   )}
                 </span>
-                <span className="leading-none">{tab.label}</span>
+                {/* The label only for the open tab: it slides out of the icon. */}
+                <span className="ytmq-tab-label" aria-hidden>
+                  <span>{tab.label}</span>
+                </span>
               </button>
             )
           })}
@@ -413,14 +368,14 @@ export function TabBar({
             onClick={() => setShareOpen((v) => !v)}
             aria-expanded={shareOpen}
             aria-label={`Lobby ${code} — show QR and share`}
-            className={`group flex min-h-11 shrink-0 items-center gap-1.5 rounded-full py-1 pl-2 pr-2.5 transition-colors sm:min-h-12 sm:gap-2 sm:pl-2.5 sm:pr-3 ${
+            className={`group flex h-11 w-11 shrink-0 items-center justify-center gap-2 rounded-full transition-colors sm:h-[3.25rem] sm:w-auto sm:justify-start sm:pl-3 sm:pr-4 ${
               shareOpen
                 ? 'bg-white/[0.09] text-neutral-100'
                 : 'text-neutral-400 hover:bg-white/5 hover:text-neutral-100'
             }`}
           >
             <QrIcon className="h-5 w-5 shrink-0 transition-transform duration-100 group-active:scale-90" />
-            <span className="flex flex-col items-start leading-tight">
+            <span className="hidden flex-col items-start leading-tight sm:flex">
               <span className="text-[9px] font-medium uppercase tracking-wide text-neutral-500">
                 Lobby
               </span>

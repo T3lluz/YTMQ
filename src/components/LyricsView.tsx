@@ -19,9 +19,10 @@ import {
   sendPlaybackSeek,
   sendPlaybackVolume,
 } from '../lib/bridgeChannel'
-import { formatPlaybackTime, type PlaybackAction } from '../lib/playback'
+import type { PlaybackAction } from '../lib/playback'
 import { LyricsUpNext, type UpNextTrack } from './LyricsUpNext'
 import { PlaybackControls } from './PlaybackControls'
+import { SquigglyProgress } from './SquigglyProgress'
 
 type LyricsViewProps = {
   roomId: string
@@ -380,38 +381,27 @@ export function LyricsScreen({
         <LyricsBackdrop live paletteReady={false} />
 
         <div className="relative flex min-h-0 flex-1 flex-col items-center justify-center gap-6 p-8 text-center">
-          <div className="relative flex h-28 w-28 items-center justify-center">
-            <span aria-hidden className="ytmq-idle-ring absolute inset-0 rounded-full" />
-            <span
-              aria-hidden
-              className="ytmq-idle-ring absolute inset-0 rounded-full"
-              style={{ animationDelay: '1.4s' }}
-            />
-            <div className="ytmq-idle-badge ytmq-now-control-primary relative flex h-20 w-20 items-center justify-center rounded-full text-white ring-1 ring-white/20">
-              <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden className="h-9 w-9">
-                <path d="M6 5h4v14H6zM14 5h4v14h-4z" />
-              </svg>
-            </div>
+          <div className="flex h-20 w-20 items-center justify-center rounded-[26px] bg-white/10 text-white/80">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden className="h-9 w-9">
+              <path d="M9 18V5l12-2v13" />
+              <circle cx="6" cy="18" r="3" />
+              <circle cx="18" cy="16" r="3" />
+            </svg>
           </div>
 
           <div className="space-y-1.5">
             <h2 className="font-lyrics text-2xl font-extrabold tracking-tight text-white drop-shadow sm:text-3xl">
-              Nothing playing
+              Nothing playing yet
             </h2>
             <p className="mx-auto max-w-sm text-sm text-neutral-300/90">
               {connected
-                ? 'Press play in YouTube Music or Spotify and the lyrics will light up here.'
-                : 'Connect YouTube Music or Spotify as host to follow along with synced lyrics.'}
+                ? 'Press play in YouTube Music or Spotify and the lyrics show up here, line by line.'
+                : 'Once the host links YouTube Music or Spotify, synced lyrics show up here.'}
             </p>
           </div>
 
           <span
-            className="inline-flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-white/90 backdrop-blur"
-            style={{
-              borderColor: 'var(--np-accent-border)',
-              background:
-                'color-mix(in srgb, var(--np-accent) 14%, rgba(0, 0, 0, 0.4))',
-            }}
+            className="inline-flex items-center gap-2 rounded-full bg-black/30 px-3.5 py-1.5 text-xs font-semibold text-white/90"
           >
             <span
               className={`h-2 w-2 rounded-full ${
@@ -684,13 +674,7 @@ type SeekBarProps = {
   variant?: 'full' | 'compact'
 }
 
-/**
- * Seekable playback bar for the lyrics screen. Drag (or tap) to scrub: the fill
- * jumps optimistically to the target and holds there until the bridge confirms
- * a newer position, so it never snaps back to a stale broadcast. The scrub
- * "pill" stays hidden until the bar is hovered, then springs in, and swells
- * with a soft accent glow while actively dragging.
- */
+/** Seekable playback bar for the lyrics screen (the shared squiggly bar). */
 function SeekBar({
   position,
   duration,
@@ -701,125 +685,19 @@ function SeekBar({
   videoId,
   variant = 'full',
 }: SeekBarProps) {
-  const [pendingSeek, setPendingSeek] = useState<number | null>(null)
-  const [dragging, setDragging] = useState(false)
-  const trackRef = useRef<HTMLDivElement | null>(null)
-  const sentAtRef = useRef(0)
-
-  useEffect(() => {
-    setPendingSeek(null)
-  }, [videoId])
-
-  useEffect(() => {
-    if (pendingSeek == null) return
-    if (updatedAt != null && updatedAt > sentAtRef.current) setPendingSeek(null)
-  }, [updatedAt, pendingSeek])
-
-  const hasDuration = duration != null && duration > 0
-  const shown = pendingSeek ?? position
-  const percent =
-    hasDuration && duration ? Math.min(100, Math.max(0, (shown / duration) * 100)) : 0
-
-  const positionFromClientX = (clientX: number): number | null => {
-    const el = trackRef.current
-    if (!el || duration == null) return null
-    const rect = el.getBoundingClientRect()
-    if (rect.width <= 0) return null
-    const ratio = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width))
-    return ratio * duration
-  }
-
-  const onPointerDown = (e: React.PointerEvent) => {
-    if (!canSeek) return
-    const next = positionFromClientX(e.clientX)
-    if (next == null) return
-    e.preventDefault()
-    e.currentTarget.setPointerCapture?.(e.pointerId)
-    setDragging(true)
-    setPendingSeek(next)
-    // Hold the optimistic value through routine broadcasts until we send.
-    sentAtRef.current = Number.POSITIVE_INFINITY
-  }
-
-  const onPointerMove = (e: React.PointerEvent) => {
-    if (!dragging) return
-    const next = positionFromClientX(e.clientX)
-    if (next != null) setPendingSeek(next)
-  }
-
-  const endDrag = (e: React.PointerEvent) => {
-    if (!dragging) return
-    const next = positionFromClientX(e.clientX) ?? pendingSeek
-    e.currentTarget.releasePointerCapture?.(e.pointerId)
-    setDragging(false)
-    if (next != null && onSeek) {
-      setPendingSeek(next)
-      onSeek(next)
-      sentAtRef.current = Date.now()
-    }
-  }
-
-  const trackHeight = variant === 'full' ? 'h-1.5' : 'h-1'
-  const hoverHeight = variant === 'full' ? 'group-hover/seek:h-2.5' : 'group-hover/seek:h-1.5'
-  const dragHeight = variant === 'full' ? 'h-2.5' : 'h-1.5'
-  const thumbSize = variant === 'full' ? 'h-4 w-4' : 'h-3 w-3'
-
   return (
-    <div className="w-full">
-      <div
-        ref={trackRef}
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={endDrag}
-        onPointerCancel={endDrag}
-        className={`group/seek relative -my-2 py-2 ${
-          canSeek ? 'cursor-pointer touch-none' : ''
-        }`}
-        title={canSeek ? 'Drag to seek' : undefined}
-        role={canSeek ? 'slider' : undefined}
-        aria-label={canSeek ? 'Seek track position' : undefined}
-        aria-valuemin={canSeek ? 0 : undefined}
-        aria-valuemax={canSeek && duration != null ? Math.floor(duration) : undefined}
-        aria-valuenow={canSeek ? Math.floor(shown) : undefined}
-      >
-        <div
-          className={`ytmq-now-progress-track w-full overflow-hidden rounded-full transition-[height] duration-200 ${trackHeight} ${
-            canSeek ? hoverHeight : ''
-          } ${dragging ? dragHeight : ''}`}
-        >
-          <div
-            className={`ytmq-now-progress-fill h-full rounded-full transition-[width] duration-300 ease-linear ${
-              live && percent > 1 && percent < 99 ? 'is-live' : ''
-            }`}
-            style={{
-              width: `${percent}%`,
-              // Snap instantly to the scrub target instead of easing.
-              ...(pendingSeek != null ? { transition: 'none' } : null),
-            }}
-          />
-        </div>
-        {canSeek && (
-          <span
-            aria-hidden
-            className={`pointer-events-none absolute top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white ring-1 ring-black/25 transition-[opacity,transform,box-shadow] duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] ${thumbSize} ${
-              dragging
-                ? 'scale-125 opacity-100 shadow-[0_0_0_6px_rgba(var(--np-accent-rgb)/0.28),0_2px_10px_rgba(0,0,0,0.45)]'
-                : 'scale-50 opacity-0 shadow-md group-hover/seek:scale-100 group-hover/seek:opacity-100'
-            }`}
-            style={{ left: `${percent}%` }}
-          />
-        )}
-      </div>
-      {variant === 'full' && (
-        <div
-          className="mt-1.5 flex justify-between text-xs tabular-nums"
-          style={{ color: 'color-mix(in srgb, var(--np-accent-light) 60%, #a1a1aa)' }}
-        >
-          <span>{formatPlaybackTime(shown)}</span>
-          <span>{hasDuration && duration ? formatPlaybackTime(duration) : '--:--'}</span>
-        </div>
-      )}
-    </div>
+    <SquigglyProgress
+      position={position}
+      duration={duration}
+      playing={live}
+      canSeek={canSeek}
+      onSeek={onSeek}
+      updatedAt={updatedAt}
+      trackKey={videoId}
+      size={variant === 'full' ? 'lg' : 'sm'}
+      times={variant === 'full' ? 'elapsed-total' : 'none'}
+      className="w-full"
+    />
   )
 }
 
@@ -1115,23 +993,15 @@ function VolumeControl({
   return (
     <div
       ref={ref}
-      className={`ytmq-vol group absolute left-3 top-1/2 z-30 hidden -translate-y-1/2 flex-col items-center gap-3 rounded-full border bg-black/40 px-2 py-3.5 text-white backdrop-blur transition-[opacity,transform] duration-300 sm:flex ${
+      className={`ytmq-vol group absolute left-4 top-1/2 z-30 hidden -translate-y-1/2 flex-col items-center gap-2.5 rounded-full bg-black/35 px-2 py-3 text-white shadow-[0_12px_30px_rgba(0,0,0,0.35)] backdrop-blur-xl transition-[opacity,translate] duration-300 sm:flex ${
         near || dragging
-          ? 'scale-100 opacity-100'
-          : 'pointer-events-none scale-95 opacity-0'
-      }`}
-      style={{
-        borderColor: 'var(--np-accent-border)',
-        boxShadow: '0 10px 30px rgba(0, 0, 0, 0.45), 0 0 22px var(--np-accent-glow)',
-      }}
+          ? 'translate-x-0 opacity-100'
+          : 'pointer-events-none -translate-x-2 opacity-0'
+      } ${dragging ? 'is-dragging' : ''}`}
       role="group"
       aria-label="Volume"
     >
-      <span
-        aria-hidden
-        className="text-[10px] font-semibold tabular-nums tracking-wide"
-        style={{ color: 'color-mix(in srgb, var(--np-accent-light) 70%, white)' }}
-      >
+      <span aria-hidden className="ytmq-vol-value text-[11px] font-semibold tabular-nums text-white/70">
         {Math.round(percent)}
       </span>
       <div
@@ -1147,26 +1017,12 @@ function VolumeControl({
         aria-valuemax={100}
         aria-valuenow={Math.round(percent)}
       >
-        <div
-          ref={trackRef}
-          className={`ytmq-vol-track relative w-1.5 overflow-hidden rounded-full ${
-            dragging ? 'is-dragging' : ''
-          }`}
-        >
+        <div ref={trackRef} className="ytmq-vol-track relative overflow-hidden rounded-full">
           <div
-            className={`ytmq-vol-fill absolute inset-x-0 bottom-0 rounded-full ${
-              dragging ? 'is-dragging' : ''
-            }`}
+            className="ytmq-vol-fill absolute inset-x-0 bottom-0"
             style={{ height: `${percent}%` }}
           />
         </div>
-        <span
-          aria-hidden
-          className={`ytmq-vol-thumb pointer-events-none absolute left-1/2 h-4 w-4 rounded-full ${
-            dragging ? 'is-dragging' : ''
-          }`}
-          style={{ bottom: `${percent}%` }}
-        />
       </div>
       <button
         type="button"

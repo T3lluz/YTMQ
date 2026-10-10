@@ -184,8 +184,22 @@
       '.ctl .play{width:34px;height:34px;background:#fafafa;color:#181818;margin:0 2px}',
       '.ctl .play:hover{background:#fff;color:#000}',
       '.prog{grid-area:bar;display:flex;align-items:center;gap:8px;font-size:10px;color:#737373;font-variant-numeric:tabular-nums}',
-      '.bar{flex:1;height:3px;border-radius:999px;background:rgba(255,255,255,.1);overflow:hidden}',
-      '.bar i{display:block;height:100%;width:0;border-radius:inherit;background:rgb(var(--ac-light));transition:background .6s}',
+      // Progress: Android's squiggly bar (the web app uses the same one).
+      '.bar{position:relative;flex:1;height:14px}',
+      '.bar.seek{cursor:pointer;touch-action:none}',
+      '.bar svg{position:absolute;inset:0;width:100%;height:100%;overflow:hidden}',
+      '.bar path{fill:none;stroke:#fff;stroke-width:3;stroke-linecap:round;transition:stroke-width .22s ' + EASE + '}',
+      '.bar line{stroke:rgba(255,255,255,.22);stroke-width:3;stroke-linecap:round;transition:stroke-width .22s ' + EASE + ',stroke .2s}',
+      '.bar .thumb{position:absolute;left:0;top:50%;width:4px;height:12px;margin:-6px 0 0 -2px;border-radius:999px;background:#fff;' +
+        'box-shadow:0 0 0 2px rgba(0,0,0,.2);transition:height .26s ' + EASE + ',width .26s ' + EASE + ',margin .26s ' + EASE + '}',
+      '.bar.seek:hover path,.bar.seek:hover line,.bar.drag path,.bar.drag line{stroke-width:4.5}',
+      '.bar.seek:hover line,.bar.drag line{stroke:rgba(255,255,255,.32)}',
+      '.bar.seek:hover .thumb,.bar.drag .thumb{width:6px;height:17px;margin:-8.5px 0 0 -3px}',
+      '.bar .tip{position:absolute;bottom:100%;margin-bottom:6px;transform:translateX(-50%);padding:2px 6px;border-radius:6px;' +
+        'background:rgba(10,10,10,.92);color:#fff;font-size:10px;font-weight:600;white-space:nowrap;pointer-events:none;opacity:0;transition:opacity .15s}',
+      '.bar.seek:hover .tip,.bar.drag .tip{opacity:1}',
+      '.prog span{transition:color .2s}',
+      '.np:hover .prog span{color:#a3a3a3}',
       '.np.idle{grid-template-areas:"art text text" "bar bar bar"}',
       '.np.idle .ctl,.np.idle .prog{display:none}',
       '.np.idle .art{box-shadow:none}',
@@ -419,7 +433,8 @@
       '<button type="button" class="play" data-a="toggle" data-r="play" title="Play">' + icon('play', 16) + '</button>' +
       '<button type="button" data-a="next" title="Next">' + icon('next', 15) + '</button>' +
       '</div>' +
-      '<div class="prog"><span data-r="t0">0:00</span><div class="bar"><i data-r="bar"></i></div><span data-r="t1">0:00</span></div>' +
+      '<div class="prog"><span data-r="t0">0:00</span><div class="bar" data-r="bar"><svg aria-hidden="true"><line data-r="rest"></line><path data-r="wave"></path></svg>' +
+      '<i class="thumb" data-r="thumb"></i><span class="tip" data-r="tip"></span></div><span data-r="t1">0:00</span></div>' +
       '</div>' +
       (mode === 'popup'
         ? '<div class="sources">' +
@@ -504,6 +519,8 @@
       roomUrl: '',
       rows: Object.create(null),
       clock: { at: 0, time: 0, duration: 0, playing: false },
+      held: null,
+      dragging: false,
       lastState: null,
     }
 
@@ -656,15 +673,136 @@
       tick()
     }
 
-    function tick() {
+    function clockNow() {
       var c = current.clock
+      if (current.held != null) return current.held
       var now = c.time
       if (c.playing && c.at) now += (Date.now() - c.at) / 1000
       if (c.duration > 0) now = Math.min(now, c.duration)
-      r.bar.style.width = (c.duration > 0 ? (now / c.duration) * 100 : 0).toFixed(2) + '%'
+      return now
+    }
+
+    function tick() {
+      var c = current.clock
+      var now = clockNow()
       r.t0.textContent = fmt(now)
       r.t1.textContent = c.duration > 0 ? fmt(c.duration) : '–:––'
+      r.bar.classList.toggle('seek', c.duration > 0)
+      wakeWave()
     }
+
+    // The wave, after SystemUI's SquigglyProgress: half-wavelength cubic
+    // segments that taper into the playhead, travelling while playing and
+    // easing flat (550 ms) on pause, back up (800 ms) on play.
+    var WAVE = { len: 14, amp: 2, speed: 14 }
+    var wave = { phase: 0, h: 0, from: 0, to: 0, start: 0, last: 0, raf: 0 }
+
+    function wakeWave() {
+      if (wave.raf) return
+      wave.last = performance.now()
+      wave.raf = requestAnimationFrame(drawWave)
+    }
+
+    function drawWave(t) {
+      wave.raf = 0
+      var c = current.clock
+      var w = r.bar.clientWidth
+      var want = c.playing && current.held == null && current.phase === 'live' ? 1 : 0
+      if (want !== wave.to) {
+        wave.from = wave.h
+        wave.to = want
+        wave.start = t + (want ? 60 : 0)
+      }
+      var k = Math.min(1, Math.max(0, (t - wave.start) / (wave.to ? 800 : 550)))
+      wave.h = wave.from + (wave.to - wave.from) * (1 - Math.pow(1 - k, 3))
+      var dt = (t - wave.last) / 1000
+      wave.last = t
+      if (wave.h > 0.001) wave.phase = (wave.phase + dt * WAVE.speed) % WAVE.len
+      if (w > 0) {
+        var px = c.duration > 0 ? Math.max(0, Math.min(w, (clockNow() / c.duration) * w)) : 0
+        var mid = 7
+        var half = WAVE.len / 2
+        var taper = 1.5 * WAVE.len
+        var ampAt = function (x) {
+          return WAVE.amp * wave.h * Math.min(1, Math.max(0, (px + taper / 2 - x) / taper))
+        }
+        var x = -wave.phase - half
+        var sign = 1
+        var y = mid - ampAt(x) * sign
+        var d = 'M' + x.toFixed(1) + ' ' + y.toFixed(2)
+        while (x < px) {
+          sign = -sign
+          var nx = Math.min(x + half, px)
+          var mx = x + (nx - x) / 2
+          var ny = mid - ampAt(nx) * sign
+          d += 'C' + mx.toFixed(1) + ' ' + y.toFixed(2) + ' ' + mx.toFixed(1) + ' ' + ny.toFixed(2) + ' ' + nx.toFixed(1) + ' ' + ny.toFixed(2)
+          x = nx
+          y = ny
+        }
+        r.wave.setAttribute('d', px > 0 ? d : '')
+        r.rest.setAttribute('x1', String(Math.min(w, px + 3)))
+        r.rest.setAttribute('x2', String(w))
+        r.rest.setAttribute('y1', String(mid))
+        r.rest.setAttribute('y2', String(mid))
+        r.thumb.style.transform = 'translateX(' + px.toFixed(1) + 'px)'
+      }
+      var moving = (wave.h > 0.001 || k < 1) && !container.hidden
+      if (moving || c.playing) wave.raf = requestAnimationFrame(drawWave)
+    }
+
+    // Seeking: tap or drag the bar. The bar holds the target until the next
+    // state from the player arrives.
+    function secondsAt(clientX) {
+      var c = current.clock
+      var rect = r.bar.getBoundingClientRect()
+      if (!c.duration || rect.width <= 0) return null
+      return Math.min(1, Math.max(0, (clientX - rect.left) / rect.width)) * c.duration
+    }
+    r.bar.addEventListener('pointermove', function (e) {
+      var v = secondsAt(e.clientX)
+      if (v == null) return
+      var rect = r.bar.getBoundingClientRect()
+      r.tip.style.left = Math.min(rect.width, Math.max(0, e.clientX - rect.left)) + 'px'
+      r.tip.textContent = fmt(v)
+      if (current.dragging) {
+        current.held = v
+        tick()
+      }
+    })
+    r.bar.addEventListener('pointerdown', function (e) {
+      var v = secondsAt(e.clientX)
+      if (v == null || e.button !== 0) return
+      e.preventDefault()
+      try {
+        r.bar.setPointerCapture(e.pointerId)
+      } catch (err) {
+        /* ignore */
+      }
+      current.dragging = true
+      current.held = v
+      r.bar.classList.add('drag')
+      tick()
+    })
+    function endDrag(e) {
+      if (!current.dragging) return
+      current.dragging = false
+      r.bar.classList.remove('drag')
+      var v = secondsAt(e.clientX)
+      if (v == null) v = current.held
+      if (v != null) {
+        current.held = v
+        current.clock = { at: Date.now(), time: v, duration: current.clock.duration, playing: current.clock.playing }
+        onAction('seek', { position: v })
+      }
+      // Let the player's next report take over shortly after.
+      setTimeout(function () {
+        current.held = null
+        tick()
+      }, 1200)
+      tick()
+    }
+    r.bar.addEventListener('pointerup', endDrag)
+    r.bar.addEventListener('pointercancel', endDrag)
 
     function buildRow(row) {
       var item = el('div', 'row')
