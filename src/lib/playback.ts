@@ -32,6 +32,17 @@ export type NowPlaying = {
   source?: NowPlayingSource
   /** Album art when the player is not YouTube Music. */
   thumbnailUrl?: string
+  /** Whether the player shuffles (Spotify reports a mode; YouTube Music does not). */
+  shuffle?: boolean
+  /** YTMQ smart shuffle is on (Spotify): related songs get mixed into the queue. */
+  smartShuffle?: boolean
+  /** The device Spotify plays on ("Fredde's MacBook"). */
+  deviceName?: string
+}
+
+export const SOURCE_LABEL: Record<NowPlayingSource, string> = {
+  ytm: 'YouTube Music',
+  spotify: 'Spotify',
 }
 
 /** Formats seconds as m:ss for playback UI. */
@@ -72,6 +83,10 @@ export type PlaybackAction =
   | 'toggle'
   | 'seek'
   | 'volume'
+  /** Spotify: set shuffle to `state`. YouTube Music: shuffle what plays after the shared queue. */
+  | 'shuffle'
+  /** Spotify only: YTMQ's smart shuffle on or off (`state`). */
+  | 'smart_shuffle'
 
 /**
  * Previous-track threshold in seconds. If the current song has played at

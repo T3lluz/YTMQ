@@ -632,6 +632,30 @@ async function chromeUpdate(info, current) {
   }
 }
 
+/**
+ * The Update button. Firefox updates its signed copy itself when asked, then
+ * reloads into it. Chrome cannot install an unpacked update, so it gets the
+ * install page in update mode: the zip downloads from there, with the steps
+ * beside it, instead of a blank tab that only held the download.
+ */
+async function startUpdate() {
+  if (FIREFOX && chrome.runtime.requestUpdateCheck) {
+    try {
+      const result = await chrome.runtime.requestUpdateCheck()
+      const status = Array.isArray(result) ? result[0] : result && result.status
+      if (status === 'update_available') {
+        // Firefox applies a downloaded update on reload.
+        setTimeout(() => chrome.runtime.reload(), 1500)
+        return { ok: true, mode: 'reloading' }
+      }
+    } catch (e) {
+      /* fall back to the install page */
+    }
+  }
+  await chrome.tabs.create({ url: YTMQ_SITE_ORIGIN + YTMQ_SITE_PATH + '/docs/install?update=1' })
+  return { ok: true, mode: 'page' }
+}
+
 // The service worker starts often (every message wakes it), which makes this
 // a cheap stand-in for a timer; checkForUpdate throttles itself.
 void checkForUpdate(false)
@@ -648,13 +672,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true
   }
   if (message && message.type === 'ytmq-download-update') {
-    chrome.storage.local.get('ytmq_update', (data) => {
-      const zip =
-        (data && data.ytmq_update && data.ytmq_update.zip) ||
-        (FIREFOX ? YTMQ_SITE_ORIGIN + YTMQ_SITE_PATH + '/docs/install' : UPDATE_INFO_URL.replace(/\.json$/, '.zip'))
-      chrome.tabs.create({ url: zip })
-      sendResponse({ ok: true })
-    })
+    void startUpdate().then(sendResponse, () => sendResponse({ ok: false }))
     return true
   }
   if (message && message.type === 'ytmq-reload-extension') {

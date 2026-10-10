@@ -19,7 +19,7 @@ YouTube Music **shared queue**: the host plays in **YouTube Music**; **guests** 
 | Search songs (+ simple artist list) | Full artist discography, albums, play counts |
 | Host tab: see queue, open `music.youtube.com/watch?v=` | Guest auth, moderation, PWA |
 
-**UI:** Minimal, dark-friendly, mobile-first. **3 tabs:** Search | Queue | Room. Large touch targets; toasts; clear empty states.
+**UI:** Dark, mobile-first, modelled on Spotify. **Tabs:** Search | Queue | Lyrics | Host (host only); the lobby button in the tab bar has the QR, link, your name and who is here. Large touch targets; toasts; clear empty states.
 
 **Non-goals v1:** In-app playback for guests, user accounts, payments, lyrics.
 
@@ -41,7 +41,7 @@ YouTube Music **shared queue**: the host plays in **YouTube Music**; **guests** 
 | App | Vite + React + TS + Tailwind, base `/ytmq/` |
 | API + realtime | `server/main.ts` (Deno 2.9), `server/realtime.ts` (WebSocket hub) |
 | Data | SQLite (`node:sqlite`) in `~/docker/ytmq/data/ytmq.db`, schema in `server/db.ts` |
-| Search / lyrics | `server/functions/search`, `server/functions/lyrics` (LRCLIB + NetEase + KuGou + Musixmatch) |
+| Search / lyrics | `server/functions/search` (catalog.ts: search, artist/album/playlist pages, radio), `server/functions/lyrics` (LRCLIB + NetEase word timing, cached in DATA_DIR) |
 | Client | `src/lib/ytmqClient.ts` (shared by app and bridge), app singleton in `src/lib/api.ts` |
 | Hosting | `~/docker/ytmq` on t3lluz, public through the `t3lluz-public` Cloudflare tunnel, tailnet through Caddy |
 | Deploy | push to `main` → live within a minute (`deploy/server/update.sh`, `ytmq-deploy.timer`) |
@@ -71,7 +71,7 @@ No secrets. `VITE_API_URL` is optional (defaults to the app's own origin + `/ytm
 | Path | Purpose |
 |------|---------|
 | `/ytmq/` | Create lobby \| Join with code |
-| `/ytmq/room/:roomId` | Guest (and host) room: Search \| Queue \| Lyrics \| Room \| Admin |
+| `/ytmq/room/:roomId` | Guest (and host) room: Search \| Queue \| Lyrics \| Host |
 | `/ytmq/host/:roomId` | Old host entry, forwards to the room |
 | `/ytmq/join?code=` | Join form (code prefilled from the homepage) |
 | `/ytmq/docs`, `/ytmq/docs/:slug` | Public docs (`src/pages/docs/`), its own lazy chunk |
@@ -114,4 +114,4 @@ flowchart LR
   G --> LRC[LRCLIB direct]
 ```
 
-**Lyrics sourcing.** The browser hits LRCLIB directly for the fastest happy path. In parallel it calls the server's `lyrics` function, which aggregates LRCLIB + NetEase Cloud Music + KuGou + Musixmatch (none of which ship CORS headers). The first source to return time-synced lyrics wins; it falls back to plain/instrumental matches when nothing has synced.
+**Lyrics sourcing.** The server's `lyrics` function looks a song up on LRCLIB (exact match on artist, title, album and length, then searches) and on NetEase Cloud Music at the same time; NetEase's word-by-word timing wins when title, artist and length (within 3 s) agree. Answers are cached in `DATA_DIR/lyrics-cache.json`.

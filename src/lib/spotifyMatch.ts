@@ -80,11 +80,12 @@ export function buildSpotifySearchQueries(
   return queries
 }
 
-/** 0–100. Title carries more weight than artist. */
+/** 0–100. Title carries more weight than artist; a length that disagrees costs. */
 export function scoreSpotifyCandidate(
   title: string,
   artist: string,
-  candidate: Pick<SpotifyTrackCandidate, 'name' | 'artist'>,
+  candidate: Pick<SpotifyTrackCandidate, 'name' | 'artist'> & { durationMs?: number },
+  durationSec?: number,
 ): number {
   const qTitle = cleanMusicTitle(title)
   const qArtist = cleanArtistName(artist)
@@ -102,6 +103,11 @@ export function scoreSpotifyCandidate(
     else if (cArtist.includes(qArtist) || qArtist.includes(cArtist)) score += 24
     else score += Math.round(tokenOverlap(qArtist, cArtist) * 20)
   }
+  if (durationSec && candidate.durationMs) {
+    const off = Math.abs(candidate.durationMs / 1000 - durationSec)
+    if (off <= 3) score += 5
+    else if (off > 12) score -= 20
+  }
   return score
 }
 
@@ -112,11 +118,12 @@ export function pickSpotifyMatch(
   artist: string,
   candidates: SpotifyTrackCandidate[],
   threshold = SPOTIFY_MATCH_THRESHOLD,
+  durationSec?: number,
 ): SpotifyTrackCandidate | null {
   let best: SpotifyTrackCandidate | null = null
   let bestScore = -1
   for (const candidate of candidates) {
-    const score = scoreSpotifyCandidate(title, artist, candidate)
+    const score = scoreSpotifyCandidate(title, artist, candidate, durationSec)
     if (score > bestScore) {
       best = candidate
       bestScore = score

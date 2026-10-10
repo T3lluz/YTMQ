@@ -1,12 +1,15 @@
 import { useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { YtmqLogo } from '../components/YtmqLogo'
+import { CodeInput } from '../components/CodeInput'
+import { Button } from '../components/ui/Button'
+import { buttonClass } from '../components/ui/buttonStyles'
+import { ChevronLeftIcon } from '../components/ui/icons'
 import { lastNickname, rememberNickname, setNickname } from '../lib/nickname'
 import { rememberLobby } from '../lib/recentLobbies'
 import { joinLobby, roomPath } from '../lib/room'
 
-const field =
-  'min-h-12 w-full rounded-xl border border-white/10 bg-neutral-900 px-4 text-base text-white outline-none transition-colors placeholder:text-neutral-600 focus:border-white/40'
+const field = 'ytmq-input h-12 w-full'
 
 export function Join() {
   const navigate = useNavigate()
@@ -71,49 +74,30 @@ export function Join() {
   }
 
   return (
-    <main className="mx-auto flex min-h-dvh w-full max-w-md flex-col px-4 pb-10 pt-6 sm:px-6">
-      <Link
-        to="/"
-        className="ytmq-press inline-flex w-fit items-center gap-1.5 rounded-full py-1 pr-3 text-sm font-medium text-neutral-400 transition-colors hover:text-white"
-      >
-        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4" aria-hidden>
-          <path d="M16 10H4" />
-          <path d="m9 5-5 5 5 5" />
-        </svg>
+    <main className="mx-auto flex min-h-dvh w-full max-w-md flex-col px-4 pb-10 pt-4 sm:px-6">
+      <Link to="/" className={buttonClass('ghost', 'md', '-ml-3 w-fit')}>
+        <ChevronLeftIcon className="h-[18px] w-[18px]" />
         Home
       </Link>
 
-      <div className="flex flex-1 flex-col justify-center py-10">
+      <div className="flex flex-1 flex-col justify-center py-8">
         <header className="ytmq-anim-fade-up">
-          <YtmqLogo size={56} className="-ml-1 h-14 w-14" />
-          <h1 className="mt-5 text-3xl font-extrabold tracking-[-0.03em] text-white">Join a lobby</h1>
-          <p className="mt-2 text-neutral-400">
-            The host has the code on their screen, under the QR.
-          </p>
+          <YtmqLogo size={60} className="-ml-1 h-[60px] w-[60px]" />
+          <h1 className="mt-5 text-[2rem] font-extrabold leading-tight tracking-[-0.035em] text-white">Join a lobby</h1>
+          <p className="mt-1.5 text-neutral-400">The host has the code on their screen, under the QR.</p>
         </header>
 
         <form
           onSubmit={(e) => void handleSubmit(e)}
-          className="ytmq-anim-fade-up mt-8 flex flex-col gap-4"
+          className="ytmq-anim-fade-up mt-8 flex flex-col gap-5 rounded-[28px] bg-[#121212] p-5"
           style={{ animationDelay: '80ms' }}
         >
-          <label className="block space-y-1.5">
-            <span className="text-sm font-medium text-neutral-300">Lobby code</span>
-            <input
-              type="text"
-              value={code}
-              onChange={(e) => setCode(e.target.value.replace(/\s/g, '').toUpperCase())}
-              placeholder="4F9K2A"
-              autoComplete="off"
-              autoCapitalize="characters"
-              spellCheck={false}
-              autoFocus={!code}
-              maxLength={12}
-              className={`${field} font-mono text-xl font-medium tracking-[0.3em] uppercase placeholder:tracking-[0.3em]`}
-            />
-          </label>
-          <label className="block space-y-1.5">
-            <span className="text-sm font-medium text-neutral-300">Your name</span>
+          <div className="flex flex-col gap-2">
+            <span className="text-[13px] font-bold uppercase tracking-[0.12em] text-neutral-500">Lobby code</span>
+            <CodeInput value={code} onChange={setCode} autoFocus={!code} />
+          </div>
+          <label className="flex flex-col gap-2">
+            <span className="text-[13px] font-bold uppercase tracking-[0.12em] text-neutral-500">Your name</span>
             <input
               type="text"
               value={nickname}
@@ -126,8 +110,8 @@ export function Join() {
             />
           </label>
           {needsPassword && (
-            <label className="ytmq-anim-fade-up block space-y-1.5">
-              <span className="text-sm font-medium text-neutral-300">Password</span>
+            <label className="ytmq-anim-fade-up flex flex-col gap-2">
+              <span className="text-[13px] font-bold uppercase tracking-[0.12em] text-neutral-500">Password</span>
               <input
                 type="password"
                 value={password}
@@ -141,24 +125,19 @@ export function Join() {
           )}
 
           {error && (
-            <p className="ytmq-anim-fade rounded-xl bg-accent-500/10 px-4 py-3 text-sm text-accent-200" role="alert">
+            <p className="ytmq-anim-fade rounded-2xl bg-accent-500/10 px-4 py-3 text-sm text-accent-200" role="alert">
               {error}
             </p>
           )}
 
-          <button
-            type="submit"
-            disabled={joining}
-            className="ytmq-press mt-2 inline-flex min-h-12 items-center justify-center gap-2 rounded-full bg-accent-600 px-4 text-base font-semibold text-white hover:bg-accent-500 disabled:opacity-60"
-          >
-            {joining && <span className="ytmq-spinner h-4 w-4" aria-hidden />}
-            {joining ? 'Joining…' : 'Join'}
-          </button>
+          <Button type="submit" variant="accent" size="lg" loading={joining} className="self-end">
+            {joining ? 'Joining…' : 'Join lobby'}
+          </Button>
         </form>
 
-        <p className="ytmq-anim-fade-up mt-8 text-sm text-neutral-500" style={{ animationDelay: '140ms' }}>
-          Scanning the QR does the same thing. No account, nothing to install.{' '}
-          <Link to="/docs/guests" className="text-neutral-300 underline decoration-neutral-700 underline-offset-4 hover:text-white">
+        <p className="ytmq-anim-fade-up mt-6 px-1 text-sm text-neutral-500" style={{ animationDelay: '140ms' }}>
+          Scanning the QR does the same. No account, nothing to install.{' '}
+          <Link to="/docs/guests" className="font-semibold text-neutral-300 hover:text-white hover:underline">
             How it works for guests
           </Link>
         </p>

@@ -1,6 +1,7 @@
 import type { RealtimeChannel } from './ytmqClient'
 import { ytmq } from './api'
-import type { PlaybackAction } from './playback'
+import type { NowPlayingSource, PlaybackAction } from './playback'
+import { getActiveSource } from './playbackChannel'
 
 export function bridgeChannelName(roomId: string) {
   return `ytmq-bridge:${roomId}`
@@ -26,30 +27,45 @@ export type PlaybackControlPayload = {
   position?: number
   /** Target volume 0–100 — only used by the `volume` action. */
   volume?: number
+  /** On or off, for `shuffle` and `smart_shuffle`. */
+  state?: boolean
+  /**
+   * The player this is for. With YouTube Music and Spotify both linked, only
+   * the room's active player acts; without a target (older clients) both do.
+   */
+  target?: NowPlayingSource
 }
 
-/** Tell the YT Music bridge to next/prev/play/pause the current track. */
+function withTarget(roomId: string, payload: Omit<PlaybackControlPayload, 'target'>) {
+  const target = getActiveSource(roomId)
+  return target ? { ...payload, target } : payload
+}
+
+/** Next/prev/play/pause (and shuffle) on the room's active player. */
 export function sendPlaybackControl(
   roomId: string,
   action: PlaybackAction,
+  extra: { state?: boolean } = {},
 ): void {
-  void sendBridgeBroadcast(roomId, 'playback_control', { action })
+  void sendBridgeBroadcast(roomId, 'playback_control', withTarget(roomId, { action, ...extra }))
 }
 
-/** Tell the YT Music bridge to seek the current track to `position` seconds. */
+/** Seek the active player to `position` seconds. */
 export function sendPlaybackSeek(roomId: string, position: number): void {
-  void sendBridgeBroadcast(roomId, 'playback_control', {
-    action: 'seek',
-    position: Math.max(0, Math.round(position)),
-  })
+  void sendBridgeBroadcast(
+    roomId,
+    'playback_control',
+    withTarget(roomId, { action: 'seek', position: Math.max(0, Math.round(position)) }),
+  )
 }
 
-/** Tell the YT Music bridge to set the host player volume to `volume` (0–100). */
+/** Set the active player's volume to `volume` (0–100). */
 export function sendPlaybackVolume(roomId: string, volume: number): void {
-  void sendBridgeBroadcast(roomId, 'playback_control', {
-    action: 'volume',
-    volume: Math.min(100, Math.max(0, Math.round(volume))),
-  })
+  void sendBridgeBroadcast(
+    roomId,
+    'playback_control',
+    withTarget(roomId, { action: 'volume', volume: Math.min(100, Math.max(0, Math.round(volume))) }),
+  )
 }
 
 type SenderState = {
@@ -112,10 +128,13 @@ function bindPlaybackControl(state: SenderState, roomId: string) {
     if (!payload || typeof payload !== 'object') return
     const action = (payload as { action?: PlaybackControlPayload['action'] }).action
     if (!action) return
+    const p = payload as Partial<PlaybackControlPayload>
     const next: PlaybackControlPayload = {
       action,
-      position: (payload as { position?: number }).position,
-      volume: (payload as { volume?: number }).volume,
+      position: p.position,
+      volume: p.volume,
+      state: typeof p.state === 'boolean' ? p.state : undefined,
+      target: p.target === 'spotify' || p.target === 'ytm' ? p.target : undefined,
     }
     for (const listener of playbackControlListeners.get(roomId) ?? []) {
       listener(next)
@@ -144,7 +163,7 @@ export function subscribePlaybackControl(
 async function sendBridgeBroadcast(
   roomId: string,
   event: string,
-  payload: Record<string, unknown>,
+  payload: Record<string, unknown> | PlaybackControlPayload,
 ): Promise<void> {
   const sender = getSender(roomId)
   const joined = await sender.ready

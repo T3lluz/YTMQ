@@ -8,14 +8,20 @@ import {
   subscribeSpotifyAuth,
 } from '../lib/spotifyAuth'
 import { fetchSpotifyProfile } from '../lib/spotifyApi'
-import { PlayerCard, SpotifyIcon, secondaryButton, textButton } from './PlayerCard'
+import { CardActions, PlayerCard, SpotifyIcon } from './PlayerCard'
+import { buttonClass } from './ui/buttonStyles'
+
+const secondaryButton = buttonClass('tonal', 'md')
+const textButton = buttonClass('ghost', 'md')
 
 type SpotifyConnectProps = {
   roomId: string
   playerStatus: SpotifyPlayerStatus
+  /** Spotify is the room's player right now. */
+  active?: boolean
 }
 
-export function SpotifyConnect({ roomId, playerStatus }: SpotifyConnectProps) {
+export function SpotifyConnect({ roomId, playerStatus, active = false }: SpotifyConnectProps) {
   const [linked, setLinked] = useState(() => isSpotifyLinked())
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -64,21 +70,22 @@ export function SpotifyConnect({ roomId, playerStatus }: SpotifyConnectProps) {
         name="Spotify"
         status={following ? 'live' : 'warn'}
         statusLabel={`Linked${displayName ? ` as ${displayName}` : ''}`}
+        active={active}
       >
         <p>
           {playerStatus.deviceName
-            ? `Following ${playerStatus.deviceName}. Now playing and lyrics show whatever plays there.`
-            : 'Play something in any Spotify app and this lobby follows it.'}
+            ? `Playing on ${playerStatus.deviceName}. While Spotify plays, the shared queue plays there too, one song ahead.`
+            : 'Play something in any Spotify app; the lobby follows it and plays the shared queue on it.'}
         </p>
         {statusMessage && <p className="text-amber-200">{statusMessage}</p>}
-        <div className="flex flex-wrap items-center gap-3">
+        <CardActions>
           <a href="https://open.spotify.com" target="_blank" rel="noopener noreferrer" className={secondaryButton}>
             Open Spotify
           </a>
           <button type="button" onClick={disconnect} className={textButton}>
             Disconnect
           </button>
-        </div>
+        </CardActions>
       </PlayerCard>
     )
   }
@@ -86,23 +93,20 @@ export function SpotifyConnect({ roomId, playerStatus }: SpotifyConnectProps) {
   return (
     <PlayerCard icon={icon} name="Spotify" status="off" statusLabel="Optional">
       <p>
-        Log in and the lobby follows what you play on Spotify, on any device. Guests see it in now
-        playing and lyrics. The shared queue still goes to YouTube Music.
+        Log in and the lobby follows what you play on Spotify, on any device, and plays the shared
+        queue there. Controls, shuffle and smart shuffle need Premium.
       </p>
       {error && (
         <p className="text-accent-300" role="alert">
           {error}
         </p>
       )}
-      <button
-        type="button"
-        onClick={() => void startLogin()}
-        disabled={busy}
-        className="ytmq-press inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full bg-[#1ed760] px-5 text-sm font-bold text-black hover:bg-[#3be477] disabled:opacity-60"
-      >
-        {busy && <span className="ytmq-spinner h-4 w-4" aria-hidden />}
-        Connect Spotify
-      </button>
+      <CardActions>
+        <button type="button" onClick={() => void startLogin()} disabled={busy} className={buttonClass('spotify', 'md')}>
+          {busy && <span className="ytmq-spinner h-4 w-4" aria-hidden />}
+          Connect Spotify
+        </button>
+      </CardActions>
     </PlayerCard>
   )
 }

@@ -1,8 +1,12 @@
-import { useEffect, useRef, useState } from 'react'
-import { CopiedCheck } from './CopiedCheck'
-import { useLobbyShare } from '../hooks/useLobbyShare'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
+import type { PresenceParticipant } from '../hooks/useRoomPresence'
+import { useIsDesktop } from '../hooks/useMediaQuery'
+import { Avatar } from './ParticipantList'
+import { SharePanel } from './SharePanel'
+import { CloseIcon, QrIcon } from './ui/icons'
 
-export type RoomTab = 'search' | 'queue' | 'lyrics' | 'room' | 'admin'
+export type RoomTab = 'search' | 'queue' | 'lyrics' | 'admin'
 
 type TabBarProps = {
   active: RoomTab
@@ -10,44 +14,26 @@ type TabBarProps = {
   queueCount: number
   /** Show the host-only Admin tab. */
   showAdmin?: boolean
-  /** Room id — used to build the shareable link + QR. */
   roomId: string
-  /** Human-friendly lobby code shown in the dock. */
   code: string
-  /** Surface copy confirmations as toasts. */
+  nickname: string
+  onNicknameChange?: (name: string) => void
+  participants: PresenceParticipant[]
   onCopied?: (message: string) => void
 }
 
 function SearchIcon({ className }: { className?: string }) {
   return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
-      aria-hidden
-    >
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
       <circle cx="11" cy="11" r="7" />
-      <path d="m21 21-4.3-4.3" />
+      <path d="m20 20-3.6-3.6" />
     </svg>
   )
 }
 
 function QueueIcon({ className }: { className?: string }) {
   return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
-      aria-hidden
-    >
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
       <path d="M3 6h13M3 12h9M3 18h9" />
       <g className="ytmq-icon-queue-arrow">
         <path d="M18 12v8" />
@@ -59,16 +45,7 @@ function QueueIcon({ className }: { className?: string }) {
 
 function LyricsIcon({ className }: { className?: string }) {
   return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
-      aria-hidden
-    >
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
       <path d="M4 6h9" />
       <path d="M4 12h6" />
       <path d="M4 18h5" />
@@ -80,64 +57,13 @@ function LyricsIcon({ className }: { className?: string }) {
   )
 }
 
-function RoomIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
-      aria-hidden
-    >
-      <circle cx="9" cy="8" r="3.2" />
-      <path d="M3.5 19a5.5 5.5 0 0 1 11 0" />
-      <g className="ytmq-icon-room-peeker">
-        <path d="M16 6.2a3 3 0 0 1 0 5.6" />
-        <path d="M17.5 19a5.5 5.5 0 0 0-2.7-4.7" />
-      </g>
-    </svg>
-  )
-}
-
 function AdminIcon({ className }: { className?: string }) {
   return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
-      aria-hidden
-    >
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
       <path d="M12 3 4.5 6v5c0 4.4 3.1 7.6 7.5 9 4.4-1.4 7.5-4.6 7.5-9V6L12 3Z" />
       <path className="ytmq-icon-admin-check" pathLength={1} d="m9 11.5 2 2 4-4" />
       <path className="ytmq-icon-admin-ex-1" pathLength={1} d="M9 9.5 15 13.5" />
       <path className="ytmq-icon-admin-ex-2" pathLength={1} d="M15 9.5 9 13.5" />
-    </svg>
-  )
-}
-
-function QrIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
-      aria-hidden
-    >
-      <rect x="3" y="3" width="7" height="7" rx="1.5" />
-      <rect x="14" y="3" width="7" height="7" rx="1.5" />
-      <rect x="3" y="14" width="7" height="7" rx="1.5" />
-      <path d="M14 14h3v3M21 14v.01M14 21h.01M17 21h4v-4" />
     </svg>
   )
 }
@@ -148,100 +74,113 @@ type TabDef = {
   Icon: (props: { className?: string }) => React.ReactElement
 }
 
-const baseTabs: TabDef[] = [
+const BASE_TABS: TabDef[] = [
   { id: 'search', label: 'Search', Icon: SearchIcon },
   { id: 'queue', label: 'Queue', Icon: QueueIcon },
   { id: 'lyrics', label: 'Lyrics', Icon: LyricsIcon },
-  { id: 'room', label: 'Room', Icon: RoomIcon },
 ]
+const ADMIN_TAB: TabDef = { id: 'admin', label: 'Host', Icon: AdminIcon }
 
-const adminTab: TabDef = { id: 'admin', label: 'Admin', Icon: AdminIcon }
+// Geometry of a tab. The open tab is padding + icon + gap + label + padding;
+// the others share what is left of a fixed width, so the bar never changes
+// size when you switch, only the pill slides and stretches.
+const TAB_H = 48
+const PAD_L = 16
+const ICON = 22
+const GAP = 8
+const PAD_R = 18
+const MIN_TAB = 48
 
-/** Popover anchored above the dock with the lobby QR, code, and copy actions. */
-function LobbyShareCard({
+/** The lobby's QR, code and link, your name, and who is here. */
+function LobbySheet({
   roomId,
   code,
-  onClose,
+  nickname,
+  onNicknameChange,
+  participants,
   onCopied,
+  onClose,
 }: {
   roomId: string
   code: string
-  onClose: () => void
+  nickname: string
+  onNicknameChange?: (name: string) => void
+  participants: PresenceParticipant[]
   onCopied?: (message: string) => void
+  onClose: () => void
 }) {
-  const { qrDataUrl, copied, copy } = useLobbyShare(roomId, code, {
-    qrWidth: 200,
-    onCopied,
-  })
+  const desktop = useIsDesktop()
+  const [name, setName] = useState(nickname)
+  const here = participants.filter((p) => p.online)
 
-  return (
-    <div
-      role="dialog"
-      aria-label="Lobby share options"
-      className="ytmq-anim-pop absolute bottom-full left-1/2 mb-3 w-[min(17rem,calc(100vw-1.5rem))] max-w-[17rem] -translate-x-1/2 rounded-3xl border border-white/10 bg-neutral-900 p-4 shadow-[0_20px_60px_rgba(0,0,0,0.6)]"
-    >
-      <div className="flex flex-col items-center gap-3">
-        {qrDataUrl ? (
-          <img
-            src={qrDataUrl}
-            alt={`QR code for lobby ${code}`}
-            className="rounded-2xl bg-white p-2"
-            width={176}
-            height={176}
+  const body = (
+    <div className="flex flex-col gap-5">
+      <SharePanel roomId={roomId} code={code} onCopied={onCopied} />
+      {onNicknameChange && (
+        <label className="flex flex-col gap-1.5">
+          <span className="text-xs font-bold uppercase tracking-[0.12em] text-neutral-500">Your name</span>
+          <input
+            value={name}
+            maxLength={32}
+            onChange={(e) => setName(e.target.value)}
+            onBlur={() => name.trim() && name.trim() !== nickname && onNicknameChange(name.trim())}
+            onKeyDown={(e) => e.key === 'Enter' && (e.currentTarget as HTMLInputElement).blur()}
+            className="ytmq-input h-11"
+            placeholder="Your name on the queue"
           />
-        ) : (
-          <div
-            className="ytmq-skeleton rounded-2xl"
-            style={{ width: 176, height: 176 }}
-            aria-label="Generating QR code"
-          />
-        )}
-
-        <div className="text-center">
-          <p className="text-[11px] font-medium uppercase tracking-wide text-neutral-500">
-            Lobby code
-          </p>
-          <p className="font-mono text-xl tracking-widest text-neutral-100 sm:text-2xl">
-            {code}
-          </p>
+        </label>
+      )}
+      {here.length > 0 && (
+        <div className="flex flex-col gap-2">
+          <span className="text-xs font-bold uppercase tracking-[0.12em] text-neutral-500">Here now · {here.length}</span>
+          <ul className="flex flex-wrap gap-1.5">
+            {here.slice(0, 18).map((p) => (
+              <li key={p.client_id} className="flex h-9 items-center gap-2 rounded-full bg-white/[0.06] pl-1 pr-3 text-[13px] font-semibold text-white">
+                <Avatar participant={p} size="sm" />
+                <span className="max-w-[8rem] truncate">{p.nickname || 'Guest'}</span>
+              </li>
+            ))}
+          </ul>
         </div>
-
-        <div className="grid w-full grid-cols-2 gap-2">
-          <button
-            type="button"
-            onClick={() => void copy('code')}
-            className="ytmq-press inline-flex min-h-10 items-center justify-center gap-1.5 rounded-full bg-white/[0.08] px-3 text-sm font-semibold text-neutral-100 hover:bg-white/[0.14]"
-          >
-            {copied === 'code' && <CopiedCheck />}
-            {copied === 'code' ? 'Copied' : 'Copy code'}
-          </button>
-          <button
-            type="button"
-            onClick={() => void copy('link')}
-            className="ytmq-press inline-flex min-h-10 items-center justify-center gap-1.5 rounded-full bg-white px-3 text-sm font-semibold text-neutral-950 hover:bg-neutral-200"
-          >
-            {copied === 'link' && <CopiedCheck />}
-            {copied === 'link' ? 'Copied' : 'Copy link'}
-          </button>
-        </div>
-      </div>
-
-      {/* Little pointer notch toward the dock */}
-      <span
-        aria-hidden
-        className="absolute -bottom-1.5 left-1/2 h-3 w-3 -translate-x-1/2 rotate-45 rounded-[3px] border-b border-r border-white/10 bg-neutral-900"
-      />
-      <button
-        type="button"
-        onClick={onClose}
-        aria-label="Close"
-        className="absolute right-3 top-3 rounded-full p-1 text-neutral-500 transition-colors hover:text-neutral-200"
-      >
-        <svg viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
-          <path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" />
-        </svg>
-      </button>
+      )}
     </div>
+  )
+
+  if (desktop) {
+    return (
+      <div
+        role="dialog"
+        aria-label="Invite people"
+        className="ytmq-anim-pop absolute bottom-full right-0 mb-3 w-[22rem] max-w-[calc(100vw-2rem)] rounded-[28px] bg-[#1c1c1c] p-5 shadow-[0_24px_70px_rgba(0,0,0,0.65)] ring-1 ring-white/[0.07]"
+      >
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close"
+          className="ytmq-press absolute right-3 top-3 inline-flex h-8 w-8 items-center justify-center rounded-full text-neutral-400 hover:bg-white/[0.08] hover:text-white"
+        >
+          <CloseIcon className="h-4 w-4" />
+        </button>
+        {body}
+      </div>
+    )
+  }
+
+  return createPortal(
+    <div
+      className="ytmq-sheet-backdrop fixed inset-0 z-[70] flex items-end bg-black/60"
+      onPointerDown={(e) => e.target === e.currentTarget && onClose()}
+    >
+      <div
+        role="dialog"
+        aria-label="Invite people"
+        className="ytmq-sheet-in max-h-[88dvh] w-full overflow-y-auto rounded-t-[28px] bg-[#1c1c1c] px-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] pt-2"
+      >
+        <span aria-hidden className="mx-auto mb-4 block h-1 w-9 rounded-full bg-white/20" />
+        {body}
+      </div>
+    </div>,
+    document.body,
   )
 }
 
@@ -252,40 +191,37 @@ export function TabBar({
   showAdmin,
   roomId,
   code,
+  nickname,
+  onNicknameChange,
+  participants,
   onCopied,
 }: TabBarProps) {
-  const tabs = showAdmin ? [...baseTabs, adminTab] : baseTabs
+  const tabs = showAdmin ? [...BASE_TABS, ADMIN_TAB] : BASE_TABS
   const [shareOpen, setShareOpen] = useState(false)
-
-  const iconWrapRefs = useRef<Partial<Record<RoomTab, HTMLSpanElement | null>>>(
-    {},
-  )
-
-  const replayIconAnimation = (id: RoomTab) => {
-    const el = iconWrapRefs.current[id]
-    if (!el) return
-    const cls = `ytmq-tab-icon-anim-${id}`
-    el.classList.remove(cls)
-    void el.offsetWidth
-    el.classList.add(cls)
-  }
-
-  const handleChange = (id: RoomTab) => {
-    replayIconAnimation(id)
-    onChange(id)
-  }
-
+  const [labelWidths, setLabelWidths] = useState<number[] | null>(null)
+  const measureRef = useRef<HTMLDivElement | null>(null)
   const dockRef = useRef<HTMLDivElement | null>(null)
+  const iconRefs = useRef<Partial<Record<RoomTab, HTMLSpanElement | null>>>({})
 
-  // Close the share popover on outside click / Escape.
+  // Measure each label once fonts are in, and again if they change.
+  useLayoutEffect(() => {
+    const measure = () => {
+      const spans = measureRef.current?.querySelectorAll('span')
+      if (!spans) return
+      setLabelWidths(Array.from(spans, (s) => Math.ceil(s.getBoundingClientRect().width)))
+    }
+    measure()
+    void document.fonts?.ready.then(measure)
+  }, [tabs.length])
+
   useEffect(() => {
     if (!shareOpen) return
     const onPointer = (e: PointerEvent) => {
-      if (!dockRef.current?.contains(e.target as Node)) setShareOpen(false)
+      if (!dockRef.current?.contains(e.target as Node) && !(e.target as Element)?.closest?.('[role="dialog"]')) {
+        setShareOpen(false)
+      }
     }
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setShareOpen(false)
-    }
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setShareOpen(false)
     document.addEventListener('pointerdown', onPointer)
     document.addEventListener('keydown', onKey)
     return () => {
@@ -294,95 +230,112 @@ export function TabBar({
     }
   }, [shareOpen])
 
+  const activeIndex = Math.max(0, tabs.findIndex((t) => t.id === active))
+  const openWidth = (i: number) => PAD_L + ICON + GAP + (labelWidths?.[i] ?? 48) + PAD_R
+  const widest = Math.max(...tabs.map((_, i) => openWidth(i)))
+  const total = widest + (tabs.length - 1) * MIN_TAB
+  const activeWidth = openWidth(activeIndex)
+  const restWidth = (total - activeWidth) / (tabs.length - 1)
+  const widths = tabs.map((_, i) => (i === activeIndex ? activeWidth : restWidth))
+  const lefts = widths.map((_, i) => widths.slice(0, i).reduce((a, b) => a + b, 0))
+
+  const select = (tab: TabDef) => {
+    const el = iconRefs.current[tab.id]
+    if (el) {
+      const cls = `ytmq-tab-icon-anim-${tab.id}`
+      el.classList.remove(cls)
+      void el.offsetWidth
+      el.classList.add(cls)
+    }
+    onChange(tab.id)
+  }
+
   return (
-    <div
-      className="pointer-events-none fixed inset-x-0 bottom-0 z-50 flex justify-center overflow-visible px-2 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:px-3 sm:pb-[calc(1rem+env(safe-area-inset-bottom))]"
-    >
-      <div ref={dockRef} className="ytmq-dock pointer-events-auto relative max-w-full">
+    <div className="pointer-events-none fixed inset-x-0 bottom-0 z-50 flex justify-center px-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:pb-[calc(1rem+env(safe-area-inset-bottom))]">
+      {/* Off-screen copies of the labels, to size the tabs. */}
+      <div ref={measureRef} aria-hidden className="ytmq-tab-label pointer-events-none invisible fixed left-0 top-0 flex">
+        {tabs.map((t) => (
+          <span key={t.id}>{t.label}</span>
+        ))}
+      </div>
+
+      <div ref={dockRef} className="ytmq-dock pointer-events-auto relative">
         {shareOpen && (
-          <LobbyShareCard
+          <LobbySheet
             roomId={roomId}
             code={code}
-            onClose={() => setShareOpen(false)}
+            nickname={nickname}
+            onNicknameChange={onNicknameChange}
+            participants={participants}
             onCopied={onCopied}
+            onClose={() => setShareOpen(false)}
           />
         )}
 
-        <nav aria-label="Room navigation" className="ytmq-dock-nav relative flex max-w-full items-center gap-1 overflow-visible rounded-full border border-white/10 bg-neutral-900/90 p-1 shadow-[0_16px_40px_-8px_rgba(0,0,0,0.7)] backdrop-blur-xl ytmq-hide-scrollbar sm:p-1.5">
-          {tabs.map((tab) => {
-            const isActive = active === tab.id
-            const { Icon } = tab
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => handleChange(tab.id)}
-                className={`ytmq-tab group relative flex h-11 shrink-0 items-center justify-center rounded-full text-sm font-semibold transition-[background-color,color,padding] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] sm:h-[3.25rem] ${
-                  isActive
-                    ? 'is-active bg-white/[0.1] pl-3.5 pr-4 text-white sm:pl-4 sm:pr-5'
-                    : 'w-11 text-neutral-400 hover:bg-white/[0.05] hover:text-neutral-100 sm:w-[3.25rem]'
-                }`}
-                aria-current={isActive ? 'page' : undefined}
-                aria-label={
-                  tab.id === 'queue' && queueCount > 0
-                    ? `Queue, ${queueCount} ${queueCount === 1 ? 'song' : 'songs'}`
-                    : tab.label
-                }
-              >
-                <span className="relative shrink-0 overflow-visible">
-                  <span
-                    ref={(el) => {
-                      iconWrapRefs.current[tab.id] = el
-                    }}
-                    className="ytmq-tab-icon-wrap inline-flex items-center justify-center"
-                  >
-                    <Icon
-                      className={`h-[22px] w-[22px] transition-[transform,color] duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] group-active:scale-90 ${
-                        isActive ? 'text-accent-400' : ''
-                      }`}
-                    />
-                  </span>
-                  {tab.id === 'queue' && queueCount > 0 && (
+        <nav aria-label="Room" className="ytmq-dock-nav flex items-center gap-1 rounded-full p-1">
+          <div className="relative flex" style={{ width: total, height: TAB_H }}>
+            <span
+              aria-hidden
+              className="ytmq-dock-pill absolute top-0 rounded-full"
+              style={{ left: lefts[activeIndex], width: activeWidth, height: TAB_H }}
+            />
+            {tabs.map((tab, i) => {
+              const isActive = i === activeIndex
+              const { Icon } = tab
+              const iconLeft = isActive ? PAD_L : (widths[i]! - ICON) / 2
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => select(tab)}
+                  aria-current={isActive ? 'page' : undefined}
+                  aria-label={tab.id === 'queue' && queueCount > 0 ? `Queue, ${queueCount} ${queueCount === 1 ? 'song' : 'songs'}` : tab.label}
+                  className={`ytmq-tab group relative shrink-0 rounded-full ${isActive ? 'is-active text-white' : 'text-neutral-400 hover:text-neutral-100'}`}
+                  style={{ width: widths[i], height: TAB_H }}
+                >
+                  <span className="ytmq-tab-icon absolute top-1/2" style={{ left: iconLeft, width: ICON, height: ICON }}>
                     <span
-                      aria-hidden
-                      className="ytmq-anim-pop absolute -right-2.5 -top-2 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent-600 px-1 text-[10px] font-bold leading-none text-white ring-2 ring-neutral-900"
+                      ref={(el) => {
+                        iconRefs.current[tab.id] = el
+                      }}
+                      className="ytmq-tab-icon-wrap flex h-full w-full items-center justify-center"
                     >
-                      {queueCount > 99 ? '99+' : queueCount}
+                      <Icon className={`h-[22px] w-[22px] transition-colors duration-300 group-active:scale-90 ${isActive ? 'text-accent-400' : ''}`} />
                     </span>
-                  )}
-                </span>
-                {/* The label only for the open tab: it slides out of the icon. */}
-                <span className="ytmq-tab-label" aria-hidden>
-                  <span>{tab.label}</span>
-                </span>
-              </button>
-            )
-          })}
+                    {tab.id === 'queue' && queueCount > 0 && !isActive && (
+                      <span
+                        aria-hidden
+                        className="ytmq-anim-pop absolute -right-2.5 -top-2 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent-600 px-1 text-[10px] font-bold leading-none text-white ring-2 ring-[#1a1a1a]"
+                      >
+                        {queueCount > 99 ? '99+' : queueCount}
+                      </span>
+                    )}
+                  </span>
+                  <span
+                    aria-hidden
+                    className="ytmq-tab-label absolute top-1/2"
+                    style={{ left: PAD_L + ICON + GAP, opacity: isActive ? 1 : 0 }}
+                  >
+                    {tab.label}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
 
-          {/* Divider */}
-          <span aria-hidden className="mx-1 h-8 w-px bg-white/10" />
+          <span aria-hidden className="mx-1 h-7 w-px bg-white/10" />
 
-          {/* Lobby code + QR */}
           <button
             type="button"
             onClick={() => setShareOpen((v) => !v)}
             aria-expanded={shareOpen}
-            aria-label={`Lobby ${code} — show QR and share`}
-            className={`group flex h-11 w-11 shrink-0 items-center justify-center gap-2 rounded-full transition-colors sm:h-[3.25rem] sm:w-auto sm:justify-start sm:pl-3 sm:pr-4 ${
-              shareOpen
-                ? 'bg-white/[0.09] text-neutral-100'
-                : 'text-neutral-400 hover:bg-white/5 hover:text-neutral-100'
+            aria-label={`Lobby ${code}: QR code and link`}
+            className={`ytmq-press flex h-12 shrink-0 items-center gap-2 rounded-full px-3.5 transition-colors ${
+              shareOpen ? 'bg-white/[0.12] text-white' : 'text-neutral-300 hover:bg-white/[0.06] hover:text-white'
             }`}
           >
-            <QrIcon className="h-5 w-5 shrink-0 transition-transform duration-100 group-active:scale-90" />
-            <span className="hidden flex-col items-start leading-tight sm:flex">
-              <span className="text-[9px] font-medium uppercase tracking-wide text-neutral-500">
-                Lobby
-              </span>
-              <span className="max-w-[4.5rem] truncate font-mono text-xs font-semibold tracking-widest text-neutral-100 sm:max-w-none sm:text-sm">
-                {code}
-              </span>
-            </span>
+            <QrIcon className="h-[22px] w-[22px] shrink-0" />
+            <span className="hidden font-mono text-sm font-semibold tracking-[0.18em] text-white sm:inline">{code}</span>
           </button>
         </nav>
       </div>

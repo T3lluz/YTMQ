@@ -1,5 +1,6 @@
 import { getValidSpotifyAccessToken, setSpotifyDisplayName } from './spotifyAuth'
 import type { NowPlayingNextUp } from './playback'
+import type { SpotifyTrackCandidate } from './spotifyMatch'
 
 const API = 'https://api.spotify.com/v1'
 
@@ -84,6 +85,9 @@ export type SpotifyPlayback = {
   is_playing: boolean
   progress_ms: number | null
   device?: SpotifyDevice
+  shuffle_state?: boolean
+  /** Not in Spotify's docs, but sent: whether the app's own Smart Shuffle is on. */
+  smart_shuffle?: boolean
   item: {
     type?: string
     id: string | null
@@ -91,7 +95,7 @@ export type SpotifyPlayback = {
     name: string
     duration_ms: number
     artists: { name: string }[]
-    album?: { images?: { url: string }[] }
+    album?: { name?: string; images?: { url: string }[] }
   } | null
 }
 
@@ -163,4 +167,53 @@ export async function seekSpotifyPlayback(positionSec: number) {
 export async function setSpotifyVolume(volume: number) {
   const pct = Math.min(100, Math.max(0, Math.round(volume)))
   await spotifyFetch(`/me/player/volume?volume_percent=${pct}`, { method: 'PUT' })
+}
+
+export async function setSpotifyShuffle(state: boolean) {
+  await spotifyFetch(`/me/player/shuffle?state=${state ? 'true' : 'false'}`, { method: 'PUT' })
+}
+
+/** Put a track at the end of Spotify's own queue ("Next in queue"). */
+export async function addToSpotifyQueue(uri: string) {
+  await spotifyFetch(`/me/player/queue?uri=${encodeURIComponent(uri)}`, { method: 'POST' })
+}
+
+/** Start playing these tracks now, on the active device. */
+export async function playSpotifyTracks(uris: string[]) {
+  await spotifyFetch('/me/player/play', {
+    method: 'PUT',
+    body: JSON.stringify({ uris }),
+  })
+}
+
+type SearchTrack = {
+  id: string
+  uri: string
+  name: string
+  duration_ms: number
+  artists?: { name: string }[]
+  album?: { images?: { url: string }[] }
+  is_playable?: boolean
+}
+
+/** Spotify's track search, shaped for spotifyMatch. */
+export async function searchSpotifyTracks(query: string, limit = 8): Promise<SpotifyTrackCandidate[]> {
+  const params = new URLSearchParams({ q: query, type: 'track', limit: String(limit) })
+  const data = await spotifyJson<{ tracks?: { items?: SearchTrack[] } }>(`/search?${params}`)
+  return (data?.tracks?.items ?? [])
+    .filter((t) => t?.uri && t.is_playable !== false)
+    .map((t) => ({
+      id: t.id,
+      uri: t.uri,
+      name: t.name,
+      artist: (t.artists ?? []).map((a) => a.name).join(', '),
+      albumArt: t.album?.images?.[0]?.url ?? '',
+      durationMs: t.duration_ms,
+    }))
+}
+
+/** The uris in Spotify's own queue after the current track. */
+export async function fetchSpotifyQueueUris(): Promise<string[]> {
+  const data = await spotifyJson<{ queue?: { uri?: string }[] }>('/me/player/queue')
+  return (data?.queue ?? []).map((t) => t?.uri ?? '').filter(Boolean)
 }

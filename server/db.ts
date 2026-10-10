@@ -34,7 +34,50 @@ export type QueueRow = {
   added_by: string;
   insert_mode: "play_next" | "queue";
   created_at: string;
+  /** Song details for display and matching (QueueMeta), JSON in the table. */
+  meta: QueueMeta;
 };
+
+export type QueueMeta = {
+  duration?: number;
+  album?: string;
+  artists?: { id: string | null; name: string }[];
+  explicit?: boolean;
+  /** Picked by smart shuffle, not a person. */
+  smart?: boolean;
+};
+
+function cleanMeta(input: unknown): QueueMeta {
+  if (!input || typeof input !== "object") return {};
+  const m = input as Record<string, unknown>;
+  const out: QueueMeta = {};
+  if (typeof m.duration === "number" && Number.isFinite(m.duration) && m.duration > 0 && m.duration < 36000) {
+    out.duration = Math.round(m.duration);
+  }
+  if (typeof m.album === "string" && m.album.trim()) out.album = m.album.trim().slice(0, 200);
+  if (Array.isArray(m.artists)) {
+    out.artists = m.artists
+      .slice(0, 12)
+      .filter((a): a is Record<string, unknown> => Boolean(a) && typeof a === "object")
+      .map((a) => ({
+        id: typeof a.id === "string" ? a.id.slice(0, 64) : null,
+        name: typeof a.name === "string" ? a.name.slice(0, 120) : "",
+      }))
+      .filter((a) => a.name);
+  }
+  if (m.explicit === true) out.explicit = true;
+  if (m.smart === true) out.smart = true;
+  return out;
+}
+
+function parseMeta(text: unknown): QueueMeta {
+  if (typeof text !== "string" || !text) return {};
+  try {
+    return cleanMeta(JSON.parse(text));
+  } catch {
+    return {};
+  }
+}
 
 type RoomRow = {
   id: string;
@@ -112,6 +155,11 @@ export function openDb(path: string, emit: (change: Change) => void) {
   const db = new DatabaseSync(path);
   db.exec("pragma journal_mode = wal; pragma foreign_keys = on; pragma busy_timeout = 3000;");
   db.exec(SCHEMA);
+  // Added after launch: song details as JSON.
+  const queueColumns = db.prepare("pragma table_info(queue_items)").all() as { name: string }[];
+  if (!queueColumns.some((c) => c.name === "meta")) {
+    db.exec("alter table queue_items add column meta text not null default '{}'");
+  }
 
   const now = () => new Date().toISOString();
   const isUuid = (v: unknown): v is string =>
@@ -145,8 +193,8 @@ export function openDb(path: string, emit: (change: Change) => void) {
     queueItem: db.prepare("select * from queue_items where id = ?"),
     insertQueue: db.prepare(
       `insert into queue_items (id, room_id, position, video_id, title, channel_title,
-       thumbnail_url, added_by, insert_mode, created_at)
-       values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       thumbnail_url, added_by, insert_mode, created_at, meta)
+       values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ),
     deleteQueue: db.prepare("delete from queue_items where id = ?"),
     participants: db.prepare(
@@ -391,9 +439,13 @@ export function openDb(path: string, emit: (change: Change) => void) {
 
   // --- Queue ---------------------------------------------------------------
 
+  function rowOut(raw: Record<string, unknown>): QueueRow {
+    return { ...(raw as unknown as QueueRow), meta: parseMeta(raw.meta) };
+  }
+
   function listQueue(roomId: string): QueueRow[] {
     if (!activeRoom(roomId)) return [];
-    return q.queue.all(roomId) as QueueRow[];
+    return (q.queue.all(roomId) as Record<string, unknown>[]).map(rowOut);
   }
 
   /**
@@ -428,6 +480,7 @@ export function openDb(path: string, emit: (change: Change) => void) {
       added_by: str(input.added_by, 60),
       insert_mode: mode,
       created_at: now(),
+      meta: cleanMeta(input.meta),
     };
     q.insertQueue.run(
       row.id,
@@ -440,6 +493,7 @@ export function openDb(path: string, emit: (change: Change) => void) {
       row.added_by,
       row.insert_mode,
       row.created_at,
+      JSON.stringify(row.meta),
     );
     emit({ table: "queue_items", roomId, eventType: "INSERT", new: row, old: null });
     return row;
@@ -447,7 +501,8 @@ export function openDb(path: string, emit: (change: Change) => void) {
 
   function removeFromQueue(itemId: string): boolean {
     if (!isUuid(itemId)) return false;
-    const row = q.queueItem.get(itemId) as QueueRow | undefined;
+    const raw = q.queueItem.get(itemId) as Record<string, unknown> | undefined;
+    const row = raw ? rowOut(raw) : undefined;
     if (!row || !activeRoom(row.room_id)) return false;
     if (Number(q.deleteQueue.run(itemId).changes) === 0) return false;
     emit({ table: "queue_items", roomId: row.room_id, eventType: "DELETE", new: null, old: row });

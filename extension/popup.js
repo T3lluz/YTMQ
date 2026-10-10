@@ -160,13 +160,37 @@
     }
   }
 
-  function onNowPlaying(p) {
-    if (!p || !p.title) return
+  // Per player: its last report, when it started playing, when it last played.
+  var players = {}
+
+  /** Like the app: the player that is playing (the latest to start) wins, else the one that played last. */
+  function activePlayer(now) {
+    var list = Object.keys(players).map(function (k) { return players[k] })
+    var fresh = list.filter(function (s) { return now - s.at < 12000 })
+    var playing = fresh.filter(function (s) { return s.p.state === 'playing' })
+    if (playing.length) return playing.sort(function (a, b) { return b.since - a.since })[0]
+    var pool = fresh.length ? fresh : list
+    return pool.sort(function (a, b) { return b.lastPlaying - a.lastPlaying || b.at - a.at })[0] || null
+  }
+
+  function onNowPlaying(raw) {
+    if (!raw || !raw.title) return
     var now = Date.now()
-    if (p.source === 'spotify') playback.spotifyAt = now
+    var source = raw.source === 'spotify' ? 'spotify' : 'ytm'
+    if (source === 'spotify') playback.spotifyAt = now
     else playback.ytmAt = now
-    // Like the app: while Spotify is publishing, it wins.
-    if (p.source !== 'spotify' && now - playback.spotifyAt < 8000) return
+    var prev = players[source]
+    var playingNow = raw.state === 'playing'
+    var wasPlaying = prev && prev.p.state === 'playing' && now - prev.at < 12000
+    players[source] = {
+      p: raw,
+      at: now,
+      since: playingNow ? (wasPlaying ? prev.since : now) : prev ? prev.since : 0,
+      lastPlaying: playingNow ? now : prev ? prev.lastPlaying : 0,
+    }
+    var active = activePlayer(now)
+    if (!active) return
+    var p = active.p
     playback.np = {
       videoId: p.videoId,
       title: p.title,
@@ -320,7 +344,8 @@
       case 'toggle':
       case 'prev':
       case 'next':
-        broadcast('playback_control', { action: action })
+        // Only the room's player acts, when YouTube Music and Spotify are both linked.
+        broadcast('playback_control', { action: action, target: playback.np ? playback.np.source : undefined })
         // Show the change before the player reports back.
         if (action === 'toggle' && playback.np) {
           playback.np.state = playback.np.state === 'playing' ? 'paused' : 'playing'
@@ -329,7 +354,7 @@
         return
       case 'seek':
         if (extra && typeof extra.position === 'number') {
-          broadcast('playback_control', { action: 'seek', position: extra.position })
+          broadcast('playback_control', { action: 'seek', position: extra.position, target: playback.np ? playback.np.source : undefined })
           if (playback.np) {
             playback.np.currentTime = extra.position
             playback.at = Date.now()

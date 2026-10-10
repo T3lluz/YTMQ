@@ -3,6 +3,17 @@ import { ytmq } from './api'
 
 export type QueueInsertMode = 'play_next' | 'queue'
 
+/** Song details stored with a queue row (server/db.ts QueueMeta). */
+export type QueueMeta = {
+  /** Seconds. */
+  duration?: number
+  album?: string
+  artists?: { id: string | null; name: string }[]
+  explicit?: boolean
+  /** Picked by smart shuffle, not a person. */
+  smart?: boolean
+}
+
 export type QueueItem = {
   id: string
   room_id: string
@@ -14,6 +25,8 @@ export type QueueItem = {
   added_by: string
   created_at: string
   insert_mode: QueueInsertMode
+  /** Missing on rows from before song details were stored. */
+  meta?: QueueMeta
 }
 
 export type AddTrackInput = {
@@ -25,6 +38,7 @@ export type AddTrackInput = {
   insert_mode?: QueueInsertMode
   /** The host's token, so the host can add while guest adds are off. */
   host_token?: string
+  meta?: QueueMeta
 }
 
 export async function fetchQueueItems(roomId: string): Promise<QueueItem[]> {
@@ -47,6 +61,7 @@ export async function addTrackToQueue(
     thumbnail_url: track.thumbnail_url ?? '',
     added_by: track.added_by ?? '',
     insert_mode: track.insert_mode ?? 'play_next',
+    meta: track.meta ?? {},
     ...(track.host_token ? { host_token: track.host_token } : {}),
   })
 }

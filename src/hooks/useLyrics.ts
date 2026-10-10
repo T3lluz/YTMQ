@@ -50,7 +50,7 @@ const retrying = new Set<string>()
 // Bump the prefix whenever the persisted shape changes (or to invalidate
 // poisoned entries from older builds — e.g. negative results that used to be
 // cached permanently before coverage improved).
-const SS_PREFIX = 'ytmq:lrc:v3:'
+const SS_PREFIX = 'ytmq:lrc:v4:'
 
 function ssLoad(videoId: string): CacheEntry | null {
   try {

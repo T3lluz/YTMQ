@@ -37,6 +37,8 @@ type NowPlayingPayload = {
   videoId: string
   title: string
   artist: string
+  /** Lets the room tell this player from Spotify when both are linked. */
+  source: 'ytm'
   updatedAt: number
   currentTime: number
   duration?: number
@@ -58,6 +60,7 @@ type PlaybackAction =
   | 'toggle'
   | 'seek'
   | 'volume'
+  | 'shuffle'
 
 type QueueStoreState = {
   queue: {
@@ -397,6 +400,7 @@ function readNowPlaying(): NowPlayingPayload | null {
     videoId,
     title: title || 'Unknown track',
     artist,
+    source: 'ytm',
     updatedAt: Date.now(),
     currentTime,
     ...(duration != null ? { duration } : {}),
@@ -570,6 +574,16 @@ function readVolume(bar: PlayerBar | null): number | undefined {
   return undefined
 }
 
+/** YouTube Music's own shuffle: a one-off reshuffle of what plays next. */
+function doShuffle(): boolean {
+  return clickPlayerBarButton([
+    'tp-yt-paper-icon-button.shuffle',
+    '.shuffle',
+    'button[aria-label*="Shuffle" i]',
+    'tp-yt-paper-icon-button[aria-label*="Shuffle" i]',
+  ])
+}
+
 function runPlaybackAction(
   action: PlaybackAction,
   position?: number,
@@ -590,6 +604,8 @@ function runPlaybackAction(
       return typeof position === 'number' ? doSeek(position) : false
     case 'volume':
       return typeof volume === 'number' ? doSetVolume(volume) : false
+    case 'shuffle':
+      return doShuffle()
     default:
       return false
   }
@@ -1503,8 +1519,39 @@ async function runBridge() {
       showToast(`Could not ${action} — open YouTube Music tab`)
       return
     }
+    if (action === 'shuffle') {
+      showToast('Shuffled. The shared queue keeps its order.')
+      window.setTimeout(() => void repinSharedQueue(), 600)
+    }
     window.setTimeout(publishNowPlaying, 200)
     window.setTimeout(publishNowPlaying, 800)
+  }
+
+  /**
+   * YouTube Music's shuffle scatters everything after the current song,
+   * guest picks included. Put the shared queue back in its order: play next
+   * rows right after the current song, the rest at the end, as when added.
+   */
+  let repinning = false
+  async function repinSharedQueue() {
+    if (repinning) return
+    repinning = true
+    try {
+      const rows = ((await loadQueue()) ?? []).filter(
+        (row) => syncedIds.has(row.id) && isInPlaybackSession(row.created_at, playbackSince),
+      )
+      if (rows.length === 0) return
+      for (const row of rows) await removeVideoFromQueueWithRetry(row.video_id, 2)
+      const playNext = rows.filter((row) => normalizeMode(row.insert_mode) === 'play_next')
+      const queued = rows.filter((row) => normalizeMode(row.insert_mode) !== 'play_next')
+      for (const row of [...playNext].reverse()) await addVideoToYtmWithRetry(row.video_id, 'play_next', 2)
+      for (const row of queued) await addVideoToYtmWithRetry(row.video_id, 'queue', 2)
+      log('Shared queue put back in order after shuffle', rows.length)
+    } catch (err) {
+      log('Re-ordering after shuffle failed', err)
+    } finally {
+      repinning = false
+    }
   }
 
   // Set once the panel bridge starts below; queue changes refresh it.
@@ -1514,6 +1561,9 @@ async function runBridge() {
     .channel(`ytmq-bridge:${roomId}`)
     .on('broadcast', { event: 'playback_control' }, ({ payload }) => {
       if (!payload || typeof payload !== 'object') return
+      // With Spotify linked too, the room sends each control to one player.
+      const target = (payload as { target?: string }).target
+      if (target && target !== 'ytm') return
       const action = (payload as { action?: PlaybackAction }).action
       const position = (payload as { position?: number }).position
       const volume = (payload as { volume?: number }).volume
@@ -1522,7 +1572,8 @@ async function runBridge() {
         action === 'prev' ||
         action === 'play' ||
         action === 'pause' ||
-        action === 'toggle'
+        action === 'toggle' ||
+        action === 'shuffle'
       ) {
         handlePlaybackControl(action)
       } else if (action === 'seek') {

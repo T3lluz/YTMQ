@@ -2,7 +2,7 @@
 
 ![YTMQ: everyone picks, one queue plays](public/og.png)
 
-A shared queue for **YouTube Music**. Friends open a link on their phones, search, and add songs; the host's YouTube Music plays them in order, with now playing, lyrics and controls on every screen. Spotify can be followed too, for now playing and lyrics.
+A shared queue for **YouTube Music and Spotify**. Friends open a link on their phones, search, and add songs; the host's player takes them in order, with now playing, lyrics and controls on every screen.
 
 **[Open YTMQ](https://t3lluz.com/ytmq/)** · [Docs](https://t3lluz.com/ytmq/docs) · [Install the extension](https://t3lluz.com/ytmq/docs/install) · [API](https://t3lluz.com/ytmq/docs/api) · [Chrome zip](https://t3lluz.com/ytmq/ytmq-extension.zip) · [Firefox add-on](https://t3lluz.com/ytmq/ytmq-firefox.xpi) · [Userscript](https://t3lluz.com/ytmq/ytmq-connect.user.js)
 
@@ -37,9 +37,9 @@ Optional `.env.local`:
 
 No secrets anywhere: search scrapes YouTube Music's own web API server-side, and lyrics come from public sources.
 
-## Spotify (optional host follower)
+## Spotify
 
-Spotify uses the official Web API (PKCE) from the host's YTMQ tab. No extension, no Client ID prompt. After login, YTMQ reads the active Spotify player and shows that track on lyrics, now playing, and recently played. It does not push the shared queue onto Spotify.
+Spotify uses the official Web API (PKCE) from the host's YTMQ tab. No extension, no Client ID prompt. After login, YTMQ follows the active Spotify player (now playing, lyrics, history) and plays the shared queue on it: Spotify's queue cannot be reordered or trimmed through the API, so each shared song is matched on Spotify and handed over about 25 seconds before the current one ends (or at once on Next), then leaves the shared queue when it starts. Shuffle maps to Spotify's; smart shuffle is YTMQ's own (Spotify's cannot be switched on through the API) and adds a related song from YouTube Music's radio every third track.
 
 The app already ships a public Client ID. On the Spotify dashboard, add these exact redirect URIs (trailing slash included):
 - `http://127.0.0.1:5173/ytmq/` (Spotify rejects `localhost`; open the dev server at 127.0.0.1 when testing Spotify)
@@ -49,7 +49,7 @@ Then play something in the Spotify app, click **Connect Spotify** in Admin, and 
 
 Skip / pause / seek from YTMQ need Spotify Premium. Following what is playing works on Free.
 
-You can connect YouTube Music and Spotify at the same time; now-playing prefers Spotify while it is actively publishing.
+You can connect YouTube Music and Spotify at the same time. The one playing is the room's player (the latest to start, if both are); controls carry a `target` so only that player acts.
 
 Guest links and QR codes point at `/ytmq/room/<id>`; the server answers any unknown path under `/ytmq/` with the app.
 

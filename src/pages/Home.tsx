@@ -1,7 +1,12 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { SiteFooter, SiteHeader } from '../components/site/SiteChrome'
 import { QueuePreview } from '../components/site/QueuePreview'
+import { CodeInput } from '../components/CodeInput'
+import { Button } from '../components/ui/Button'
+import { buttonClass } from '../components/ui/buttonStyles'
+import { ArrowRightIcon, MusicNoteIcon, SearchIcon, SmartShuffleIcon } from '../components/ui/icons'
+import { SpotifyIcon, YouTubeMusicIcon } from '../components/ui/brands'
 import { HOST_NICKNAME, setNickname } from '../lib/nickname'
 import { createLobby, fetchRoom, roomPath, setHostToken } from '../lib/room'
 import { forgetLobby, recentLobbies, rememberLobby, type RecentLobby } from '../lib/recentLobbies'
@@ -33,12 +38,15 @@ function useLiveRecentLobbies() {
   return live
 }
 
-function ArrowRight({ className = 'h-4 w-4' }: { className?: string }) {
+function Feature({ icon, title, children }: { icon: ReactNode; title: string; children: ReactNode }) {
   return (
-    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
-      <path d="M4 10h12" />
-      <path d="m11 5 5 5-5 5" />
-    </svg>
+    <div className="flex flex-col gap-4 rounded-[24px] bg-[#121212] p-6">
+      <span className="ytmq-cookie-tile flex h-14 w-14 items-center justify-center bg-white/[0.07] text-white">{icon}</span>
+      <div>
+        <h3 className="text-lg font-extrabold tracking-[-0.02em] text-white">{title}</h3>
+        <p className="mt-1.5 text-[15px] leading-relaxed text-neutral-400">{children}</p>
+      </div>
+    </div>
   )
 }
 
@@ -47,6 +55,7 @@ export function Home() {
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [code, setCode] = useState('')
+  const [shake, setShake] = useState(0)
   const recent = useLiveRecentLobbies()
 
   async function handleCreate() {
@@ -68,8 +77,9 @@ export function Home() {
   function handleJoin(e: React.FormEvent) {
     e.preventDefault()
     const clean = code.trim().toUpperCase()
-    if (clean.length < 4) {
-      setError('Codes are 6 characters, like 4F9K2A')
+    if (clean.length < CODE_LENGTH) {
+      setError('Codes are 6 letters and numbers, like 4F9K2A')
+      setShake((n) => n + 1)
       return
     }
     navigate(`/join?code=${encodeURIComponent(clean)}`)
@@ -79,78 +89,64 @@ export function Home() {
     <div className="flex min-h-dvh flex-col">
       <SiteHeader />
 
-      <main className="mx-auto grid w-full max-w-6xl flex-1 items-center gap-12 px-4 pb-16 pt-10 sm:px-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,26rem)] lg:gap-16 lg:pt-16">
+      <main className="mx-auto grid w-full max-w-6xl flex-1 items-center gap-12 px-4 pb-16 pt-8 sm:px-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,25rem)] lg:gap-16 lg:pt-14">
         <section className="min-w-0">
-          <p className="ytmq-anim-fade-up text-sm font-semibold text-accent-400">
-            Shared queue for YouTube Music
+          <p className="ytmq-anim-fade-up inline-flex h-8 items-center gap-2 rounded-full bg-white/[0.06] pl-1.5 pr-3.5 text-[13px] font-semibold text-neutral-200">
+            <YouTubeMusicIcon className="h-5 w-5" />
+            <SpotifyIcon className="-ml-3 h-5 w-5 ring-2 ring-[#1a1a1a] rounded-full" />
+            One queue for YouTube Music or Spotify
           </p>
           <h1
-            className="ytmq-anim-fade-up mt-3 text-[2.6rem] font-extrabold leading-[1.02] tracking-[-0.035em] text-white sm:text-6xl"
+            className="ytmq-anim-fade-up mt-5 text-[2.9rem] font-extrabold leading-[0.98] tracking-[-0.045em] text-white sm:text-[4.4rem]"
             style={{ animationDelay: '40ms' }}
           >
             Everyone picks.
             <br />
-            One queue plays.
+            <span className="text-accent-500">One queue</span> plays.
           </h1>
           <p
             className="ytmq-anim-fade-up mt-5 max-w-xl text-lg leading-relaxed text-neutral-400"
             style={{ animationDelay: '80ms' }}
           >
-            Friends add songs from their phones and the host&apos;s YouTube Music plays them in
-            order. Lyrics and controls show up on every screen. Nobody signs up for anything.
+            Friends search and add songs from their phones. The host&apos;s player takes them in order, with
+            lyrics and controls on every screen. Nobody signs up for anything.
           </p>
 
           <form
             onSubmit={handleJoin}
-            className="ytmq-anim-fade-up mt-8 max-w-md"
+            className="ytmq-anim-fade-up mt-9 max-w-md rounded-[28px] bg-[#121212] p-5"
             style={{ animationDelay: '120ms' }}
           >
-            <label htmlFor="home-code" className="text-sm font-medium text-neutral-300">
-              Got a code from the host?
+            <label htmlFor="home-code" className="text-[13px] font-bold uppercase tracking-[0.12em] text-neutral-500">
+              Join with a code
             </label>
-            <div className="mt-2 flex gap-2">
-              <input
+            <div className="mt-3">
+              <CodeInput
+                key={shake}
                 id="home-code"
                 value={code}
-                onChange={(e) =>
-                  setCode(e.target.value.replace(/[^a-z0-9]/gi, '').toUpperCase().slice(0, CODE_LENGTH))
-                }
-                placeholder="4F9K2A"
-                autoComplete="off"
-                autoCapitalize="characters"
-                spellCheck={false}
-                inputMode="text"
-                aria-label="Lobby code"
-                className="min-h-13 w-full min-w-0 rounded-full border border-white/10 bg-neutral-900 px-5 font-mono text-xl font-medium tracking-[0.3em] text-white uppercase outline-none transition-colors placeholder:tracking-[0.3em] placeholder:text-neutral-600 focus:border-white/40"
+                onChange={(v) => {
+                  setCode(v)
+                  setError(null)
+                }}
+                invalid={shake > 0}
               />
-              <button
-                type="submit"
-                className="ytmq-press inline-flex min-h-13 shrink-0 items-center gap-2 rounded-full bg-accent-600 px-6 text-base font-semibold text-white hover:bg-accent-500"
-              >
+            </div>
+            <div className="mt-4 flex items-center justify-between gap-3">
+              <span className="min-w-0 text-[13px] text-neutral-500">Or scan the QR on the host&apos;s screen.</span>
+              <Button type="submit" variant="accent" size="lg" disabled={code.length < CODE_LENGTH}>
                 Join
-                <ArrowRight />
-              </button>
+                <ArrowRightIcon className="h-[18px] w-[18px]" />
+              </Button>
             </div>
           </form>
 
-          <div
-            className="ytmq-anim-fade-up mt-6 flex max-w-md flex-wrap items-center gap-x-4 gap-y-3"
-            style={{ animationDelay: '160ms' }}
-          >
-            <button
-              type="button"
-              onClick={() => void handleCreate()}
-              disabled={creating}
-              className="ytmq-press inline-flex min-h-11 items-center gap-2 rounded-full bg-white px-5 text-sm font-semibold text-neutral-950 hover:bg-neutral-200 disabled:opacity-60"
-            >
-              {creating && <span className="ytmq-spinner h-4 w-4" aria-hidden />}
-              {creating ? 'Creating…' : 'Host a lobby'}
-            </button>
-            <Link
-              to="/docs/install"
-              className="text-sm text-neutral-400 underline decoration-neutral-700 underline-offset-4 transition-colors hover:text-white hover:decoration-neutral-400"
-            >
-              First time hosting? Two-minute setup
+          <div className="ytmq-anim-fade-up mt-6 flex max-w-md flex-wrap items-center gap-3" style={{ animationDelay: '160ms' }}>
+            <Button variant="primary" size="lg" loading={creating} onClick={() => void handleCreate()}>
+              {creating ? 'Starting…' : 'Host a lobby'}
+            </Button>
+            <Link to="/docs/install" className={buttonClass('ghost', 'lg')}>
+              First time? Set up in two minutes
             </Link>
           </div>
 
@@ -162,25 +158,23 @@ export function Home() {
 
           {recent.length > 0 && (
             <section className="ytmq-anim-fade-up mt-10 max-w-md" aria-label="Your lobbies">
-              <h2 className="text-xs font-semibold uppercase tracking-[0.14em] text-neutral-500">
-                Jump back in
-              </h2>
-              <ul className="mt-3 divide-y divide-white/[0.06] overflow-hidden rounded-2xl border border-white/[0.08] bg-neutral-900/60">
+              <h2 className="text-[13px] font-bold uppercase tracking-[0.12em] text-neutral-500">Jump back in</h2>
+              <ul className="mt-3 flex flex-col gap-1">
                 {recent.map((lobby) => (
                   <li key={lobby.roomId}>
                     <Link
                       to={roomPath(lobby.roomId)}
-                      className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-white/[0.04]"
+                      className="group flex h-14 items-center gap-3 rounded-2xl bg-white/[0.04] px-4 transition-colors hover:bg-white/[0.08]"
                     >
-                      <span className="font-mono text-base font-medium tracking-[0.2em] text-white">
-                        {lobby.code}
-                      </span>
-                      <span className="rounded-full bg-white/[0.06] px-2 py-0.5 text-[11px] font-semibold text-neutral-300">
+                      <span className="font-mono text-base font-semibold tracking-[0.2em] text-white">{lobby.code}</span>
+                      <span
+                        className={`inline-flex h-6 items-center rounded-full px-2.5 text-[11px] font-bold ${
+                          lobby.host ? 'bg-accent-500/15 text-accent-300' : 'bg-white/[0.07] text-neutral-300'
+                        }`}
+                      >
                         {lobby.host ? 'You host' : 'Guest'}
                       </span>
-                      <span className="ml-auto text-neutral-500">
-                        <ArrowRight />
-                      </span>
+                      <ArrowRightIcon className="ml-auto h-4 w-4 text-neutral-500 transition-transform group-hover:translate-x-0.5 group-hover:text-white" />
                     </Link>
                   </li>
                 ))}
@@ -194,13 +188,38 @@ export function Home() {
         </div>
       </main>
 
-      <section className="border-t border-white/[0.06] bg-neutral-950">
-        <div className="mx-auto grid w-full max-w-6xl gap-8 px-4 py-14 sm:px-6 md:grid-cols-3">
+      <section className="mx-auto w-full max-w-6xl px-4 pb-16 sm:px-6">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <Feature icon={<SearchIcon className="h-6 w-6" />} title="Search that finds it">
+            Songs with every artist on them, albums, artist pages and playlists, ranked the way you expect.
+          </Feature>
+          <Feature
+            icon={
+              <span className="flex">
+                <YouTubeMusicIcon className="h-6 w-6" />
+                <SpotifyIcon className="-ml-2 h-6 w-6" />
+              </span>
+            }
+            title="Your player, either one"
+          >
+            The queue plays on YouTube Music or Spotify, whichever the host has going.
+          </Feature>
+          <Feature icon={<MusicNoteIcon className="h-6 w-6" />} title="Lyrics, word by word">
+            Synced lyrics on every phone, lit up word by word for songs that have the timing.
+          </Feature>
+          <Feature icon={<SmartShuffleIcon className="h-6 w-6" />} title="Smart shuffle">
+            When the queue runs low, YTMQ slips in songs like the one playing. Anyone can take them out.
+          </Feature>
+        </div>
+      </section>
+
+      <section className="border-t border-white/[0.06]">
+        <div className="mx-auto grid w-full max-w-6xl gap-10 px-4 py-14 sm:px-6 md:grid-cols-3">
           {[
             {
               n: '1',
               title: 'Host opens a lobby',
-              text: 'On the computer that plays the music. The YTMQ extension links that YouTube Music tab to the lobby.',
+              text: 'On the computer that plays the music. The YTMQ extension links YouTube Music; Spotify is a login.',
               to: '/docs/hosting',
             },
             {
@@ -211,17 +230,21 @@ export function Home() {
             },
             {
               n: '3',
-              title: 'Songs land in YouTube Music',
-              text: 'Play next or add to the end. The host’s YouTube Music queue follows the shared one in real time.',
+              title: 'The queue plays',
+              text: 'Play next or add to the end. The host’s player follows the shared queue as it changes.',
               to: '/docs/how-it-works',
             },
           ].map((step) => (
-            <Link key={step.n} to={step.to} className="group block">
-              <span className="font-mono text-sm text-accent-400">0{step.n}</span>
-              <h3 className="mt-2 text-lg font-bold text-white">{step.title}</h3>
-              <p className="mt-1.5 text-sm leading-relaxed text-neutral-400">{step.text}</p>
-              <span className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-neutral-300 transition-colors group-hover:text-white">
-                Read more <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
+            <Link key={step.n} to={step.to} className="group flex gap-4">
+              <span className="ytmq-cookie-tile flex h-12 w-12 shrink-0 items-center justify-center bg-accent-600 text-lg font-extrabold text-white">
+                {step.n}
+              </span>
+              <span className="min-w-0">
+                <span className="block text-lg font-extrabold tracking-[-0.02em] text-white">{step.title}</span>
+                <span className="mt-1 block text-[15px] leading-relaxed text-neutral-400">{step.text}</span>
+                <span className="mt-2 inline-flex items-center gap-1 text-sm font-semibold text-neutral-300 transition-colors group-hover:text-white">
+                  Read more <ArrowRightIcon className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
+                </span>
               </span>
             </Link>
           ))}

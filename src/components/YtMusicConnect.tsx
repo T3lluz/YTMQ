@@ -20,10 +20,17 @@ import {
   ytmUserscriptInstallUrl,
 } from '../lib/ytmusicConnect'
 import { isFirefox } from '../lib/firefoxExtension'
-import { PlayerCard, YouTubeMusicIcon, primaryButton, secondaryButton, textButton } from './PlayerCard'
+import { buttonClass } from './ui/buttonStyles'
+
+const primaryButton = buttonClass('primary', 'md')
+const secondaryButton = buttonClass('tonal', 'md')
+const textButton = buttonClass('ghost', 'md')
+import { CardActions, PlayerCard, YouTubeMusicIcon } from './PlayerCard'
 
 type YtMusicConnectProps = {
   roomId: string
+  /** YouTube Music is the room's player right now. */
+  active?: boolean
 }
 
 type Step = 'connect' | 'waiting' | 'done'
@@ -60,7 +67,7 @@ function OtherWays({
   if (!snippet && !userscriptUrl) return null
 
   return (
-    <details open={defaultOpen} className="group rounded-xl bg-black/20 px-3 py-2.5">
+    <details open={defaultOpen} className="group rounded-xl bg-black/25 px-3.5 py-3">
       <summary className="flex cursor-pointer list-none items-center justify-between text-xs font-semibold text-neutral-300 [&::-webkit-details-marker]:hidden">
         Other ways to connect
         <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 transition-transform group-open:rotate-180" aria-hidden>
@@ -88,7 +95,7 @@ function OtherWays({
               <kbd className="rounded bg-white/10 px-1 font-mono">F12</kbd>, open Console, type{' '}
               <code className="rounded bg-white/10 px-1 font-mono">allow pasting</code> if asked, then paste this and press Enter.
             </p>
-            <button type="button" onClick={() => void copy()} className={`${secondaryButton} mt-2`}>
+            <button type="button" onClick={() => void copy()} className={`${buttonClass('tonal', 'sm')} mt-2`}>
               {copied ? 'Copied' : 'Copy the script'}
             </button>
             <pre className="mt-2 max-h-28 overflow-auto rounded-lg bg-black/40 p-2 font-mono text-[10px] leading-relaxed text-neutral-400 select-all">
@@ -108,7 +115,7 @@ function OtherWays({
   )
 }
 
-export function YtMusicConnect({ roomId }: YtMusicConnectProps) {
+export function YtMusicConnect({ roomId, active = false }: YtMusicConnectProps) {
   const [step, setStep] = useState<Step>(() =>
     sessionStorage.getItem(doneKey(roomId)) === '1' ? 'done' : 'connect',
   )
@@ -220,9 +227,9 @@ export function YtMusicConnect({ roomId }: YtMusicConnectProps) {
 
   if (step === 'done') {
     return (
-      <PlayerCard icon={icon} name="YouTube Music" status="live" statusLabel="Linked to this lobby">
+      <PlayerCard icon={icon} name="YouTube Music" status="live" statusLabel="Linked to this lobby" active={active}>
         <p>Guest picks go straight into your YouTube Music queue. Keep YouTube Music open in this browser.</p>
-        <div className="flex flex-wrap items-center gap-3">
+        <CardActions>
           <button type="button" onClick={() => void reopenYtm()} className={secondaryButton}>
             Open YouTube Music
           </button>
@@ -237,7 +244,7 @@ export function YtMusicConnect({ roomId }: YtMusicConnectProps) {
           >
             Connect again
           </button>
-        </div>
+        </CardActions>
       </PlayerCard>
     )
   }
@@ -249,9 +256,11 @@ export function YtMusicConnect({ roomId }: YtMusicConnectProps) {
           On the YouTube Music tab, look for the YTMQ pill above the player. It turns green once the
           tab is linked, and this card updates by itself.
         </p>
-        <button type="button" onClick={() => void markDone()} className={primaryButton}>
-          It&apos;s linked
-        </button>
+        <CardActions>
+          <button type="button" onClick={() => void markDone()} className={primaryButton}>
+            It&apos;s linked
+          </button>
+        </CardActions>
         <p className="text-xs text-neutral-500">
           Nothing happening? The extension is probably not installed in this browser.{' '}
           <a href={`${BASE}docs/install`} target="_blank" rel="noopener noreferrer" className="text-neutral-200 underline decoration-neutral-600 underline-offset-2">
@@ -271,14 +280,14 @@ export function YtMusicConnect({ roomId }: YtMusicConnectProps) {
           The YTMQ extension links YouTube Music to this lobby. It is a one-time install on the
           computer that plays the music{isFirefox() ? ': one click in Firefox.' : ', about two minutes in Chrome.'}
         </p>
-        <a href={`${BASE}docs/install`} target="_blank" rel="noopener noreferrer" className={primaryButton}>
-          Install the extension
-        </a>
-        <div className="flex flex-wrap items-center gap-3">
+        <CardActions>
+          <a href={`${BASE}docs/install`} target="_blank" rel="noopener noreferrer" className={primaryButton}>
+            Install the extension
+          </a>
           <button type="button" onClick={() => void startConnect()} className={textButton}>
-            I have it, connect anyway
+            I have it, connect
           </button>
-        </div>
+        </CardActions>
         <OtherWays snippet={snippet} userscriptUrl={userscriptUrl} />
       </PlayerCard>
     )
@@ -296,9 +305,11 @@ export function YtMusicConnect({ roomId }: YtMusicConnectProps) {
           ? 'Links the YouTube Music tab you have open, or opens one. Sign in there if it asks.'
           : 'Opens music.youtube.com and links it to this lobby.'}
       </p>
-      <button type="button" onClick={() => void startConnect()} className={primaryButton}>
-        Connect YouTube Music
-      </button>
+      <CardActions>
+        <button type="button" onClick={() => void startConnect()} className={primaryButton}>
+          Connect YouTube Music
+        </button>
+      </CardActions>
       <OtherWays snippet={snippet} userscriptUrl={userscriptUrl} />
     </PlayerCard>
   )

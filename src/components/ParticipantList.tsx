@@ -74,52 +74,28 @@ export function ParticipantList({
       {entries.map(({ key, item, leaving }) => (
         <li
           key={key}
-          className={`mb-1 flex items-center gap-3 rounded-xl px-2 py-2 transition-colors hover:bg-white/[0.04] ${
+          className={`flex min-h-14 items-center gap-3 rounded-xl px-2 py-1.5 transition-colors hover:bg-white/[0.05] ${
             leaving ? 'ytmq-leaving' : 'ytmq-anim-row'
           }`}
         >
-          <div className="relative shrink-0">
-            <span
-              className={`flex h-9 w-9 items-center justify-center rounded-full ${avatarColor(
-                item.client_id,
-              )} text-xs font-bold`}
-            >
-              {initials(item.nickname)}
-            </span>
-            <span
-              className={`absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-neutral-950 ${
-                item.online ? 'bg-emerald-400' : 'bg-neutral-600'
-              }`}
-              title={item.online ? 'Online' : 'Away'}
-            />
-          </div>
+          <Avatar participant={item} />
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium">
+            <p className="truncate font-semibold text-white">
               {item.nickname || 'Guest'}
-              {item.isSelf && (
-                <span className="ml-1.5 text-xs font-normal text-neutral-500">
-                  (you)
-                </span>
-              )}
+              {item.isSelf && <span className="ml-1.5 text-xs font-normal text-neutral-500">you</span>}
             </p>
-            <p className="text-xs text-neutral-500">
-              {item.online ? 'Listening now' : 'Away'}
-            </p>
+            <p className="text-[13px] text-neutral-400">{item.online ? 'Here now' : 'Away'}</p>
           </div>
           {onKick && !item.isSelf && (
             <button
               type="button"
               disabled={busyId === item.client_id}
               onClick={() => onKick(item.client_id, item.nickname)}
-              className="ytmq-press inline-flex items-center gap-1.5 rounded-full bg-white/[0.06] px-3 py-1.5 text-xs font-semibold text-neutral-300 hover:bg-accent-500/15 hover:text-accent-300 disabled:opacity-40"
+              className="ytmq-press inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full px-3 text-[13px] font-semibold text-neutral-300 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.15)] hover:text-accent-300 hover:shadow-[inset_0_0_0_1px_rgba(245,73,47,0.5)] disabled:opacity-40"
               aria-label={`Remove ${item.nickname || 'guest'}`}
             >
-              {busyId === item.client_id ? (
-                <span className="ytmq-spinner h-3.5 w-3.5" aria-hidden />
-              ) : (
-                <KickIcon />
-              )}
-              Kick
+              {busyId === item.client_id ? <span className="ytmq-spinner h-3.5 w-3.5" aria-hidden /> : <KickIcon />}
+              Remove
             </button>
           )}
         </li>
@@ -128,28 +104,47 @@ export function ParticipantList({
   )
 }
 
-type ListenersBadgeProps = {
-  count: number
-  className?: string
+export function Avatar({
+  participant,
+  size = 'md',
+}: {
+  participant: Pick<PresenceParticipant, 'client_id' | 'nickname' | 'online'>
+  size?: 'sm' | 'md'
+}) {
+  const dim = size === 'sm' ? 'h-7 w-7 text-[10px]' : 'h-10 w-10 text-xs'
+  return (
+    <div className="relative shrink-0">
+      <span className={`flex items-center justify-center rounded-full font-bold ${dim} ${avatarColor(participant.client_id)}`}>
+        {initials(participant.nickname)}
+      </span>
+      {size === 'md' && (
+        <span
+          className={`absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-[#121212] ${
+            participant.online ? 'bg-emerald-400' : 'bg-neutral-600'
+          }`}
+          title={participant.online ? 'Online' : 'Away'}
+        />
+      )}
+    </div>
+  )
 }
 
-export function ListenersBadge({ count, className = '' }: ListenersBadgeProps) {
+/** Up to four faces in a row, then "+3". */
+export function AvatarStack({ participants, max = 4 }: { participants: PresenceParticipant[]; max?: number }) {
+  const online = participants.filter((p) => p.online)
+  const shown = online.slice(0, max)
   return (
-    <span
-      className={`inline-flex items-center gap-1.5 rounded-full bg-white/[0.06] px-2.5 py-1 text-xs font-semibold text-neutral-300 ${className}`}
-      aria-label={`${count} listening`}
-    >
-      <span className="relative flex h-2 w-2">
-        {count > 0 && (
-          <span className="absolute inline-flex h-2 w-2 animate-ping rounded-full bg-emerald-400/70" />
-        )}
-        <span
-          className={`relative inline-flex h-2 w-2 rounded-full ${
-            count > 0 ? 'bg-emerald-400' : 'bg-neutral-600'
-          }`}
-        />
-      </span>
-      {count} listening
+    <span className="flex items-center">
+      {shown.map((p, i) => (
+        <span key={p.client_id} className={`rounded-full ring-2 ring-[#121212] ${i > 0 ? '-ml-2' : ''}`}>
+          <Avatar participant={p} size="sm" />
+        </span>
+      ))}
+      {online.length > max && (
+        <span className="-ml-2 flex h-7 min-w-7 items-center justify-center rounded-full bg-neutral-700 px-1.5 text-[10px] font-bold text-white ring-2 ring-[#121212]">
+          +{online.length - max}
+        </span>
+      )}
     </span>
   )
 }

@@ -1,5 +1,7 @@
 import { useState } from 'react'
 import { lastNickname, rememberNickname } from '../lib/nickname'
+import { Button } from './ui/Button'
+import { PersonIcon } from './ui/icons'
 
 type NicknamePromptProps = {
   onSubmit: (nickname: string) => void
@@ -23,15 +25,18 @@ export function NicknamePrompt({ onSubmit }: NicknamePromptProps) {
 
   return (
     <div
-      className="ytmq-anim-fade fixed inset-0 z-[60] flex items-end justify-center bg-black/70 p-4 sm:items-center sm:p-6"
+      className="ytmq-anim-fade fixed inset-0 z-[60] flex items-end justify-center bg-black/70 p-3 backdrop-blur-sm sm:items-center sm:p-6"
       role="dialog"
       aria-modal="true"
       aria-labelledby="nickname-prompt-title"
     >
       <form
         onSubmit={handleSubmit}
-        className="ytmq-anim-fade-up w-full max-w-sm space-y-5 rounded-[28px] border border-white/10 bg-neutral-900 p-6 shadow-2xl shadow-black/60"
+        className="ytmq-anim-fade-up w-full max-w-sm space-y-5 rounded-[32px] bg-[#1c1c1c] p-6 shadow-2xl shadow-black/60"
       >
+        <span className="ytmq-cookie-tile flex h-14 w-14 items-center justify-center bg-accent-600 text-white">
+          <PersonIcon className="h-6 w-6" />
+        </span>
         <header className="space-y-1">
           <h2 id="nickname-prompt-title" className="text-2xl font-extrabold tracking-[-0.02em] text-white">
             What should we call you?
@@ -51,7 +56,7 @@ export function NicknamePrompt({ onSubmit }: NicknamePromptProps) {
             autoComplete="nickname"
             autoFocus
             maxLength={32}
-            className="min-h-12 w-full rounded-xl border border-white/10 bg-neutral-950 px-4 text-base outline-none transition-colors placeholder:text-neutral-600 focus:border-white/40"
+            className="ytmq-input h-12 w-full text-base"
           />
         </label>
 
@@ -61,12 +66,11 @@ export function NicknamePrompt({ onSubmit }: NicknamePromptProps) {
           </p>
         )}
 
-        <button
-          type="submit"
-          className="ytmq-press min-h-12 w-full rounded-full bg-accent-600 px-4 text-base font-semibold text-white hover:bg-accent-500"
-        >
-          Start adding songs
-        </button>
+        <div className="flex justify-end">
+          <Button type="submit" variant="accent" size="lg">
+            Start adding songs
+          </Button>
+        </div>
       </form>
     </div>
   )

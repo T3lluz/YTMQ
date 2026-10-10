@@ -12,8 +12,8 @@ const HEALTH_CHECK_MS = 5_000
 /** ~4 missed bridge broadcasts before we try to rejoin the channel. */
 const RECONNECT_AFTER_MS = 8_000
 export const PLAYBACK_STALE_MS = 30_000
-/** Ignore YouTube Music now-playing while Spotify has published recently. */
-const SPOTIFY_HOLD_MS = 8_000
+/** Both players publish every 2 s; a source quiet this long is gone. */
+const SOURCE_FRESH_MS = 12_000
 
 type Listener = (nowPlaying: NowPlaying) => void
 
@@ -28,7 +28,22 @@ type RoomPlayback = {
 
 const rooms = new Map<string, RoomPlayback>()
 const lastNowPlaying = new Map<string, NowPlaying>()
-const spotifyHoldUntil = new Map<string, number>()
+
+/**
+ * What each player last said, per room. YouTube Music (the bridge) and
+ * Spotify (the host's tab) can both be linked; the one that is playing is
+ * the room's player, and only it gets the controls.
+ */
+type SourceState = {
+  np: NowPlaying
+  receivedAt: number
+  /** When this source last went from paused to playing. */
+  playingSince: number
+  /** When this source was last seen playing. */
+  lastPlayingAt: number
+}
+const sourceStates = new Map<string, Map<NowPlayingSource, SourceState>>()
+const sourceListeners = new Set<() => void>()
 
 let healthInterval: number | undefined
 let visibilityBound = false
@@ -66,28 +81,83 @@ function parseNowPlayingPayload(payload: unknown): NowPlaying | null {
             thumbnailUrl: p.nextUp.thumbnailUrl ?? '',
           }
         : undefined,
-    source: p.source === 'spotify' || p.source === 'ytm' ? p.source : undefined,
+    // Bridges from before sources existed are YouTube Music.
+    source: p.source === 'spotify' ? 'spotify' : 'ytm',
     thumbnailUrl:
       typeof p.thumbnailUrl === 'string' && p.thumbnailUrl
         ? p.thumbnailUrl
         : undefined,
+    shuffle: typeof p.shuffle === 'boolean' ? p.shuffle : undefined,
+    smartShuffle: typeof p.smartShuffle === 'boolean' ? p.smartShuffle : undefined,
+    deviceName: typeof p.deviceName === 'string' ? p.deviceName : undefined,
   }
 }
 
-function shouldAcceptNowPlaying(
-  roomId: string,
-  source: NowPlayingSource | undefined,
-): boolean {
-  if (source === 'spotify') {
-    spotifyHoldUntil.set(roomId, Date.now() + SPOTIFY_HOLD_MS)
-    return true
+function trackSource(roomId: string, next: NowPlaying) {
+  const source: NowPlayingSource = next.source ?? 'ytm'
+  let states = sourceStates.get(roomId)
+  if (!states) {
+    states = new Map()
+    sourceStates.set(roomId, states)
   }
-  const hold = spotifyHoldUntil.get(roomId) ?? 0
-  return Date.now() >= hold
+  const now = Date.now()
+  const prev = states.get(source)
+  const playing = next.state === 'playing'
+  const wasPlaying = prev?.np.state === 'playing' && now - prev.receivedAt < SOURCE_FRESH_MS
+  states.set(source, {
+    np: { ...next, source },
+    receivedAt: now,
+    playingSince: playing ? (wasPlaying ? prev!.playingSince : now) : prev?.playingSince ?? 0,
+    lastPlayingAt: playing ? now : prev?.lastPlayingAt ?? 0,
+  })
 }
 
-function applyNowPlaying(roomId: string, next: NowPlaying) {
-  if (!shouldAcceptNowPlaying(roomId, next.source)) return
+/**
+ * The room's player right now: the one playing (the latest to start, if
+ * both are), else the one that played last. Every phone runs the same rule
+ * on the same broadcasts, so they agree.
+ */
+function pickActive(roomId: string): SourceState | null {
+  const states = [...(sourceStates.get(roomId)?.values() ?? [])]
+  if (states.length === 0) return null
+  const now = Date.now()
+  const fresh = states.filter((s) => now - s.receivedAt < SOURCE_FRESH_MS)
+  const playing = fresh.filter((s) => s.np.state === 'playing')
+  if (playing.length > 0) {
+    return playing.sort((a, b) => b.playingSince - a.playingSince)[0]!
+  }
+  const pool = fresh.length > 0 ? fresh : states
+  return pool.sort(
+    (a, b) => b.lastPlayingAt - a.lastPlayingAt || b.receivedAt - a.receivedAt,
+  )[0]!
+}
+
+/** Which player the room's controls go to, when one is known. */
+export function getActiveSource(roomId: string): NowPlayingSource | undefined {
+  return pickActive(roomId)?.np.source
+}
+
+/** Every player that reported recently, for the Admin tab's status. */
+export function getSourceSnapshots(roomId: string): Partial<Record<NowPlayingSource, NowPlaying & { fresh: boolean }>> {
+  const out: Partial<Record<NowPlayingSource, NowPlaying & { fresh: boolean }>> = {}
+  const now = Date.now()
+  for (const [source, state] of sourceStates.get(roomId) ?? []) {
+    out[source] = { ...state.np, fresh: now - state.receivedAt < SOURCE_FRESH_MS }
+  }
+  return out
+}
+
+export function subscribeSources(listener: () => void): () => void {
+  sourceListeners.add(listener)
+  return () => sourceListeners.delete(listener)
+}
+
+function applyNowPlaying(roomId: string, incoming: NowPlaying) {
+  trackSource(roomId, incoming)
+  for (const listener of sourceListeners) listener()
+  const active = pickActive(roomId)
+  if (!active) return
+  const next = active.np
   recordPlayed(roomId, {
     videoId: next.videoId,
     title: next.title,
@@ -230,8 +300,15 @@ export function publishNowPlaying(roomId: string, payload: NowPlaying): void {
   })
 }
 
-export function clearSpotifyNowPlayingHold(roomId: string): void {
-  spotifyHoldUntil.delete(roomId)
+/** A player went away (Spotify disconnected): stop counting it. */
+export function forgetSource(roomId: string, source: NowPlayingSource): void {
+  sourceStates.get(roomId)?.delete(source)
+  for (const listener of sourceListeners) listener()
+  const active = pickActive(roomId)
+  if (active) {
+    lastNowPlaying.set(roomId, active.np)
+    notifyListeners(roomId)
+  }
 }
 
 /** One shared realtime channel per room; components only register listeners. */

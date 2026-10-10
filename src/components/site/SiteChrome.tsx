@@ -1,5 +1,6 @@
 import { Link, NavLink } from 'react-router-dom'
 import { YtmqWordmark } from '../YtmqLogo'
+import { buttonClass } from '../ui/buttonStyles'
 
 /** Top bar shared by the landing page and the docs. */
 export function SiteHeader({ children }: { children?: React.ReactNode }) {
@@ -14,17 +15,14 @@ export function SiteHeader({ children }: { children?: React.ReactNode }) {
           <NavLink
             to="/docs"
             className={({ isActive }) =>
-              `rounded-full px-3 py-1.5 transition-colors ${
-                isActive ? 'text-white' : 'text-neutral-400 hover:text-white'
+              `inline-flex h-8 items-center rounded-full px-3.5 text-[13px] font-semibold transition-colors ${
+                isActive ? 'bg-white/[0.08] text-white' : 'text-neutral-400 hover:text-white'
               }`
             }
           >
             Docs
           </NavLink>
-          <Link
-            to="/docs/install"
-            className="ytmq-press hidden rounded-full border border-white/15 px-3.5 py-1.5 text-neutral-100 transition-colors hover:border-white/30 sm:inline-flex"
-          >
+          <Link to="/docs/install" className={buttonClass('outline', 'sm', 'hidden sm:inline-flex')}>
             Get the extension
           </Link>
         </nav>

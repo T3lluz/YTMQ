@@ -8,21 +8,17 @@ import {
   type CSSProperties,
 } from 'react'
 import { hqThumbnail, nowPlayingArtwork, type QueueItem } from '../lib/queue'
-import { useNowPlaying } from '../hooks/useNowPlaying'
-import { usePlaybackPosition } from '../hooks/usePlaybackPosition'
+import { usePlayer } from '../hooks/usePlayer'
 import { useImagePalette } from '../hooks/useImagePalette'
 import { useLyrics, prefetchLyrics, type LyricsStatus } from '../hooks/useLyrics'
 import { activeLineIndex, type LyricLine, type Lyrics } from '../lib/lyrics'
 import { paletteCssVars } from '../lib/imagePalette'
-import {
-  sendPlaybackControl,
-  sendPlaybackSeek,
-  sendPlaybackVolume,
-} from '../lib/bridgeChannel'
-import type { PlaybackAction } from '../lib/playback'
+import type { NowPlayingSource, PlaybackAction } from '../lib/playback'
 import { LyricsUpNext, type UpNextTrack } from './LyricsUpNext'
-import { PlaybackControls } from './PlaybackControls'
+import { PlaybackControls, type ShuffleState } from './PlaybackControls'
 import { SquigglyProgress } from './SquigglyProgress'
+import { SourceBadge } from './ui/brands'
+import { VolumeIcon } from './ui/icons'
 
 type LyricsViewProps = {
   roomId: string
@@ -32,6 +28,8 @@ type LyricsViewProps = {
   queueItems?: QueueItem[]
   /** Whether the viewer may drive playback from the lyrics screen. */
   canControl?: boolean
+  /** The host gets the volume slider. */
+  isHost?: boolean
 }
 
 /**
@@ -92,49 +90,10 @@ export function LyricsView({
   fullscreen = false,
   queueItems = [],
   canControl = false,
+  isHost = false,
 }: LyricsViewProps) {
-  const { nowPlaying, connected, stale } = useNowPlaying(roomId)
-  const isPlaying = nowPlaying?.state === 'playing'
-  const live = Boolean(isPlaying && !stale && nowPlaying)
-  const position = usePlaybackPosition(nowPlaying ?? null, live)
-
-  const [pendingAction, setPendingAction] = useState<PlaybackAction | null>(null)
-  const pendingTimer = useRef<number | null>(null)
-  useEffect(
-    () => () => {
-      if (pendingTimer.current !== null) window.clearTimeout(pendingTimer.current)
-    },
-    [],
-  )
-  const onControl = useCallback(
-    (action: PlaybackAction) => {
-      if (!roomId) return
-      sendPlaybackControl(roomId, action)
-      setPendingAction(action)
-      if (pendingTimer.current !== null) window.clearTimeout(pendingTimer.current)
-      pendingTimer.current = window.setTimeout(
-        () => setPendingAction(null),
-        700,
-      )
-    },
-    [roomId],
-  )
-
-  const onSeek = useCallback(
-    (target: number) => {
-      if (!roomId) return
-      sendPlaybackSeek(roomId, target)
-    },
-    [roomId],
-  )
-
-  const onVolume = useCallback(
-    (level: number) => {
-      if (!roomId) return
-      sendPlaybackVolume(roomId, level)
-    },
-    [roomId],
-  )
+  const player = usePlayer(roomId, canControl)
+  const { nowPlaying, connected, stale, isPlaying, live, position } = player
 
   const art = nowPlaying ? nowPlayingArtwork(nowPlaying, 'hq') : undefined
   const { palette, ready: paletteReady } = useImagePalette(art)
@@ -217,12 +176,15 @@ export function LyricsView({
       upNext={upNext}
       remaining={remaining}
       isPlaying={isPlaying}
-      controlsEnabled={canControl && connected && !stale}
-      pendingAction={pendingAction}
-      onControl={onControl}
-      onSeek={onSeek}
-      onVolume={onVolume}
+      controlsEnabled={player.controlsEnabled}
+      pendingAction={player.pendingAction}
+      onControl={player.control}
+      onSeek={player.seek}
+      onVolume={isHost ? player.setVolume : undefined}
       volume={nowPlaying?.volume}
+      shuffle={player.shuffle}
+      onShuffle={player.toggleShuffle}
+      source={nowPlaying?.source}
       updatedAt={nowPlaying?.updatedAt}
       videoId={nowPlaying?.videoId}
     />
@@ -305,6 +267,9 @@ export type LyricsScreenProps = {
   updatedAt?: number
   /** Resets optimistic scrub state when the track changes. */
   videoId?: string
+  shuffle?: ShuffleState
+  onShuffle?: () => void
+  source?: NowPlayingSource
 }
 
 /** Pure presentation — easy to render with mock data for visual testing. */
@@ -334,6 +299,9 @@ export function LyricsScreen({
   volume,
   updatedAt,
   videoId,
+  shuffle,
+  onShuffle,
+  source,
 }: LyricsScreenProps) {
   const sectionRef = useRef<HTMLElement | null>(null)
   const { zoom, zoomIn, zoomOut, reset: resetZoom } = useLyricsZoom()
@@ -441,11 +409,14 @@ export function LyricsScreen({
       onSeek={onSeek}
       updatedAt={updatedAt}
       videoId={videoId}
+      shuffle={shuffle}
+      onShuffle={onShuffle}
+      source={source}
     />
   )
 
   const lyricsPane = (
-    <LyricsBody status={status} lyrics={lyrics} position={position} stale={stale} />
+    <LyricsBody status={status} lyrics={lyrics} position={position} stale={stale} live={live} />
   )
 
   return (
@@ -540,6 +511,9 @@ type ArtPanelProps = {
   onSeek?: (position: number) => void
   updatedAt?: number
   videoId?: string
+  shuffle?: ShuffleState
+  onShuffle?: () => void
+  source?: NowPlayingSource
 }
 
 function ArtPanel({
@@ -557,6 +531,9 @@ function ArtPanel({
   onSeek,
   updatedAt,
   videoId,
+  shuffle,
+  onShuffle,
+  source,
 }: ArtPanelProps) {
   const hasDuration = duration != null && duration > 0
   const canSeek = controlsEnabled && hasDuration && !!onSeek
@@ -578,11 +555,12 @@ function ArtPanel({
 
         <div className="w-full min-w-0 text-center">
           <p
-            className="flex items-center justify-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider"
+            className="flex items-center justify-center gap-2 text-[11px] font-semibold uppercase tracking-wider"
             style={{ color: 'color-mix(in srgb, var(--np-accent-light) 88%, white)' }}
           >
             {live && <Equalizer />}
             {live ? 'Now playing' : 'Paused'}
+            {source && <SourceBadge source={source} tone="glass" compact className="normal-case tracking-normal" />}
           </p>
           <p className="truncate text-2xl font-bold text-white drop-shadow lg:text-3xl">
             {title}
@@ -609,6 +587,8 @@ function ArtPanel({
             disabled={!controlsEnabled}
             pendingAction={pendingAction}
             onControl={onControl}
+            shuffle={shuffle}
+            onShuffle={onShuffle}
           />
         )}
       </div>
@@ -1038,47 +1018,6 @@ function VolumeControl({
   )
 }
 
-/**
- * Speaker glyph whose sound waves fade in/out with the level (1/2/3 arcs) and
- * whose diagonal "slash" draws across the icon when muted, then retracts
- * smoothly on unmute.
- */
-function VolumeIcon({ level, muted }: { level: number; muted: boolean }) {
-  const wave = (show: boolean): CSSProperties => ({
-    opacity: show && !muted ? 1 : 0,
-    transformOrigin: '7px 12px',
-    transform: show && !muted ? 'scale(1)' : 'scale(0.45)',
-    transition:
-      'opacity 260ms ease, transform 260ms cubic-bezier(0.34, 1.56, 0.64, 1)',
-  })
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden
-      className="h-5 w-5 shrink-0"
-    >
-      <path d="M11 5 6 9H3v6h3l5 4z" fill="currentColor" stroke="none" />
-      <path d="M14.5 9a4.5 4.5 0 0 1 0 6" style={wave(level > 0)} />
-      <path d="M17 6.5a8 8 0 0 1 0 11" style={wave(level >= 45)} />
-      <path d="M19.5 4a11.5 11.5 0 0 1 0 16" style={wave(level >= 80)} />
-      <path
-        d="M3.5 3.5 20.5 20.5"
-        pathLength={1}
-        style={{
-          strokeDasharray: '1 1',
-          strokeDashoffset: muted ? 0 : 1,
-          transition: 'stroke-dashoffset 340ms cubic-bezier(0.65, 0, 0.35, 1)',
-        }}
-      />
-    </svg>
-  )
-}
-
 function MinusIcon() {
   return (
     <svg
@@ -1116,13 +1055,15 @@ type LyricsBodyProps = {
   lyrics: Lyrics | null
   position: number
   stale: boolean
+  /** Playing right now: word sweeps run between position reports. */
+  live?: boolean
 }
 
-export function LyricsBody({ status, lyrics, position, stale }: LyricsBodyProps) {
+export function LyricsBody({ status, lyrics, position, stale, live = false }: LyricsBodyProps) {
   if (status === 'loading') return <LyricsSkeleton />
 
   if (lyrics && lyrics.synced.length > 0) {
-    return <SyncedLyrics lines={lyrics.synced} position={position} dim={stale} />
+    return <SyncedLyrics lines={lyrics.synced} position={position} dim={stale} live={live && !stale} />
   }
 
   if (lyrics?.plain) {
@@ -1138,24 +1079,71 @@ type SyncedLyricsProps = {
   lines: LyricLine[]
   position: number
   dim: boolean
+  live: boolean
 }
 
-function SyncedLyrics({ lines, position, dim }: SyncedLyricsProps) {
+/** A word-timed line: one span per word, spaces left outside so lines wrap between words. */
+function WordLine({ line }: { line: LyricLine }) {
+  return (
+    <>
+      {line.words!.map((word, i) => {
+        const m = word.text.match(/^(\s*)(.*?)(\s*)$/s)
+        const lead = m?.[1] ? ' ' : ''
+        const tail = m?.[3] ? ' ' : ''
+        return (
+          <span key={i}>
+            {lead}
+            <span className="ytmq-w" data-s={word.start} data-e={word.end}>
+              {m?.[2] ?? word.text}
+            </span>
+            {tail}
+          </span>
+        )
+      })}
+    </>
+  )
+}
+
+function SyncedLyrics({ lines, position, dim, live }: SyncedLyricsProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const lineRefs = useRef<(HTMLParagraphElement | null)[]>([])
   const activeIndex = activeLineIndex(lines, position)
+  const wordTimed = lines.some((l) => l.words?.length)
 
-  // Subtle glow envelope for the focused line: ease up from 0 as the line
-  // gains focus, peak mid-line, then ease back to 0 as the next line nears.
-  // sin(π·progress) gives exactly that 0 → 1 → 0 arc.
-  const activeGlow = (() => {
-    if (activeIndex < 0) return 0
-    const start = lines[activeIndex]?.time ?? 0
-    const next = lines[activeIndex + 1]?.time
-    const duration = next != null ? Math.max(0.5, next - start) : 4
-    const progress = Math.min(1, Math.max(0, (position - start) / duration))
-    return Math.sin(Math.PI * progress)
-  })()
+  // The last reported position and when it came, so the word sweep can run
+  // at the screen's frame rate between reports (they come every ~2 s).
+  const posRef = useRef({ pos: position, at: 0, live })
+  useLayoutEffect(() => {
+    posRef.current = { pos: position, at: performance.now(), live }
+  }, [position, live])
+
+  // Light the sung line up word by word, the way Apple Music does: a soft
+  // edge sweeps across each word as it is sung. Lines timed only by the line
+  // light up whole, as before.
+  useEffect(() => {
+    if (!wordTimed || activeIndex < 0) return
+    const el = lineRefs.current[activeIndex]
+    const spans = el ? Array.from(el.querySelectorAll<HTMLElement>('.ytmq-w')) : []
+    if (spans.length === 0) return
+    const timing = spans.map((s) => [Number(s.dataset.s), Number(s.dataset.e)] as const)
+    let raf = 0
+    const frame = () => {
+      const { pos, at, live: playing } = posRef.current
+      const now = pos + (playing ? (performance.now() - at) / 1000 : 0) + 0.05
+      for (let i = 0; i < spans.length; i += 1) {
+        const [s0, e0] = timing[i]!
+        const f = now <= s0 ? 0 : now >= e0 ? 1 : (now - s0) / Math.max(0.05, e0 - s0)
+        spans[i]!.style.setProperty('--lw', f.toFixed(3))
+      }
+      if (posRef.current.live) raf = requestAnimationFrame(frame)
+    }
+    frame()
+    if (posRef.current.live) raf = requestAnimationFrame(frame)
+    return () => {
+      cancelAnimationFrame(raf)
+      for (const span of spans) span.style.removeProperty('--lw')
+    }
+  }, [activeIndex, wordTimed, live, lines])
 
   useLayoutEffect(() => {
     const scroll = scrollRef.current
@@ -1163,9 +1151,8 @@ function SyncedLyrics({ lines, position, dim }: SyncedLyricsProps) {
 
     const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
-    // Before the first line is sung (activeIndex < 0) keep the lyrics pinned to
-    // the top so a new song starts from the beginning, instead of lingering at
-    // wherever the previous track left the scroll (often the bottom).
+    // Before the first line is sung keep the lyrics at the top, so a new song
+    // starts from the beginning instead of where the last one left off.
     if (activeIndex < 0) {
       scroll.scrollTo({ top: 0, behavior: reduce ? 'auto' : 'smooth' })
       return
@@ -1185,33 +1172,18 @@ function SyncedLyrics({ lines, position, dim }: SyncedLyricsProps) {
     <div className="ytmq-lyrics-stage h-full">
       <div
         ref={scrollRef}
-        className={`ytmq-lyrics-scroll h-full overflow-y-auto overflow-x-hidden px-1 ${
-          dim ? 'opacity-70' : ''
-        }`}
+        className={`ytmq-lyrics-scroll h-full overflow-y-auto overflow-x-hidden px-1 ${dim ? 'opacity-70' : ''}`}
         role="list"
         aria-label="Synced lyrics"
       >
-        {/* Half-viewport spacers let the first and last lines scroll to the
-            vertical centre, so the active line is always centred. */}
+        {/* Half-viewport spacers let the first and last lines reach the middle. */}
         <div aria-hidden className="ytmq-lyrics-spacer" />
         {lines.map((line, index) => {
-          const state =
-            index === activeIndex
-              ? 'is-active'
-              : index < activeIndex
-                ? 'is-sung'
-                : 'is-upcoming'
-          // Progressive blur: sharp on the active line, then softening with
-          // distance so lines melt away as they move up/down from the focus
-          // band. Capped so far-off lines don't turn to mush.
+          const state = index === activeIndex ? 'is-active' : index < activeIndex ? 'is-sung' : 'is-upcoming'
+          // Lines soften with distance from the sung one.
           const distance = activeIndex < 0 ? index : Math.abs(index - activeIndex)
           const blur = Math.min(distance * 1.15, 6)
-          const style = {
-            '--ytmq-line-blur': `${blur.toFixed(2)}px`,
-            ...(index === activeIndex
-              ? { '--ytmq-line-glow': activeGlow.toFixed(3) }
-              : null),
-          } as CSSProperties
+          const words = Boolean(line.words?.length)
           return (
             <p
               key={`${line.time}-${index}`}
@@ -1219,10 +1191,10 @@ function SyncedLyrics({ lines, position, dim }: SyncedLyricsProps) {
                 lineRefs.current[index] = node
               }}
               role="listitem"
-              className={`ytmq-lyric-line ${state}`}
-              style={style}
+              className={`ytmq-lyric-line ${state} ${words ? 'has-words' : ''}`}
+              style={{ '--ytmq-line-blur': `${blur.toFixed(2)}px` } as CSSProperties}
             >
-              {line.text || '♪'}
+              {words ? <WordLine line={line} /> : line.text || '♪'}
             </p>
           )
         })}

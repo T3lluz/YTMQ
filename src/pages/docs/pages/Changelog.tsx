@@ -5,6 +5,21 @@ type Entry = { date: string; version?: string; items: string[] }
 const ENTRIES: Entry[] = [
   {
     date: 'October 2026',
+    version: 'Extension 1.12',
+    items: [
+      'New search, built like Spotify\'s: a top result, songs with every artist on them, albums, explicit marks and lengths, plus artists, albums, playlists and videos. Artist, album and playlist pages, and trending songs and moods before you type.',
+      'Spotify plays the shared queue: each song goes to Spotify just before the one playing ends, so it can still be removed until then.',
+      'With YouTube Music and Spotify both linked, only the one playing gets the controls. Now playing shows which player it is.',
+      'Shuffle on every player. On Spotify it cycles to smart shuffle, which adds a related song every third track to the queue, marked so anyone can take it out.',
+      'Lyrics come from LRCLIB and NetEase, matched on title, artist and length, and light up word by word when the timing exists.',
+      'New look for every screen except lyrics: one set of buttons and corners, Material switches with a check and a cross, a fixed-width tab bar, the Room tab folded into the lobby button.',
+      'Volume for the host in the now playing panel and the phone\'s mini player. The mute icon on the lyrics screen draws properly.',
+      'Up next on the lyrics screen drips down from the top and is pulled back up a second before the next song.',
+      'The Update button opens the install page (Chrome) or updates in place (Firefox) instead of a blank tab.',
+    ],
+  },
+  {
+    date: 'October 2026',
     version: 'Extension 1.11.1',
     items: [
       'A squiggly progress bar, after Android\'s media player: it waves while music plays and settles flat on pause. Hover it for the time under the pointer; drag to seek, in the app and in the extension.',

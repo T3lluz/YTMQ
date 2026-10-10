@@ -46,25 +46,10 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 
-/* The floating tab dock at the bottom of a room. */
-.ytmq-dock-nav {
-  transform-origin: bottom center;
-  transition:
-    transform 600ms cubic-bezier(0.34, 1.56, 0.64, 1),
-    opacity 400ms ease-out;
-  will-change: transform;
-  overflow: visible;
-}
-
-.ytmq-dock {
-  overflow: visible;
-}
-
-/* Desktop: a touch larger, since it is the only navigation on screen. */
-@media (min-width: 768px) and (hover: hover) {
-  .ytmq-dock-nav {
-    transform: scale(1.08);
-  }
+:root {
+  /* The M3 Expressive cookie (the logo's shape), for tiles and avatars. */
+  --ytmq-cookie: url("data:image/svg+xml,%3Csvg xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22 viewBox%3D%22-40 -40 80 80%22%3E%3Cpath d%3D%22M39.2 0C39.2 1.25 38.73 2.58 38.08 3.75C37.43 4.92 36.27 6.02 35.31 7.02C34.34 8.03 33.12 8.87 32.28 9.79C31.45 10.71 30.73 11.53 30.3 12.55C29.88 13.57 29.82 14.66 29.75 15.9C29.69 17.15 29.96 18.61 29.93 20C29.9 21.4 29.95 22.99 29.58 24.27C29.21 25.56 28.6 26.83 27.72 27.72C26.83 28.6 25.56 29.21 24.27 29.58C22.99 29.95 21.4 29.9 20 29.93C18.61 29.96 17.15 29.69 15.9 29.75C14.66 29.82 13.57 29.88 12.55 30.3C11.53 30.73 10.71 31.45 9.79 32.28C8.87 33.12 8.03 34.34 7.02 35.31C6.02 36.27 4.92 37.43 3.75 38.08C2.58 38.73 1.25 39.2 0 39.2C-1.25 39.2 -2.58 38.73 -3.75 38.08C-4.92 37.43 -6.02 36.27 -7.02 35.31C-8.03 34.34 -8.87 33.12 -9.79 32.28C-10.71 31.45 -11.53 30.73 -12.55 30.3C-13.57 29.88 -14.66 29.82 -15.9 29.75C-17.15 29.69 -18.61 29.96 -20 29.93C-21.4 29.9 -22.99 29.95 -24.27 29.58C-25.56 29.21 -26.83 28.6 -27.72 27.72C-28.6 26.83 -29.21 25.56 -29.58 24.27C-29.95 22.99 -29.9 21.4 -29.93 20C-29.96 18.61 -29.69 17.15 -29.75 15.9C-29.82 14.66 -29.88 13.57 -30.3 12.55C-30.73 11.53 -31.45 10.71 -32.28 9.79C-33.12 8.87 -34.34 8.03 -35.31 7.02C-36.27 6.02 -37.43 4.92 -38.08 3.75C-38.73 2.58 -39.2 1.25 -39.2 0C-39.2 -1.25 -38.73 -2.58 -38.08 -3.75C-37.43 -4.92 -36.27 -6.02 -35.31 -7.02C-34.34 -8.03 -33.12 -8.87 -32.28 -9.79C-31.45 -10.71 -30.73 -11.53 -30.3 -12.55C-29.88 -13.57 -29.82 -14.66 -29.75 -15.9C-29.69 -17.15 -29.96 -18.61 -29.93 -20C-29.9 -21.4 -29.95 -22.99 -29.58 -24.27C-29.21 -25.56 -28.6 -26.83 -27.72 -27.72C-26.83 -28.6 -25.56 -29.21 -24.27 -29.58C-22.99 -29.95 -21.4 -29.9 -20 -29.93C-18.61 -29.96 -17.15 -29.69 -15.9 -29.75C-14.66 -29.82 -13.57 -29.88 -12.55 -30.3C-11.53 -30.73 -10.71 -31.45 -9.79 -32.28C-8.87 -33.12 -8.03 -34.34 -7.02 -35.31C-6.02 -36.27 -4.92 -37.43 -3.75 -38.08C-2.58 -38.73 -1.25 -39.2 -0 -39.2C1.25 -39.2 2.58 -38.73 3.75 -38.08C4.92 -37.43 6.02 -36.27 7.02 -35.31C8.03 -34.34 8.87 -33.12 9.79 -32.28C10.71 -31.45 11.53 -30.73 12.55 -30.3C13.57 -29.88 14.66 -29.82 15.9 -29.75C17.15 -29.69 18.61 -29.96 20 -29.93C21.4 -29.9 22.99 -29.95 24.27 -29.58C25.56 -29.21 26.83 -28.6 27.72 -27.72C28.6 -26.83 29.21 -25.56 29.58 -24.27C29.95 -22.99 29.9 -21.4 29.93 -20C29.96 -18.61 29.69 -17.15 29.75 -15.9C29.82 -14.66 29.88 -13.57 30.3 -12.55C30.73 -11.53 31.45 -10.71 32.28 -9.79C33.12 -8.87 34.34 -8.03 35.31 -7.02C36.27 -6.02 37.43 -4.92 38.08 -3.75C38.73 -2.58 39.2 -1.25 39.2 0Z%22%2F%3E%3C%2Fsvg%3E");
+  --panel-bg: #121212;
 }
 
 /* The room is an app, not a document: taps on rows and buttons should not
@@ -457,15 +442,6 @@ body {
   100% { transform: rotate(0deg); }
 }
 
-/* Room — secondary person peeks right (out from behind), then springs back */
-@keyframes ytmq-room-peek {
-  0%   { transform: translateX(0); }
-  35%  { transform: translateX(4px); }
-  58%  { transform: translateX(1px); }
-  78%  { transform: translateX(3.5px); }
-  100% { transform: translateX(0); }
-}
-
 /* Admin — checkmark erases, X draws in, X erases, checkmark redraws.
    pathLength="1" on each path normalises dasharray/dashoffset to [0,1]. */
 @keyframes ytmq-admin-check-out-in {
@@ -500,13 +476,6 @@ body {
   transform-box: fill-box;
   transform-origin: 50% 90%;
   animation: ytmq-lyrics-note-sway 0.52s var(--ease-spring) both;
-}
-
-/* Room: only secondary-person sub-group */
-.ytmq-tab-icon-anim-room .ytmq-icon-room-peeker {
-  transform-box: fill-box;
-  transform-origin: center;
-  animation: ytmq-room-peek 0.75s var(--ease-spring) both;
 }
 
 /* Admin: base stroke-dash state (hidden X lines, visible checkmark) */
@@ -1237,91 +1206,151 @@ body {
 }
 
 /* ----------------------------------------------------------------------------
-   Lyrics "Up next" banner (fullscreen desktop)
+   Lyrics "Up next": a drop that drips from the top edge into a card, hangs
+   by a neck (the gooey filter melts edge and drop together), and is pulled
+   back up a second before the next song.
    ------------------------------------------------------------------------- */
-
-.ytmq-upnext {
-  backdrop-filter: blur(12px) saturate(150%);
-  -webkit-backdrop-filter: blur(12px) saturate(150%);
-  box-shadow:
-    0 18px 48px rgba(0, 0, 0, 0.5),
-    0 0 0 1px rgba(255, 255, 255, 0.08);
-  animation: ytmq-upnext-in 580ms cubic-bezier(0.22, 1.5, 0.36, 1) both;
-  will-change: transform, opacity;
+.ytmq-drop {
+  --drop-w: min(22.5rem, calc(100vw - 2rem));
+  --drop-h: 4.25rem;
+  --drop-top: 1.4rem;
+  --drop-fill: color-mix(in srgb, var(--np-accent, #3a3a3a) 32%, #121212);
 }
-
-.ytmq-upnext.is-leaving {
-  animation: ytmq-upnext-out 520ms cubic-bezier(0.5, -0.5, 0.7, 0.25) both;
-}
-
-.ytmq-upnext-dot {
-  width: 6px;
-  height: 6px;
+.ytmq-drop-edge,
+.ytmq-drop-blob {
+  position: absolute;
+  left: 50%;
+  translate: -50% 0;
   border-radius: 9999px;
-  background: var(--np-accent-light);
-  animation: ytmq-upnext-pulse 1.2s ease-in-out infinite;
+  background: var(--drop-fill);
 }
-
-.ytmq-upnext-bar {
-  background: linear-gradient(
-    90deg,
-    var(--np-accent),
-    var(--np-accent-light)
-  );
-  transition: transform 0.25s linear;
+.ytmq-drop-edge {
+  top: -14px;
+  width: 8.5rem;
+  height: 20px;
+  animation: ytmq-edge-in 0.5s cubic-bezier(0.2, 0, 0, 1) both;
 }
-
-@keyframes ytmq-upnext-in {
+.ytmq-drop-blob {
+  top: var(--drop-top);
+  width: var(--drop-w);
+  height: var(--drop-h);
+  animation: ytmq-drop-in 1.1s cubic-bezier(0.3, 0.6, 0.3, 1) both;
+}
+.ytmq-drop-card {
+  margin-top: var(--drop-top);
+  width: var(--drop-w);
+  height: var(--drop-h);
+  border-radius: 9999px;
+  animation: ytmq-drop-card-in 1.1s ease both;
+}
+@keyframes ytmq-edge-in {
+  from {
+    width: 0;
+    top: -20px;
+  }
+}
+@keyframes ytmq-drop-in {
   0% {
-    opacity: 0;
-    transform: translateY(-150%) scale(0.92);
+    top: -44px;
+    width: 40px;
+    height: 40px;
+  }
+  28% {
+    top: -6px;
+    width: 44px;
+    height: 58px;
+  }
+  46% {
+    top: 26px;
+    width: 62px;
+    height: 62px;
   }
   62% {
-    opacity: 1;
-    transform: translateY(10%) scale(1.015);
+    top: 30px;
+    width: calc(var(--drop-w) * 1.06);
+    height: calc(var(--drop-h) * 0.84);
+  }
+  80% {
+    top: 17px;
+    width: calc(var(--drop-w) * 0.97);
+    height: calc(var(--drop-h) * 1.07);
+  }
+  100% {
+    top: var(--drop-top);
+    width: var(--drop-w);
+    height: var(--drop-h);
+  }
+}
+@keyframes ytmq-drop-card-in {
+  0%,
+  58% {
+    opacity: 0;
+    transform: scale(0.9);
   }
   100% {
     opacity: 1;
-    transform: translateY(0) scale(1);
+    transform: none;
   }
 }
-
-@keyframes ytmq-upnext-out {
+.ytmq-drop.is-leaving .ytmq-drop-blob {
+  animation: ytmq-drop-out 0.76s cubic-bezier(0.5, 0, 0.3, 1) both;
+}
+.ytmq-drop.is-leaving .ytmq-drop-card {
+  animation: ytmq-drop-card-out 0.28s ease both;
+}
+.ytmq-drop.is-leaving .ytmq-drop-edge {
+  animation: ytmq-edge-out 0.76s ease both;
+}
+@keyframes ytmq-drop-out {
   0% {
-    opacity: 1;
-    transform: translateY(0) scale(1);
+    top: var(--drop-top);
+    width: var(--drop-w);
+    height: var(--drop-h);
   }
   22% {
-    transform: translateY(12%) scale(1.01);
-  }
-  100% {
-    opacity: 0;
-    transform: translateY(-160%) scale(0.9);
-  }
-}
-
-@keyframes ytmq-upnext-pulse {
-  0%,
-  100% {
-    opacity: 1;
-    transform: scale(1);
+    top: calc(var(--drop-top) + 12px);
+    width: calc(var(--drop-w) * 1.05);
+    height: calc(var(--drop-h) * 0.88);
   }
   50% {
-    opacity: 0.55;
-    transform: scale(0.82);
+    top: 2px;
+    width: calc(var(--drop-w) * 0.5);
+    height: calc(var(--drop-h) * 1.18);
+  }
+  76% {
+    top: -16px;
+    width: 64px;
+    height: 54px;
+  }
+  100% {
+    top: -64px;
+    width: 36px;
+    height: 36px;
   }
 }
-
-@media (prefers-reduced-motion: reduce) {
-  .ytmq-upnext {
-    animation: ytmq-fade-up 0.3s ease both;
-  }
-  .ytmq-upnext.is-leaving {
-    animation: none;
+@keyframes ytmq-drop-card-out {
+  to {
     opacity: 0;
+    transform: translateY(-8px) scale(0.9);
   }
-  .ytmq-upnext-dot {
-    animation: none;
+}
+@keyframes ytmq-edge-out {
+  0%,
+  62% {
+    width: 8.5rem;
+    top: -14px;
+  }
+  100% {
+    width: 0;
+    top: -22px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ytmq-drop-liquid {
+    display: none;
+  }
+  .ytmq-drop-card {
+    background: var(--drop-fill);
   }
 }
 
@@ -1383,27 +1412,453 @@ body {
   animation: ytmq-fade-in 0.15s ease both;
 }
 
-/* Room dock tabs: icon only, and the open tab's label slides out beside its
-   icon. Animating grid columns gives the label a real width transition. */
-.ytmq-tab-label {
-  display: grid;
-  grid-template-columns: 0fr;
-  opacity: 0;
-  transition:
-    grid-template-columns 320ms var(--ease-out-soft),
-    opacity 180ms ease,
-    margin-left 320ms var(--ease-out-soft);
+
+/* ============================================================================
+   2026-10 revamp: one set of surfaces, radii and controls for every screen.
+   Radii: pills for anything you press, 24px panels, 16px cards, 12px rows,
+   6px song art.
+   ========================================================================= */
+
+.ytmq-panel {
+  --panel-bg: #121212;
+  background: var(--panel-bg);
 }
-.ytmq-tab-label > span {
-  overflow: hidden;
+.ytmq-app-mobile {
+  --panel-bg: #0a0a0a;
+}
+.ytmq-panel-scroll,
+.ytmq-app-mobile {
+  container-type: inline-size;
+}
+
+/* The sticky bar on top of every tab. */
+.ytmq-panel-header {
+  background: color-mix(in srgb, var(--panel-bg) 86%, transparent);
+  backdrop-filter: blur(18px) saturate(140%);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+}
+
+/* Text fields: a pill that lights its edge on focus. */
+.ytmq-input {
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.07);
+  padding: 0 1.1rem;
+  color: #fff;
+  font-size: 0.9375rem;
+  outline: none;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+  transition: box-shadow 0.18s ease, background-color 0.18s ease;
+}
+.ytmq-input::placeholder {
+  color: rgb(115 115 115);
+}
+.ytmq-input:hover {
+  background: rgba(255, 255, 255, 0.09);
+}
+.ytmq-input:focus {
+  background: rgba(255, 255, 255, 0.1);
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.85);
+}
+
+.ytmq-search-field {
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+}
+.ytmq-search-field:hover {
+  background: rgba(255, 255, 255, 0.11);
+}
+.ytmq-search-field.is-focused {
+  background: rgba(255, 255, 255, 0.11);
+  box-shadow: inset 0 0 0 2px #fff;
+}
+.ytmq-search-field input::-webkit-search-cancel-button {
+  display: none;
+}
+
+/* Shapes cut from the cookie. */
+.ytmq-cookie-tile {
+  -webkit-mask: var(--ytmq-cookie) center / contain no-repeat;
+  mask: var(--ytmq-cookie) center / contain no-repeat;
+}
+
+/* Mood and genre tiles: a turned cookie peeks out of the corner. */
+.ytmq-mood-tile {
+  isolation: isolate;
+}
+.ytmq-mood-cookie {
+  position: absolute;
+  right: -1.4rem;
+  bottom: -1.6rem;
+  width: 5.2rem;
+  height: 5.2rem;
+  opacity: 0.85;
+  transform: rotate(var(--tile-turn, 18deg));
+  transition: transform 0.6s var(--ease-spring);
+  -webkit-mask: var(--ytmq-cookie) center / contain no-repeat;
+  mask: var(--ytmq-cookie) center / contain no-repeat;
+}
+.ytmq-mood-tile:hover .ytmq-mood-cookie {
+  transform: rotate(calc(var(--tile-turn, 18deg) + 45deg)) scale(1.08);
+}
+
+/* ---------------------------------------------------------------------------
+   Song rows. Every list shares the grid, so columns line up between rows;
+   the album and length columns appear as the list gets wider.
+   ------------------------------------------------------------------------ */
+.ytmq-song-list {
+  container-type: inline-size;
+}
+.ytmq-song-row {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+}
+.ytmq-song-album,
+.ytmq-song-duration,
+.ytmq-song-head {
+  display: none;
+}
+@container (min-width: 460px) {
+  .ytmq-song-row {
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
+  }
+  .ytmq-song-duration {
+    display: block;
+  }
+}
+@container (min-width: 760px) {
+  .ytmq-song-row {
+    grid-template-columns: auto minmax(0, 1.35fr) minmax(0, 1fr) auto auto;
+  }
+  .ytmq-song-album {
+    display: block;
+  }
+  .ytmq-song-head {
+    display: grid;
+  }
+}
+
+/* Search: Top result beside the first songs once there is room. */
+@container (min-width: 900px) {
+  .ytmq-results-top {
+    grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+  }
+}
+/* Admin: two columns on wide screens. */
+@container (min-width: 980px) {
+  .ytmq-admin-grid {
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+    align-items: start;
+  }
+}
+
+/* Artist page header fades into the panel. */
+.ytmq-artist-hero {
+  min-height: 15rem;
+}
+
+/* ---------------------------------------------------------------------------
+   Material 3 switch: track 52×32, a 24px thumb with a cross when off and a
+   check when on. It slides on a spring and swells while pressed.
+   ------------------------------------------------------------------------ */
+.ytmq-switch {
+  position: relative;
+  flex-shrink: 0;
+  width: 52px;
+  height: 32px;
+  border-radius: 9999px;
+  background: #2a2a2a;
+  box-shadow: inset 0 0 0 2px #747474;
+  transition:
+    background-color 0.25s ease,
+    box-shadow 0.25s ease,
+    opacity 0.2s ease;
+  cursor: pointer;
+}
+.ytmq-switch[aria-checked='true'] {
+  background: var(--color-accent-600);
+  box-shadow: inset 0 0 0 2px var(--color-accent-600);
+}
+.ytmq-switch:disabled {
+  opacity: 0.38;
+  cursor: default;
+}
+.ytmq-switch-thumb {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  width: 24px;
+  height: 24px;
+  border-radius: 9999px;
+  background: #9a9a9a;
+  display: grid;
+  place-items: center;
+  transition:
+    transform 0.42s cubic-bezier(0.3, 1.45, 0.45, 1),
+    background-color 0.25s ease,
+    scale 0.2s ease;
+}
+/* The hover halo M3 calls a state layer. */
+.ytmq-switch-thumb::before {
+  content: '';
+  position: absolute;
+  inset: -8px;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.1);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+.ytmq-switch:hover:not(:disabled) .ytmq-switch-thumb::before,
+.ytmq-switch:focus-visible .ytmq-switch-thumb::before {
+  opacity: 1;
+}
+.ytmq-switch:active:not(:disabled) .ytmq-switch-thumb {
+  scale: 1.16;
+}
+.ytmq-switch[aria-checked='true'] .ytmq-switch-thumb {
+  transform: translateX(20px);
+  background: #fff;
+}
+.ytmq-switch-thumb svg {
+  grid-area: 1 / 1;
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition:
+    opacity 0.22s ease,
+    transform 0.4s cubic-bezier(0.3, 1.45, 0.45, 1);
+}
+.ytmq-switch-check {
+  stroke: var(--color-accent-700);
+  opacity: 0;
+  transform: rotate(-60deg) scale(0.4);
+}
+.ytmq-switch-cross {
+  stroke: #2a2a2a;
+  opacity: 1;
+}
+.ytmq-switch[aria-checked='true'] .ytmq-switch-check {
+  opacity: 1;
+  transform: none;
+}
+.ytmq-switch[aria-checked='true'] .ytmq-switch-cross {
+  opacity: 0;
+  transform: rotate(60deg) scale(0.4);
+}
+.ytmq-switch:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 3px;
+  border-radius: 9999px;
+}
+
+/* ---------------------------------------------------------------------------
+   The dock. Fixed width; the pill slides and stretches to the open tab, the
+   icons glide to make room for its label. No overshoot, so nothing bounces.
+   ------------------------------------------------------------------------ */
+.ytmq-dock-nav {
+  background: rgba(26, 26, 26, 0.92);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.07),
+    0 18px 44px -10px rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(22px) saturate(150%);
+  -webkit-backdrop-filter: blur(22px) saturate(150%);
+}
+@media (min-width: 768px) and (hover: hover) {
+  .ytmq-dock {
+    transform: scale(1.06);
+    transform-origin: bottom center;
+  }
+}
+.ytmq-dock-pill {
+  background: rgba(255, 255, 255, 0.1);
+  transition:
+    left 460ms cubic-bezier(0.2, 0, 0, 1),
+    width 460ms cubic-bezier(0.2, 0, 0, 1);
+}
+.ytmq-tab {
+  transition:
+    width 460ms cubic-bezier(0.2, 0, 0, 1),
+    color 0.25s ease;
+}
+.ytmq-tab-icon {
+  transform: translateY(-50%);
+  transition: left 460ms cubic-bezier(0.2, 0, 0, 1);
+}
+.ytmq-tab-label {
+  font-size: 0.875rem;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.005em;
   white-space: nowrap;
+  transform: translateY(-50%);
+  transition: opacity 200ms ease;
 }
 .ytmq-tab.is-active .ytmq-tab-label {
-  grid-template-columns: 1fr;
-  opacity: 1;
-  margin-left: 0.5rem;
+  transition: opacity 280ms ease 120ms;
+}
+
+/* ---------------------------------------------------------------------------
+   Sheets (phones) and the mini player.
+   ------------------------------------------------------------------------ */
+@keyframes ytmq-sheet-in {
+  from {
+    transform: translateY(100%);
+  }
+}
+@keyframes ytmq-sheet-out {
+  to {
+    transform: translateY(100%);
+  }
+}
+.ytmq-sheet-in {
+  animation: ytmq-sheet-in 0.36s cubic-bezier(0.2, 0, 0, 1) both;
+}
+.ytmq-sheet-out {
+  animation: ytmq-sheet-out 0.22s cubic-bezier(0.3, 0, 1, 1) both;
+}
+.ytmq-sheet-backdrop {
+  animation: ytmq-fade-in 0.25s ease both;
+}
+.ytmq-sheet-backdrop-out {
+  animation: ytmq-fade-in 0.22s ease reverse both;
+}
+
+.ytmq-mini-bg {
+  background:
+    linear-gradient(0deg, rgba(10, 10, 10, 0.35), rgba(10, 10, 10, 0.35)),
+    color-mix(in srgb, var(--np-accent, #2a2a2a) 55%, #141414);
+  transition: background-color 0.7s ease;
+}
+
+/* Expand and collapse to the content's height. */
+.ytmq-collapse {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 360ms cubic-bezier(0.2, 0, 0, 1);
+}
+.ytmq-collapse > div {
+  overflow: hidden;
+}
+.ytmq-collapse.is-open {
+  grid-template-rows: 1fr;
+}
+
+/* Volume bar (rail, mini player). */
+.ytmq-volbar-track {
+  height: 4px;
+  background: rgba(255, 255, 255, 0.22);
+  transition: height 200ms var(--ease-spring);
+}
+.ytmq-volbar-fill {
+  background: #fff;
+  transition: width 140ms ease-out;
+}
+.ytmq-volbar.is-dragging .ytmq-volbar-fill,
+.ytmq-volbar.is-dragging .ytmq-volbar-thumb {
+  transition: none;
+}
+.ytmq-volbar-thumb {
+  opacity: 0;
+  scale: 0.6;
   transition:
-    grid-template-columns 360ms var(--ease-out-soft),
-    opacity 260ms ease 80ms,
-    margin-left 360ms var(--ease-out-soft);
+    opacity 160ms ease,
+    scale 200ms var(--ease-spring),
+    left 140ms ease-out;
+}
+.ytmq-volbar:hover .ytmq-volbar-track,
+.ytmq-volbar.is-dragging .ytmq-volbar-track {
+  height: 6px;
+}
+.ytmq-volbar:hover .ytmq-volbar-fill,
+.ytmq-volbar.is-dragging .ytmq-volbar-fill {
+  background: var(--np-accent-light, #ff6b52);
+}
+.ytmq-volbar:hover .ytmq-volbar-thumb,
+.ytmq-volbar.is-dragging .ytmq-volbar-thumb {
+  opacity: 1;
+  scale: 1;
+}
+
+@keyframes ytmq-shuffle-pop {
+  0% {
+    transform: rotate(0) scale(1);
+  }
+  40% {
+    transform: rotate(-12deg) scale(0.82);
+  }
+  100% {
+    transform: rotate(0) scale(1);
+  }
+}
+.ytmq-shuffle-pop {
+  animation: ytmq-shuffle-pop 380ms var(--ease-spring);
+}
+
+@keyframes ytmq-logo-pulse {
+  0%,
+  100% {
+    transform: rotate(0) scale(1);
+  }
+  50% {
+    transform: rotate(22deg) scale(0.92);
+  }
+}
+.ytmq-logo-pulse {
+  animation: ytmq-logo-pulse 1.4s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+}
+
+/* ---------------------------------------------------------------------------
+   Word-timed lyrics: on the sung line a soft edge sweeps across each word,
+   with a pixel of lift, as in Apple Music. --lw runs 0 → 1 per word.
+   ------------------------------------------------------------------------ */
+.ytmq-lyric-line.has-words.is-active .ytmq-w {
+  --lw: 0;
+  display: inline-block;
+  white-space: pre;
+  background-image: linear-gradient(
+    90deg,
+    #fff calc(var(--lw) * 140% - 40%),
+    rgba(255, 255, 255, 0.38) calc(var(--lw) * 140%)
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  transform: translateY(calc((1 - var(--lw)) * 2px));
+}
+
+/* Code boxes: a blinking caret, and a shake for a short code. */
+@keyframes ytmq-caret {
+  0%,
+  45% {
+    opacity: 1;
+  }
+  55%,
+  100% {
+    opacity: 0;
+  }
+}
+.ytmq-caret {
+  animation: ytmq-caret 1.05s steps(1) infinite;
+}
+@keyframes ytmq-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20% {
+    transform: translateX(-7px);
+  }
+  40% {
+    transform: translateX(6px);
+  }
+  60% {
+    transform: translateX(-4px);
+  }
+  80% {
+    transform: translateX(2px);
+  }
+}
+.ytmq-shake {
+  animation: ytmq-shake 0.42s cubic-bezier(0.3, 0, 0.3, 1);
 }

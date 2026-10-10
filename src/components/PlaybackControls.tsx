@@ -1,5 +1,12 @@
 import { useState } from 'react'
 import type { PlaybackAction } from '../lib/playback'
+import { ShuffleIcon, SmartShuffleIcon } from './ui/icons'
+
+/**
+ * Shuffle as the player has it: Spotify cycles off → shuffle → smart shuffle
+ * like its own button; YouTube Music only reshuffles, once per press.
+ */
+export type ShuffleState = { kind: 'cycle'; mode: 'off' | 'on' | 'smart' } | { kind: 'action' }
 
 type PlaybackControlsProps = {
   isPlaying: boolean
@@ -10,6 +17,55 @@ type PlaybackControlsProps = {
   /** Tooltip shown on the whole row (e.g. when the host limits controls). */
   title?: string
   className?: string
+  shuffle?: ShuffleState
+  onShuffle?: () => void
+}
+
+export function ShuffleButton({
+  state,
+  onShuffle,
+  disabled,
+  size = 'lg',
+}: {
+  state: ShuffleState
+  onShuffle: () => void
+  disabled?: boolean
+  size?: 'md' | 'lg'
+}) {
+  const [spin, setSpin] = useState(0)
+  const mode = state.kind === 'cycle' ? state.mode : 'off'
+  const on = mode !== 'off'
+  const label =
+    state.kind === 'action'
+      ? 'Shuffle what plays after the queue'
+      : mode === 'off'
+        ? 'Turn on shuffle'
+        : mode === 'on'
+          ? 'Turn on smart shuffle'
+          : 'Turn off shuffle'
+  const glyph = size === 'lg' ? 'h-6 w-6' : 'h-5 w-5'
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        setSpin((n) => n + 1)
+        onShuffle()
+      }}
+      disabled={disabled}
+      aria-label={label}
+      title={label}
+      aria-pressed={state.kind === 'cycle' ? on : undefined}
+      className={`ytmq-now-control relative inline-flex shrink-0 items-center justify-center transition hover:opacity-100 active:scale-90 disabled:opacity-30 ${
+        size === 'lg' ? 'h-11 w-11' : 'h-9 w-9'
+      } ${on ? 'opacity-100' : 'opacity-70'}`}
+      style={on ? { color: 'var(--np-accent-light, #ff6b52)' } : undefined}
+    >
+      <span key={spin} className={`flex ${spin > 0 ? 'ytmq-shuffle-pop' : ''}`}>
+        {mode === 'smart' ? <SmartShuffleIcon className={glyph} /> : <ShuffleIcon className={glyph} />}
+      </span>
+      {on && <span aria-hidden className="absolute bottom-0.5 h-1 w-1 rounded-full bg-current" />}
+    </button>
+  )
 }
 
 /**
@@ -30,6 +86,8 @@ export function PlaybackControls({
   pendingAction = null,
   title,
   className = '',
+  shuffle,
+  onShuffle,
 }: PlaybackControlsProps) {
   const [bump, setBump] = useState({ prev: 0, next: 0, pp: 0 })
 
@@ -42,9 +100,10 @@ export function PlaybackControls({
 
   return (
     <div
-      className={`ytmq-now-controls flex items-center justify-center gap-5 ${className}`}
+      className={`ytmq-now-controls flex items-center justify-center ${shuffle ? 'gap-3 sm:gap-4' : 'gap-5'} ${className}`}
       title={title}
     >
+      {shuffle && onShuffle && <ShuffleButton state={shuffle} onShuffle={onShuffle} disabled={disabled} />}
       <ControlButton
         label="Previous"
         disabled={disabled}
@@ -87,6 +146,8 @@ export function PlaybackControls({
           <NextIcon />
         </span>
       </ControlButton>
+      {/* Keeps play centred when shuffle sits on the left. */}
+      {shuffle && onShuffle && <span aria-hidden className="h-11 w-11 shrink-0" />}
     </div>
   )
 }

@@ -1,20 +1,22 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { NicknamePrompt } from '../components/NicknamePrompt'
-import { SearchTab } from '../components/SearchTab'
 import { NowPlaying } from '../components/NowPlaying'
 import { NowPlayingSidebar } from '../components/NowPlayingSidebar'
 import { LyricsView } from '../components/LyricsView'
 import { TabBar, type RoomTab } from '../components/TabBar'
 import { TabSlider } from '../components/TabSlider'
 import { ToastStack } from '../components/ToastStack'
-import { ListenersBadge } from '../components/ParticipantList'
-import {
-  AdminTabContent,
-  QueueTabContent,
-  RoomTabContent,
-} from '../components/RoomTabPanels'
+import { AvatarStack } from '../components/ParticipantList'
+import { SearchPanel } from '../components/search/SearchPanel'
+import { QueueTab } from '../components/room/QueueTab'
+import { AdminTab } from '../components/room/AdminTab'
+import { RoomChromeContext } from '../components/room/chrome'
+import { YtmqLogo } from '../components/YtmqLogo'
+import { IconButton } from '../components/ui/Button'
+import { buttonClass } from '../components/ui/buttonStyles'
 import { useQueue } from '../hooks/useQueue'
+import { useQueueAdder } from '../hooks/useQueueAdder'
 import { useIsDesktop } from '../hooks/useMediaQuery'
 import { useToast } from '../hooks/useToast'
 import { useRoomSettings } from '../hooks/useRoomSettings'
@@ -43,22 +45,29 @@ import { forgetLobby, rememberLobby } from '../lib/recentLobbies'
 // Left-to-right order of the dock tabs. Used to decide which way a panel should
 // slide in: tapping a tab further right slides in from the right, and vice
 // versa. Kept in sync with the tab order in `TabBar`.
-const TAB_ORDER: RoomTab[] = ['search', 'queue', 'lyrics', 'room', 'admin']
+const TAB_ORDER: RoomTab[] = ['search', 'queue', 'lyrics', 'admin']
+
+/** Old links and extension builds say room; that tab is gone. */
+function asTab(value: string | null | undefined): RoomTab | null {
+  if (!value) return null
+  if (value === 'room') return 'queue'
+  return TAB_ORDER.includes(value as RoomTab) ? (value as RoomTab) : null
+}
 
 function consumeRestoreTab(): RoomTab | null {
   // ?tab=admin from the extension's popup ("Set up" Spotify) or a shared link.
-  const fromUrl = new URLSearchParams(window.location.search).get('tab')
-  if (fromUrl && TAB_ORDER.includes(fromUrl as RoomTab)) {
+  const fromUrl = asTab(new URLSearchParams(window.location.search).get('tab'))
+  if (fromUrl) {
     const url = new URL(window.location.href)
     url.searchParams.delete('tab')
     window.history.replaceState(window.history.state, '', url)
-    return fromUrl as RoomTab
+    return fromUrl
   }
   try {
     const raw = sessionStorage.getItem(RESTORE_TAB_KEY)
     if (!raw) return null
     sessionStorage.removeItem(RESTORE_TAB_KEY)
-    if (TAB_ORDER.includes(raw as RoomTab)) return raw as RoomTab
+    return asTab(raw)
   } catch {
     /* private mode */
   }
@@ -102,8 +111,8 @@ function CenteredScreen({ children }: { children: React.ReactNode }) {
 function StateIcon({ children, tone = 'neutral' }: { children: React.ReactNode; tone?: 'neutral' | 'accent' }) {
   return (
     <div
-      className={`flex h-16 w-16 items-center justify-center rounded-[22px] ${
-        tone === 'accent' ? 'bg-accent-500/15 text-accent-400' : 'bg-white/[0.06] text-neutral-300'
+      className={`ytmq-cookie-tile flex h-20 w-20 items-center justify-center ${
+        tone === 'accent' ? 'bg-accent-500/20 text-accent-300' : 'bg-white/[0.07] text-neutral-300'
       }`}
     >
       {children}
@@ -113,10 +122,7 @@ function StateIcon({ children, tone = 'neutral' }: { children: React.ReactNode; 
 
 function HomeButton() {
   return (
-    <Link
-      to="/"
-      className="ytmq-press inline-flex min-h-11 items-center rounded-full bg-white px-5 text-sm font-semibold text-neutral-950 hover:bg-neutral-200"
-    >
+    <Link to="/" className={buttonClass('primary', 'md')}>
       Back to YTMQ
     </Link>
   )
@@ -178,7 +184,7 @@ function PasswordGate({
   return (
     <CenteredScreen>
       <form onSubmit={submit} className="ytmq-anim-pop w-full max-w-sm space-y-4">
-        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-[22px] bg-accent-500/15 text-accent-400">
+        <div className="ytmq-cookie-tile mx-auto flex h-20 w-20 items-center justify-center bg-accent-500/20 text-accent-300">
           <svg viewBox="0 0 20 20" fill="currentColor" className="h-7 w-7" aria-hidden>
             <path
               fillRule="evenodd"
@@ -199,27 +205,22 @@ function PasswordGate({
           onChange={(e) => setPassword(e.target.value)}
           placeholder="Password"
           autoFocus
-          className="min-h-12 w-full rounded-xl border border-white/10 bg-neutral-900 px-4 text-center outline-none transition-colors focus:border-white/40"
+          className="ytmq-input h-12 w-full text-center text-base"
         />
         {error && (
           <p className="ytmq-anim-fade text-sm text-accent-300" role="alert">
             {error}
           </p>
         )}
-        <button
-          type="submit"
-          disabled={busy}
-          className="ytmq-press inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-full bg-accent-600 px-4 text-base font-semibold text-white hover:bg-accent-500 disabled:opacity-60"
-        >
-          {busy && <span className="ytmq-spinner h-4 w-4" aria-hidden />}
-          {busy ? 'Checking…' : 'Go in'}
-        </button>
-        <Link
-          to="/"
-          className="block text-sm text-neutral-500 underline underline-offset-2 hover:text-neutral-300"
-        >
-          Back home
-        </Link>
+        <div className="flex items-center justify-center gap-2">
+          <Link to="/" className={buttonClass('ghost', 'lg')}>
+            Back
+          </Link>
+          <button type="submit" disabled={busy} className={buttonClass('accent', 'lg')}>
+            {busy && <span className="ytmq-spinner h-4 w-4" aria-hidden />}
+            {busy ? 'Checking…' : 'Go in'}
+          </button>
+        </div>
       </form>
     </CenteredScreen>
   )
@@ -263,6 +264,7 @@ function OpenSidebarIcon({ className }: { className?: string }) {
   )
 }
 
+
 export function Room() {
   const navigate = useNavigate()
   const { roomId } = useParams<{ roomId: string }>()
@@ -281,18 +283,12 @@ export function Room() {
   }
   const [ending, setEnding] = useState(false)
   const [accessGranted, setAccessGranted] = useState(false)
-  const [nickname, setNicknameState] = useState(() =>
-    roomId ? getNickname(roomId) : '',
-  )
-  const [needsNickname, setNeedsNickname] = useState(() =>
-    roomId ? !getNickname(roomId) : false,
-  )
+  const [nickname, setNicknameState] = useState(() => (roomId ? getNickname(roomId) : ''))
+  const [needsNickname, setNeedsNickname] = useState(() => (roomId ? !getNickname(roomId) : false))
   const { toasts, showToast, dismiss } = useToast()
   const isDesktop = useIsDesktop()
 
-  // Collapsible / resizable now-playing rail (desktop only). State is local so it
-  // persists across tab switches while the room stays mounted, and mirrored to
-  // localStorage so it survives reloads too.
+  // Collapsible, resizable now-playing rail (desktop). Remembered per browser.
   const [sidebarCollapsed, setSidebarCollapsed] = useState(loadSidebarCollapsed)
   const [sidebarWidth, setSidebarWidth] = useState(loadSidebarWidth)
   const [resizingSidebar, setResizingSidebar] = useState(false)
@@ -322,52 +318,40 @@ export function Room() {
     window.addEventListener('pointerup', onUp)
   }
 
-  // On desktop the Lyrics screen is a fullscreen overlay that slides in over the
-  // whole page, so the sidebar + tab content stay mounted underneath as the
-  // "base". `baseTab` is the tab the slider shows there: the live tab normally,
-  // or the last non-lyrics tab we were on while the lyrics overlay is up.
-  const lastBaseTab = useRef<RoomTab>(tab === 'lyrics' ? 'search' : tab)
-  if (tab !== 'lyrics') lastBaseTab.current = tab
-  const baseTab: RoomTab =
-    isDesktop && tab === 'lyrics' ? lastBaseTab.current : tab
+  // On desktop Lyrics is a fullscreen overlay over the page, so the rail and
+  // the last other tab stay mounted underneath it.
+  const [lastBaseTab, setLastBaseTab] = useState<RoomTab>(tab === 'lyrics' ? 'search' : tab)
+  if (tab !== 'lyrics' && tab !== lastBaseTab) setLastBaseTab(tab)
+  const baseTab: RoomTab = isDesktop && tab === 'lyrics' ? lastBaseTab : tab
 
-  // Lyrics overlay lifecycle. It's kept mounted through its slide-out so leaving
-  // animates too. Phases: `in` (sliding in) → `shown` (settled, no transform so
-  // the backdrop blur / GPU layer cost is released) → `out` (sliding away) →
-  // unmount. `dir` carries the travel direction for the animation.
+  // Lyrics overlay lifecycle: in → shown → out → hidden, so leaving animates
+  // too. Worked out while rendering, when the wish for it changes.
+  const overlayWanted = isDesktop && tab === 'lyrics'
   const [lyricsOverlay, setLyricsOverlay] = useState<{
     phase: 'hidden' | 'in' | 'shown' | 'out'
     dir: 'fwd' | 'back'
-  }>({ phase: 'hidden', dir: 'fwd' })
+    wanted: boolean
+  }>({ phase: 'hidden', dir: 'fwd', wanted: false })
+  if (lyricsOverlay.wanted !== overlayWanted) {
+    setLyricsOverlay((prev) =>
+      overlayWanted
+        ? { phase: prev.phase === 'shown' ? 'shown' : 'in', dir: tabDir, wanted: true }
+        : {
+            phase: prev.phase === 'in' || prev.phase === 'shown' ? 'out' : prev.phase,
+            dir: tabDir,
+            wanted: false,
+          },
+    )
+  }
 
-  useEffect(() => {
-    if (isDesktop && tab === 'lyrics') {
-      setLyricsOverlay((prev) =>
-        prev.phase === 'shown' ? prev : { phase: 'in', dir: tabDir },
-      )
-    } else {
-      setLyricsOverlay((prev) =>
-        prev.phase === 'in' || prev.phase === 'shown'
-          ? { phase: 'out', dir: tabDir }
-          : prev,
-      )
-    }
-  }, [tab, isDesktop, tabDir])
-
-  const clientId = useMemo(
-    () => (roomId ? getClientId(roomId) : ''),
-    [roomId],
-  )
+  const clientId = useMemo(() => (roomId ? getClientId(roomId) : ''), [roomId])
 
   const hostToken = roomId ? getHostToken(roomId) : null
   const isHost = Boolean(hostToken)
 
   const settings = useRoomSettings(roomId ?? '', room ?? undefined)
   const canControl = isHost || settings.allow_guest_controls
-  usePlaybackKeybinds({
-    roomId: roomId ?? '',
-    enabled: Boolean(roomId) && canControl,
-  })
+  usePlaybackKeybinds({ roomId: roomId ?? '', enabled: Boolean(roomId) && canControl })
 
   const { participants, onlineCount, status } = useRoomPresence(roomId ?? '', {
     clientId,
@@ -375,24 +359,45 @@ export function Room() {
     heartbeat: (accessGranted || isHost) && !roomError,
   })
 
-  const { items, loading, error, busyId, addTrack, removeItem } = useQueue(
-    roomId ?? '',
+  const { items, loading, error, busyId, addTrack, removeItem } = useQueue(roomId ?? '')
+  const { status: spotifyStatus } = useSpotifyPlayer({
+    roomId: roomId ?? '',
+    hostToken,
+    queue: items,
+    onNotice: (message) => showToast(message, 'info'),
+  })
+
+  // The host can always add; the switch in Admin is for guests.
+  const canAdd = isHost || settings.allow_guest_add
+  const onAdd = useCallback(
+    async (track: AddTrackInput, mode: QueueInsertMode) => {
+      await addTrack(hostToken ? { ...track, host_token: hostToken } : track, mode)
+    },
+    [addTrack, hostToken],
   )
-  const { status: spotifyStatus } = useSpotifyPlayer(roomId ?? '', isHost)
+  const onAdded = useCallback(
+    (title: string, mode: QueueInsertMode, count?: number) =>
+      showToast(
+        count && count > 1
+          ? `${mode === 'queue' ? 'Added' : 'Playing next:'} ${count} songs`
+          : mode === 'queue'
+            ? `Added to queue: “${title}”`
+            : `Playing next: “${title}”`,
+        'success',
+      ),
+    [showToast],
+  )
+  const adder = useQueueAdder({ canAdd, onAdd, onAdded })
 
   const lastError = useRef<string | null>(null)
   useEffect(() => {
-    if (error && error !== lastError.current) {
-      showToast(error, 'error')
-    }
+    if (error && error !== lastError.current) showToast(error, 'error')
     lastError.current = error
   }, [error, showToast])
 
   useEffect(() => {
     if (!roomId) return
-
     let cancelled = false
-
     fetchRoom(roomId)
       .then((info) => {
         if (cancelled) return
@@ -402,7 +407,7 @@ export function Room() {
         }
         setRoom(info)
         rememberLobby(roomId, info.code, Boolean(getHostToken(roomId)))
-        // Hosts are always "HOST" — never prompt them for a name.
+        // Hosts are always "HOST": never prompt them for a name.
         let stored = getNickname(roomId)
         if (!stored && getHostToken(roomId)) {
           stored = HOST_NICKNAME
@@ -410,74 +415,61 @@ export function Room() {
         }
         setNicknameState(stored)
         setNeedsNickname(!stored)
-
-        const alreadyOk =
-          sessionStorage.getItem(`ytmq_access_${roomId}`) === '1'
+        const alreadyOk = sessionStorage.getItem(`ytmq_access_${roomId}`) === '1'
         setAccessGranted(!info.has_password || alreadyOk)
       })
       .catch((err: unknown) => {
-        if (cancelled) return
-        setRoomError(err instanceof Error ? err.message : 'Could not load lobby')
+        if (!cancelled) setRoomError(err instanceof Error ? err.message : 'Could not load lobby')
       })
       .finally(() => {
         if (!cancelled) setRoomLoading(false)
       })
-
     return () => {
       cancelled = true
     }
   }, [roomId])
 
-  // The extension asks an already-open lobby to show a tab (popup → Admin).
+  // The extension asks an open lobby to show a tab (popup → Host).
   useEffect(() => {
     function onMessage(event: MessageEvent) {
       if (event.source !== window) return
       const data = event.data as { source?: string; type?: string; tab?: string } | null
       if (data?.source !== 'ytmq-extension' || data.type !== 'ytmq:show-tab') return
-      const next = data.tab as RoomTab
-      if (TAB_ORDER.includes(next)) setTab(next)
+      const next = asTab(data.tab)
+      if (next) setTab(next)
     }
     window.addEventListener('message', onMessage)
     return () => window.removeEventListener('message', onMessage)
   }, [])
 
-  // Keep the extension synced to this lobby whenever the host has the room
-  // open — not only when they visit the Admin tab (YtMusicConnect).
+  // Keep the extension on this lobby whenever the host has it open.
   useEffect(() => {
     if (!roomId || !isHost || roomLoading || roomError) return
-
     const activeId = roomId
     announceSessionToExtension(activeId)
-
     function onVisible() {
-      if (document.visibilityState === 'visible') {
-        announceSessionToExtension(activeId)
-      }
+      if (document.visibilityState === 'visible') announceSessionToExtension(activeId)
     }
     document.addEventListener('visibilitychange', onVisible)
     return () => document.removeEventListener('visibilitychange', onVisible)
   }, [roomId, isHost, roomLoading, roomError])
 
-  if (!roomId) {
-    return <RoomUnavailable message="Missing room id" />
-  }
+  if (!roomId) return <RoomUnavailable message="Missing room id" />
 
   if (roomLoading) {
     return (
-      <main className="mx-auto flex min-h-dvh max-w-lg flex-col items-center justify-center gap-3 p-6">
-        <span className="ytmq-spinner h-6 w-6 text-neutral-400" aria-hidden />
+      <main className="mx-auto flex min-h-dvh max-w-lg flex-col items-center justify-center gap-4 p-6">
+        <YtmqLogo size={56} className="ytmq-logo-pulse" />
         <p className="ytmq-anim-fade text-sm text-neutral-500">Opening the lobby…</p>
       </main>
     )
   }
 
-  if (roomError || !room) {
-    return <RoomUnavailable message={roomError ?? 'Lobby unavailable'} />
-  }
+  if (roomError || !room) return <RoomUnavailable message={roomError ?? 'Lobby unavailable'} />
 
   const activeRoomId = roomId
 
-  // Password gate (direct-link access) — the host owns the room, so skip it.
+  // Password gate (direct-link access); the host owns the room, so skip it.
   if (settings.has_password && !accessGranted && !isHost) {
     return (
       <PasswordGate
@@ -498,7 +490,7 @@ export function Room() {
     return (
       <CenteredScreen>
         <StateIcon tone="accent">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-7 w-7" aria-hidden>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-8 w-8" aria-hidden>
             <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
             <circle cx="9" cy="7" r="4" />
             <path d="m17 8 5 5" />
@@ -506,10 +498,8 @@ export function Room() {
           </svg>
         </StateIcon>
         <div className="space-y-1.5">
-          <h1 className="text-xl font-bold text-white">The host removed you</h1>
-          <p className="text-sm text-neutral-400">
-            You can&apos;t add songs to this lobby any more.
-          </p>
+          <h1 className="text-2xl font-extrabold tracking-[-0.02em] text-white">The host removed you</h1>
+          <p className="text-sm text-neutral-400">You can&apos;t add songs to this lobby any more.</p>
         </div>
         <HomeButton />
       </CenteredScreen>
@@ -520,16 +510,14 @@ export function Room() {
     return (
       <CenteredScreen>
         <StateIcon>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-7 w-7" aria-hidden>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-8 w-8" aria-hidden>
             <rect x="4" y="11" width="16" height="10" rx="2.5" />
             <path d="M8 11V7a4 4 0 1 1 8 0v4" />
           </svg>
         </StateIcon>
         <div className="space-y-1.5">
-          <h1 className="text-xl font-bold text-white">This lobby is locked</h1>
-          <p className="text-sm text-neutral-400">
-            The host stopped new people from joining. Ask them to unlock it in Admin.
-          </p>
+          <h1 className="text-2xl font-extrabold tracking-[-0.02em] text-white">This lobby is locked</h1>
+          <p className="text-sm text-neutral-400">The host stopped new people from joining. Ask them to unlock it.</p>
         </div>
         <HomeButton />
       </CenteredScreen>
@@ -548,13 +536,7 @@ export function Room() {
 
   function handleEndLobby() {
     if (!hostToken) return
-    if (
-      !window.confirm(
-        'End this lobby? The queue will be deleted for everyone.',
-      )
-    ) {
-      return
-    }
+    if (!window.confirm('End this lobby? The queue will be deleted for everyone.')) return
     setEnding(true)
     void endLobby(activeRoomId, hostToken)
       .then((ok) => {
@@ -571,167 +553,122 @@ export function Room() {
         navigate('/')
       })
       .catch((err: unknown) => {
-        showToast(
-          err instanceof Error ? err.message : 'Could not end lobby',
-          'error',
-        )
+        showToast(err instanceof Error ? err.message : 'Could not end lobby', 'error')
       })
       .finally(() => setEnding(false))
   }
 
-  // Desktop always shows the now-playing sidebar as the page base; Lyrics rides
-  // on top as a fullscreen overlay. Mobile keeps Lyrics inline as a tall panel.
-  const showSidebar = isDesktop
-  const lyricsPanelHeight = !isDesktop && tab === 'lyrics'
-
-  // Desktop is a fixed-height app shell: the page itself never scrolls; each tab
-  // owns its own internal scroll regions and lays content out to fill the space.
-  // Mobile keeps the original scrolling page.
-  const onAdd = async (track: AddTrackInput, mode: QueueInsertMode) => {
-    await addTrack(hostToken ? { ...track, host_token: hostToken } : track, mode)
-  }
-  // The host can always add; the switch in Admin is for guests.
-  const canAdd = isHost || settings.allow_guest_add
-  const onAdded = (title: string, mode: QueueInsertMode) =>
-    showToast(
-      mode === 'queue'
-        ? `Added to queue: “${title}”`
-        : `Playing next: “${title}”`,
-      'success',
-    )
-
-  // Scrollable body inside a desktop tab column; the extra bottom padding keeps
-  // the last item clear of the floating dock.
-  const deskScroll = 'min-h-0 flex-1 overflow-y-auto pb-28'
-
-  // The content for a single tab. Rendered through <TabSlider/> so switching
-  // tabs pushes the whole panel offscreen. On desktop Lyrics is handled by the
-  // overlay instead, so this only renders it inline (mobile).
   const handleQueueRemove = (id: string) => {
     const target = items.find((item) => item.id === id)
     void removeItem(id)
-    showToast(
-      target ? `Removed “${target.title}”` : 'Removed from queue',
-      'info',
-    )
+    showToast(target ? `Removed “${target.title}”` : 'Removed from the queue', 'info')
   }
+
+  const showSidebar = isDesktop
+  const lyricsPanelHeight = !isDesktop && tab === 'lyrics'
 
   const renderPanel = (panelTab: RoomTab) => {
     switch (panelTab) {
       case 'search':
-        return (
-          <div
-            className={`ytmq-tab-panel flex flex-1 flex-col ${
-              showSidebar ? 'min-h-0' : ''
-            }`}
-          >
-            <SearchTab
-              fillHeight={showSidebar}
-              nickname={nickname}
-              canAdd={canAdd}
-              onAdd={onAdd}
-              onAdded={onAdded}
-            />
-          </div>
-        )
-
+        return <SearchPanel nickname={nickname} adder={adder} />
       case 'queue':
         return (
-          <QueueTabContent
-            roomId={roomId}
+          <QueueTab
+            roomId={activeRoomId}
             nickname={nickname}
             items={items}
             loading={loading}
             busyId={busyId}
             editable={isHost || settings.allow_guest_remove}
-            allowGuestAdd={canAdd}
-            deskScroll={showSidebar ? deskScroll : undefined}
+            adder={adder}
             onRemove={handleQueueRemove}
-            onAdd={onAdd}
-            onAdded={onAdded}
-            showGuestRemoveHint={!settings.allow_guest_remove && !isHost}
+            onSearch={() => changeTab('search')}
           />
         )
-
       case 'lyrics':
-        return (
-          <LyricsView
-            roomId={roomId}
-            fullscreen={false}
-            queueItems={items}
-            canControl={canControl}
-          />
-        )
-
-      case 'room':
-        return (
-          <RoomTabContent
-            roomId={roomId}
-            code={room.code}
-            nickname={nickname}
-            onNicknameChange={saveNickname}
-            participants={participants}
-            onlineCount={onlineCount}
-            deskScroll={showSidebar ? deskScroll : undefined}
-            onCopied={(msg) => showToast(msg, 'info')}
-          />
-        )
-
+        return <LyricsView roomId={activeRoomId} fullscreen={false} queueItems={items} canControl={canControl} isHost={isHost} />
       case 'admin':
         if (!isHost || !hostToken) return null
         return (
-          <AdminTabContent
-            roomId={roomId}
+          <AdminTab
+            roomId={activeRoomId}
+            code={room.code}
             hostToken={hostToken}
             settings={settings}
             participants={participants}
             onlineCount={onlineCount}
             ending={ending}
-            deskScroll={showSidebar ? deskScroll : undefined}
             spotifyStatus={spotifyStatus}
             onToast={showToast}
             onEndLobby={handleEndLobby}
           />
         )
-
       default:
         return null
     }
   }
 
-  return (
-    <main
-      className={
-        showSidebar
-          ? 'ytmq-app h-dvh overflow-hidden'
-          : `ytmq-app pb-[calc(6rem+env(safe-area-inset-bottom))] ${
-              lyricsPanelHeight ? 'h-dvh' : 'min-h-dvh'
-            }`
-      }
+  // Who is here, on the right of every tab's header (desktop).
+  const presence = (
+    <div
+      className="flex h-10 items-center gap-2.5 rounded-full bg-white/[0.06] pl-1.5 pr-3.5"
+      title={participants.filter((p) => p.online).map((p) => p.nickname || 'Guest').join(', ')}
     >
-      {needsNickname && <NicknamePrompt onSubmit={completeNickname} />}
+      <AvatarStack participants={participants} />
+      <span className="text-[13px] font-semibold text-neutral-200">{onlineCount} here</span>
+    </div>
+  )
+  const hostPill = isHost && (
+    <span className="inline-flex h-10 items-center rounded-full bg-accent-500/15 px-3.5 text-[13px] font-bold text-accent-300">Host</span>
+  )
 
-      <div
+  const chrome = {
+    leading:
+      showSidebar && sidebarCollapsed ? (
+        <IconButton label="Show now playing" variant="tonal" size="lg" onClick={() => setSidebarCollapsed(false)}>
+          <OpenSidebarIcon className="h-5 w-5" />
+        </IconButton>
+      ) : undefined,
+    trailing: showSidebar ? (
+      <>
+        {hostPill}
+        {presence}
+      </>
+    ) : undefined,
+  }
+
+  const content = (
+    <TabSlider activeKey={baseTab} direction={tabDir} fill={showSidebar || lyricsPanelHeight} className="w-full flex-1">
+      {showSidebar ? (
+        <div className="ytmq-panel-scroll h-full overflow-y-auto overflow-x-hidden px-6 pb-32">
+          <div className={`mx-auto w-full ${sidebarCollapsed ? 'max-w-[90rem]' : ''}`}>{renderPanel(baseTab)}</div>
+        </div>
+      ) : (
+        <div className={`flex flex-col ${lyricsPanelHeight ? 'h-full' : ''}`}>{renderPanel(baseTab)}</div>
+      )}
+    </TabSlider>
+  )
+
+  return (
+    <RoomChromeContext.Provider value={chrome}>
+      <main
         className={
           showSidebar
-            ? 'flex h-full w-full items-stretch px-4 py-4 lg:px-6'
-            : `mx-auto flex w-full max-w-lg flex-col px-4 ${
-                lyricsPanelHeight ? 'h-full' : ''
-              }`
+            ? 'ytmq-app flex h-dvh gap-2 overflow-hidden bg-[#050505] p-2'
+            : `ytmq-app ytmq-app-mobile pb-[calc(6.5rem+env(safe-area-inset-bottom))] ${lyricsPanelHeight ? 'flex h-dvh flex-col' : 'min-h-dvh'}`
         }
       >
-        {/* Spotify-style now-playing rail — every tab except Lyrics on desktop.
-            Collapses to zero width with a smooth slide, and the right edge can be
-            dragged to resize it. */}
+        {needsNickname && <NicknamePrompt onSubmit={completeNickname} />}
+
         {showSidebar && (
           <div
-            className="relative hidden h-full shrink-0 overflow-hidden md:block"
+            className="relative h-full shrink-0 overflow-hidden"
             style={{
               width: sidebarCollapsed ? 0 : sidebarWidth,
-              marginRight: sidebarCollapsed ? 0 : '1.5rem',
+              marginRight: sidebarCollapsed ? -8 : 0,
               transition: resizingSidebar
                 ? 'none'
-                : 'width 380ms var(--ease-out-soft), margin-right 380ms var(--ease-out-soft)',
+                : 'width 420ms var(--ease-out-soft), margin-right 420ms var(--ease-out-soft)',
             }}
           >
             <div
@@ -740,141 +677,100 @@ export function Room() {
                 width: sidebarWidth,
                 opacity: sidebarCollapsed ? 0 : 1,
                 transform: sidebarCollapsed ? 'translateX(-24px)' : 'translateX(0)',
-                transition: resizingSidebar
-                  ? 'none'
-                  : 'opacity 260ms ease, transform 380ms var(--ease-out-soft)',
+                transition: resizingSidebar ? 'none' : 'opacity 260ms ease, transform 420ms var(--ease-out-soft)',
               }}
             >
               <NowPlayingSidebar
-                roomId={roomId}
+                roomId={activeRoomId}
                 className="h-full"
                 canControl={canControl}
+                isHost={isHost}
+                headerAction={
+                  <IconButton label="Hide now playing" size="sm" variant="glass" onClick={() => setSidebarCollapsed(true)}>
+                    <CollapseSidebarIcon className="h-[18px] w-[18px]" />
+                  </IconButton>
+                }
               />
             </div>
-
-            <button
-              type="button"
-              onClick={() => setSidebarCollapsed(true)}
-              aria-label="Hide now playing panel"
-              title="Hide panel"
-              className="ytmq-press absolute right-3 top-3 z-10 flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-neutral-950/60 text-neutral-300 backdrop-blur-md hover:bg-neutral-900/80 hover:text-white"
-            >
-              <CollapseSidebarIcon className="h-5 w-5" />
-            </button>
-
             <div
               role="separator"
               aria-orientation="vertical"
-              aria-label="Resize now playing panel"
+              aria-label="Resize now playing"
               onPointerDown={startSidebarResize}
               className="ytmq-resize-handle group absolute inset-y-0 right-0 z-10 flex w-3 cursor-col-resize items-center justify-center"
             >
-              <span className="h-12 w-1 rounded-full bg-white/15 transition-colors group-hover:bg-white/50" />
+              <span className="h-12 w-1 rounded-full bg-white/0 transition-colors group-hover:bg-white/40" />
             </div>
           </div>
         )}
 
-        <div
-          className={
-            showSidebar
-              ? 'flex h-full min-h-0 w-full min-w-0 flex-1 flex-col'
-              : `flex w-full flex-col pt-4 ${lyricsPanelHeight ? 'h-full' : ''}`
-          }
-        >
-          <div className="mb-3 flex shrink-0 items-center justify-end gap-2">
-            {isHost && (
-              <span className="rounded-full bg-accent-500/15 px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.08em] text-accent-300">
-                Host
+        {showSidebar ? (
+          <section className="ytmq-panel relative flex h-full min-w-0 flex-1 flex-col overflow-hidden rounded-[24px]">
+            {content}
+          </section>
+        ) : (
+          <>
+            <header className="flex h-14 items-center gap-3 px-4">
+              <Link to="/" aria-label="YTMQ home" className="ytmq-press -ml-1 rounded-full p-1">
+                <YtmqLogo size={30} />
+              </Link>
+              <span className="font-mono text-[15px] font-semibold tracking-[0.18em] text-white">{room.code}</span>
+              {isHost && (
+                <span className="inline-flex h-6 items-center rounded-full bg-accent-500/15 px-2.5 text-[11px] font-bold text-accent-300">
+                  Host
+                </span>
+              )}
+              <span className="ml-auto flex items-center gap-2 text-[13px] font-semibold text-neutral-300">
+                <AvatarStack participants={participants} max={3} />
+                {onlineCount} here
               </span>
-            )}
-            <ListenersBadge count={onlineCount} />
-          </div>
-
-          {/* On desktop the sidebar carries now-playing, so the compact card is
-              only needed on mobile / the lyrics tab. */}
-          {!showSidebar && (
-            <div className="mb-4">
-              <NowPlaying roomId={roomId} compact canControl={canControl} />
-            </div>
-          )}
-
-          <TabSlider
-            activeKey={baseTab}
-            direction={tabDir}
-            fill={showSidebar || lyricsPanelHeight}
-            className="w-full flex-1"
-          >
-            {showSidebar ? (
-              // The slider viewport stays full-page width so a tab push travels
-              // edge-to-edge instead of being clipped. When the rail is hidden we
-              // re-center the resting content in a max-width column inside the
-              // (full-width) sliding panel.
-              <div
-                className={`flex min-h-0 w-full flex-1 flex-col ${
-                  sidebarCollapsed ? 'mx-auto max-w-4xl' : ''
-                }`}
-              >
-                {renderPanel(baseTab)}
+            </header>
+            {tab !== 'lyrics' && (
+              <div className="px-4 pb-1">
+                <NowPlaying roomId={activeRoomId} canControl={canControl} isHost={isHost} onOpenLyrics={() => changeTab('lyrics')} />
               </div>
-            ) : (
-              renderPanel(baseTab)
             )}
-          </TabSlider>
-        </div>
-      </div>
+            <div className={`px-4 ${lyricsPanelHeight ? 'flex min-h-0 flex-1 flex-col pb-2' : ''}`}>{content}</div>
+          </>
+        )}
 
-      {/* Top-left button to bring the now-playing rail back. Hidden on the
-          Lyrics tab, where the immersive overlay owns the whole screen. */}
-      {showSidebar && sidebarCollapsed && tab !== 'lyrics' && (
-        <button
-          type="button"
-          onClick={() => setSidebarCollapsed(false)}
-          aria-label="Show now playing panel"
-          title="Show panel"
-          className="ytmq-anim-fade ytmq-press fixed left-4 top-4 z-30 flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-neutral-950/60 text-neutral-300 shadow-lg shadow-black/30 backdrop-blur-md hover:bg-neutral-900/80 hover:text-white lg:left-6"
-        >
-          <OpenSidebarIcon className="h-5 w-5" />
-        </button>
-      )}
+        {/* Desktop Lyrics: a fullscreen overlay that slides over the page. */}
+        {lyricsOverlay.phase !== 'hidden' && (
+          <div
+            className={`fixed inset-0 z-40 ${
+              lyricsOverlay.phase === 'in'
+                ? `ytmq-slide-in-${lyricsOverlay.dir}`
+                : lyricsOverlay.phase === 'out'
+                  ? `ytmq-slide-out-${lyricsOverlay.dir}`
+                  : ''
+            }`}
+            onAnimationEnd={(e) => {
+              if (e.target !== e.currentTarget) return
+              setLyricsOverlay((prev) => {
+                if (prev.phase === 'in') return { ...prev, phase: 'shown' }
+                if (prev.phase === 'out') return { ...prev, phase: 'hidden' }
+                return prev
+              })
+            }}
+          >
+            <LyricsView roomId={activeRoomId} fullscreen queueItems={items} canControl={canControl} isHost={isHost} />
+          </div>
+        )}
 
-      {/* Desktop Lyrics: a fullscreen overlay that slides the whole page. */}
-      {lyricsOverlay.phase !== 'hidden' && (
-        <div
-          className={`fixed inset-0 z-40 ${
-            lyricsOverlay.phase === 'in'
-              ? `ytmq-slide-in-${lyricsOverlay.dir}`
-              : lyricsOverlay.phase === 'out'
-                ? `ytmq-slide-out-${lyricsOverlay.dir}`
-                : ''
-          }`}
-          onAnimationEnd={(e) => {
-            if (e.target !== e.currentTarget) return
-            setLyricsOverlay((prev) => {
-              if (prev.phase === 'in') return { ...prev, phase: 'shown' }
-              if (prev.phase === 'out') return { ...prev, phase: 'hidden' }
-              return prev
-            })
-          }}
-        >
-          <LyricsView
-            roomId={roomId}
-            fullscreen
-            queueItems={items}
-            canControl={canControl}
-          />
-        </div>
-      )}
-
-      <TabBar
-        active={tab}
-        onChange={changeTab}
-        queueCount={items.length}
-        showAdmin={isHost}
-        roomId={roomId}
-        code={room.code}
-        onCopied={(msg) => showToast(msg, 'info')}
-      />
-      <ToastStack toasts={toasts} onDismiss={dismiss} />
-    </main>
+        <TabBar
+          active={tab}
+          onChange={changeTab}
+          queueCount={items.length}
+          showAdmin={isHost}
+          roomId={activeRoomId}
+          code={room.code}
+          nickname={nickname}
+          onNicknameChange={isHost ? undefined : saveNickname}
+          participants={participants}
+          onCopied={(msg) => showToast(msg, 'info')}
+        />
+        <ToastStack toasts={toasts} onDismiss={dismiss} />
+      </main>
+    </RoomChromeContext.Provider>
   )
 }

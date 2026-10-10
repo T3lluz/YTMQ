@@ -1,325 +1,171 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 import { nowPlayingArtwork } from '../lib/queue'
-import { useNowPlaying } from '../hooks/useNowPlaying'
-import { usePlaybackPosition } from '../hooks/usePlaybackPosition'
 import { useImagePalette } from '../hooks/useImagePalette'
-import { sendPlaybackControl, sendPlaybackSeek } from '../lib/bridgeChannel'
+import { usePlayer } from '../hooks/usePlayer'
 import { paletteCssVars } from '../lib/imagePalette'
-import type { PlaybackAction, PlaybackState } from '../lib/playback'
+import { ShuffleButton } from './PlaybackControls'
 import { SquigglyProgress } from './SquigglyProgress'
+import { SourceIcon } from './ui/brands'
+import { ChevronDownIcon, MusicNoteIcon, NextIcon, PauseIcon, PlayIcon, PrevIcon } from './ui/icons'
+import { VolumeBar } from './ui/VolumeBar'
 
 type NowPlayingProps = {
   roomId: string
-  compact?: boolean
   canControl?: boolean
+  /** The host gets volume in the expanded card. */
+  isHost?: boolean
+  /** Tapping the song opens the lyrics. */
+  onOpenLyrics?: () => void
 }
 
-export function NowPlaying({
-  roomId,
-  compact = false,
-  canControl = true,
-}: NowPlayingProps) {
-  const { nowPlaying, connected, stale } = useNowPlaying(roomId)
-  const [pendingAction, setPendingAction] = useState<PlaybackAction | null>(null)
-  const pendingTimer = useRef<number | null>(null)
-
-  useEffect(() => {
-    return () => {
-      if (pendingTimer.current !== null) {
-        window.clearTimeout(pendingTimer.current)
-      }
-    }
-  }, [])
-
-  const trigger = useCallback(
-    (action: PlaybackAction) => {
-      if (!roomId) return
-      sendPlaybackControl(roomId, action)
-      setPendingAction(action)
-      if (pendingTimer.current !== null) {
-        window.clearTimeout(pendingTimer.current)
-      }
-      pendingTimer.current = window.setTimeout(() => {
-        setPendingAction(null)
-      }, 700)
-    },
-    [roomId],
-  )
-
-  const effectiveState: PlaybackState = nowPlaying?.state ?? 'unknown'
-  const isPlaying = effectiveState === 'playing'
-  const position = usePlaybackPosition(
-    nowPlaying,
-    Boolean(nowPlaying && isPlaying && !stale),
-  )
+/**
+ * The phone's mini player under the top bar. Collapsed it is the song, its
+ * source and play/next; the chevron opens progress, shuffle, previous and,
+ * for the host, volume.
+ */
+export function NowPlaying({ roomId, canControl = true, isHost = false, onOpenLyrics }: NowPlayingProps) {
+  const player = usePlayer(roomId, canControl)
+  const { nowPlaying, connected, stale, live, isPlaying, position } = player
+  const [expanded, setExpanded] = useState(false)
   const thumb = nowPlaying ? nowPlayingArtwork(nowPlaying) : undefined
-  const { palette, ready: paletteReady } = useImagePalette(thumb)
-  const themeStyle = paletteCssVars(palette)
-  const live = isPlaying && !stale && Boolean(nowPlaying)
-
-  if (!nowPlaying && !connected) {
-    return (
-      <section className="ytmq-anim-fade-up flex items-center gap-3 rounded-2xl bg-white/[0.04] p-3">
-        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-white/[0.06] text-neutral-500">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5" aria-hidden>
-            <path d="M9 18V5l12-2v13" />
-            <circle cx="6" cy="18" r="3" />
-            <circle cx="18" cy="16" r="3" />
-          </svg>
-        </span>
-        <div className="min-w-0">
-          <p className="text-sm font-bold text-neutral-200">Nothing playing yet</p>
-          <p className="text-xs text-neutral-500">The song shows here once the host&apos;s player starts.</p>
-        </div>
-      </section>
-    )
-  }
+  const { palette } = useImagePalette(thumb)
 
   if (!nowPlaying) {
     return (
-      <section className="ytmq-anim-fade-up rounded-2xl bg-white/[0.04] p-4">
-        <p className="text-sm font-bold text-neutral-200">Paused or idle</p>
-        <p className="mt-0.5 text-xs text-neutral-500">
-          No update from the player in a while. The host&apos;s YouTube Music tab needs to stay open.
-        </p>
+      <section className="ytmq-anim-fade flex items-center gap-3 rounded-[20px] bg-white/[0.05] p-2.5 pr-4">
+        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-white/[0.06] text-neutral-500">
+          <MusicNoteIcon className="h-5 w-5" />
+        </span>
+        <div className="min-w-0">
+          <p className="text-sm font-bold text-white">Nothing playing yet</p>
+          <p className="truncate text-xs text-neutral-400">
+            {connected ? 'Waiting for the next song.' : 'Shows up once the host’s player starts.'}
+          </p>
+        </div>
       </section>
     )
   }
 
-  const disabled = !connected || stale || !canControl
+  const disabled = !player.controlsEnabled
+  const source = nowPlaying.source ?? 'ytm'
 
   return (
     <section
-      className={`ytmq-now-playing-card ytmq-anim-fade-up relative isolate overflow-hidden rounded-2xl border bg-neutral-900 ${
-        stale ? 'border-white/10 opacity-90' : ''
-      }`}
-      style={{
-        ...themeStyle,
-        borderColor: stale ? undefined : 'var(--np-accent-border)',
-      }}
+      className="ytmq-mini relative isolate overflow-hidden rounded-[20px]"
+      style={paletteCssVars(palette)}
       aria-label="Now playing"
     >
-      <div
-        aria-hidden
-        className="absolute inset-0 -z-30 scale-110 bg-cover bg-center blur-2xl saturate-150 transition-opacity duration-700"
-        style={{
-          backgroundImage: `url(${thumb})`,
-          opacity: paletteReady ? 1 : 0.75,
-        }}
-      />
-      <div
-        aria-hidden
-        className={`ytmq-now-lights absolute inset-0 -z-20 overflow-hidden ${live ? 'is-live' : ''}`}
-      >
-        <div className="ytmq-now-light ytmq-now-light-a" />
-        <div className="ytmq-now-light ytmq-now-light-b" />
-        <div className="ytmq-now-light ytmq-now-light-c" />
-        <div className="ytmq-now-light ytmq-now-light-d" />
-        <div className="ytmq-now-light ytmq-now-light-e" />
-        <div className="ytmq-now-light ytmq-now-light-f" />
-        <div className="ytmq-now-light ytmq-now-light-g" />
-        <div className="ytmq-now-light ytmq-now-light-h" />
-        <div className="ytmq-now-light ytmq-now-light-i" />
-        <div className="ytmq-now-light ytmq-now-light-j" />
-      </div>
-      <div
-        aria-hidden
-        className="absolute inset-0 -z-10 bg-gradient-to-br from-neutral-950/40 via-neutral-950/30 to-neutral-950/55"
-      />
-      <div
-        aria-hidden
-        className="absolute inset-0 -z-[5] bg-neutral-950/5 backdrop-blur-[6px]"
-      />
-
-      <div
-        className={`relative flex items-center gap-3 ${
-          compact ? 'p-3' : 'p-4'
-        }`}
-      >
-        <img
-          src={thumb}
-          alt=""
-          crossOrigin="anonymous"
-          className={`ytmq-now-art shrink-0 rounded-xl object-cover ring-1 ring-white/10 transition-shadow duration-700 ${
-            live ? 'is-live' : ''
-          } ${compact ? 'h-14 w-14' : 'h-16 w-16'}`}
-        />
-
-        <div className="min-w-0 flex-1 pr-2">
-          <p
-            className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider transition-colors duration-700"
-            style={{ color: 'color-mix(in srgb, var(--np-accent-light) 88%, white)' }}
-          >
-            {live && <Equalizer />}
-            {live ? 'Now playing' : 'Paused'}
-          </p>
-          <p className="truncate text-sm font-semibold text-white drop-shadow-sm sm:text-base">
-            {nowPlaying.title}
-          </p>
-          {nowPlaying.artist && (
-            <p className="truncate text-xs text-neutral-300 sm:text-sm">
-              {nowPlaying.artist}
-            </p>
-          )}
-        </div>
-
-        <div
-          className={`ytmq-now-controls flex shrink-0 items-center ${compact ? 'gap-1' : 'gap-1.5'}`}
-          title={!canControl ? 'The host has limited playback controls' : undefined}
+      <div aria-hidden className="ytmq-mini-bg absolute inset-0 -z-10" />
+      <div className="flex items-center gap-3 p-2.5">
+        <button
+          type="button"
+          onClick={onOpenLyrics}
+          className="flex min-w-0 flex-1 items-center gap-3 text-left"
+          aria-label={`Open lyrics for ${nowPlaying.title}`}
         >
-          <ControlButton
-            label="Previous"
-            onClick={() => trigger('prev')}
-            disabled={disabled}
-            active={pendingAction === 'prev'}
-            compact={compact}
-          >
-            <PrevIcon />
-          </ControlButton>
-          <ControlButton
-            label={isPlaying ? 'Pause' : 'Play'}
-            onClick={() => trigger(isPlaying ? 'pause' : 'play')}
-            disabled={disabled}
-            active={pendingAction === 'play' || pendingAction === 'pause'}
-            primary
-            compact={compact}
-          >
-            {isPlaying ? <PauseIcon /> : <PlayIcon />}
-          </ControlButton>
-          <ControlButton
-            label="Next"
-            onClick={() => trigger('next')}
-            disabled={disabled}
-            active={pendingAction === 'next'}
-            compact={compact}
-          >
-            <NextIcon />
-          </ControlButton>
-        </div>
+          <img
+            src={thumb}
+            alt=""
+            crossOrigin="anonymous"
+            className={`h-12 w-12 shrink-0 rounded-xl object-cover ${stale ? 'opacity-70' : ''}`}
+          />
+          <span className="min-w-0">
+            <span className="flex items-center gap-1.5">
+              <SourceIcon source={source} className="h-3.5 w-3.5 shrink-0" />
+              <span className="truncate text-sm font-bold text-white">{nowPlaying.title}</span>
+            </span>
+            <span className="block truncate text-xs text-white/70">
+              {live ? nowPlaying.artist : stale ? 'Player not reporting' : `Paused · ${nowPlaying.artist}`}
+            </span>
+          </span>
+        </button>
+        {!expanded && (
+          <>
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={() => player.control(isPlaying ? 'pause' : 'play')}
+              aria-label={isPlaying ? 'Pause' : 'Play'}
+              className="ytmq-press ytmq-anim-fade inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-neutral-950 disabled:opacity-40"
+            >
+              {isPlaying ? <PauseIcon className="h-[18px] w-[18px]" /> : <PlayIcon className="ml-0.5 h-[18px] w-[18px]" />}
+            </button>
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={() => player.control('next')}
+              aria-label="Next"
+              className="ytmq-press ytmq-anim-fade inline-flex h-10 w-9 shrink-0 items-center justify-center rounded-full text-white disabled:opacity-40"
+            >
+              <NextIcon className="h-5 w-5" />
+            </button>
+          </>
+        )}
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          aria-expanded={expanded}
+          aria-label={expanded ? 'Fewer controls' : 'More controls'}
+          className="ytmq-press -ml-1 inline-flex h-10 w-8 shrink-0 items-center justify-center rounded-full text-white/70"
+        >
+          <ChevronDownIcon className={`h-5 w-5 transition-transform duration-300 ${expanded ? 'rotate-180' : ''}`} />
+        </button>
       </div>
 
-      <div className={compact ? 'px-3 pb-2.5' : 'px-4 pb-3'}>
-        <SquigglyProgress
-          position={position}
-          duration={nowPlaying.duration}
-          playing={live}
-          canSeek={!disabled && Boolean(nowPlaying.duration)}
-          onSeek={(v) => sendPlaybackSeek(roomId, v)}
-          updatedAt={nowPlaying.updatedAt}
-          trackKey={nowPlaying.videoId}
-          size="sm"
-          times="elapsed-remaining"
-        />
+      <div className={`ytmq-collapse ${expanded ? 'is-open' : ''}`}>
+        <div className="min-h-0">
+          <div className="flex flex-col gap-3 px-4 pb-4 pt-1">
+            <SquigglyProgress
+              position={position}
+              duration={nowPlaying.duration}
+              playing={live}
+              canSeek={!disabled && Boolean(nowPlaying.duration)}
+              onSeek={player.seek}
+              updatedAt={nowPlaying.updatedAt}
+              trackKey={nowPlaying.videoId}
+              size="sm"
+              times="elapsed-remaining"
+            />
+            <div className="flex items-center justify-between">
+              <ShuffleButton state={player.shuffle} onShuffle={player.toggleShuffle} disabled={disabled} size="md" />
+              <button
+                type="button"
+                disabled={disabled}
+                onClick={() => player.control('prev')}
+                aria-label="Previous"
+                className="ytmq-press inline-flex h-11 w-11 items-center justify-center rounded-full text-white disabled:opacity-40"
+              >
+                <PrevIcon className="h-6 w-6" />
+              </button>
+              <button
+                type="button"
+                disabled={disabled}
+                onClick={() => player.control(isPlaying ? 'pause' : 'play')}
+                aria-label={isPlaying ? 'Pause' : 'Play'}
+                className="ytmq-press inline-flex h-14 w-14 items-center justify-center rounded-full bg-white text-neutral-950 disabled:opacity-40"
+              >
+                {isPlaying ? <PauseIcon className="h-6 w-6" /> : <PlayIcon className="ml-0.5 h-6 w-6" />}
+              </button>
+              <button
+                type="button"
+                disabled={disabled}
+                onClick={() => player.control('next')}
+                aria-label="Next"
+                className="ytmq-press inline-flex h-11 w-11 items-center justify-center rounded-full text-white disabled:opacity-40"
+              >
+                <NextIcon className="h-6 w-6" />
+              </button>
+              <span className="h-9 w-9" aria-hidden />
+            </div>
+            {isHost && !disabled && (
+              <VolumeBar volume={nowPlaying.volume} onVolume={player.setVolume} updatedAt={nowPlaying.updatedAt} />
+            )}
+            {!canControl && (
+              <p className="text-center text-xs text-white/60">The host keeps the controls for now.</p>
+            )}
+          </div>
+        </div>
       </div>
     </section>
-  )
-}
-
-function Equalizer() {
-  return (
-    <span className="ytmq-eq" aria-hidden>
-      <span className="ytmq-eq-bar" />
-      <span className="ytmq-eq-bar" />
-      <span className="ytmq-eq-bar" />
-      <span className="ytmq-eq-bar" />
-    </span>
-  )
-}
-
-type ControlButtonProps = {
-  label: string
-  onClick: () => void
-  disabled?: boolean
-  active?: boolean
-  primary?: boolean
-  compact?: boolean
-  children: React.ReactNode
-}
-
-function ControlButton({
-  label,
-  onClick,
-  disabled,
-  active,
-  primary,
-  compact,
-  children,
-}: ControlButtonProps) {
-  const size = compact
-    ? primary
-      ? 'h-9 w-9'
-      : 'h-8 w-8'
-    : primary
-      ? 'h-10 w-10'
-      : 'h-9 w-9'
-  const base =
-    'inline-flex items-center justify-center rounded-full text-white transition active:scale-95 disabled:opacity-40 disabled:active:scale-100'
-  const tone = primary
-    ? 'bg-white !text-neutral-950 hover:scale-105'
-    : 'hover:bg-white/15'
-  const ring = active ? ' ytmq-now-control-active' : ''
-  return (
-    <button
-      type="button"
-      aria-label={label}
-      title={label}
-      onClick={onClick}
-      disabled={disabled}
-      className={`${base} ${tone} ${size}${ring}`}
-    >
-      {children}
-    </button>
-  )
-}
-
-function PrevIcon() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="currentColor"
-      aria-hidden
-      className="h-4 w-4"
-    >
-      <path d="M7 6h2v12H7zM10 12l9-6v12z" />
-    </svg>
-  )
-}
-
-function NextIcon() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="currentColor"
-      aria-hidden
-      className="h-4 w-4"
-    >
-      <path d="M15 6h2v12h-2zM5 6v12l9-6z" />
-    </svg>
-  )
-}
-
-function PlayIcon() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="currentColor"
-      aria-hidden
-      className="h-4 w-4"
-    >
-      <path d="M8 5v14l11-7z" />
-    </svg>
-  )
-}
-
-function PauseIcon() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="currentColor"
-      aria-hidden
-      className="h-4 w-4"
-    >
-      <path d="M6 5h4v14H6zM14 5h4v14h-4z" />
-    </svg>
   )
 }

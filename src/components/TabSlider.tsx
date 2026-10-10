@@ -1,4 +1,4 @@
-import { useRef, useState, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 
 type Dir = 'fwd' | 'back'
 
@@ -36,31 +36,44 @@ export function TabSlider({
   children,
 }: TabSliderProps) {
   const viewportRef = useRef<HTMLDivElement>(null)
-  const prevKey = useRef(activeKey)
-  const lastChild = useRef<ReactNode>(children)
-  const [outgoing, setOutgoing] = useState<{
-    key: string
-    node: ReactNode
-    dir: Dir
-    height: number
-  } | null>(null)
-
-  // Derive the transition while rendering the new key: snapshot the panel that
-  // was on screen (and its current height) so it can play its exit before
-  // unmounting. Locking the height keeps the viewport from collapsing while both
-  // panels are absolutely positioned.
-  if (activeKey !== prevKey.current) {
-    setOutgoing({
-      key: prevKey.current,
-      node: lastChild.current,
-      dir: direction,
-      height: viewportRef.current?.offsetHeight ?? 0,
-    })
-    prevKey.current = activeKey
+  // The panel on screen, kept current so the one that leaves shows what it
+  // showed last, not what it showed when it was opened.
+  const [shown, setShown] = useState<{ key: string; node: ReactNode }>({ key: activeKey, node: children })
+  const [outgoing, setOutgoing] = useState<{ key: string; node: ReactNode; dir: Dir } | null>(null)
+  if (activeKey !== shown.key) {
+    setOutgoing({ key: shown.key, node: shown.node, dir: direction })
+    setShown({ key: activeKey, node: children })
+  } else if (children !== shown.node) {
+    setShown({ key: activeKey, node: children })
   }
-  lastChild.current = children
+
+  // The viewport's height as it was before a slide, so it can be held while
+  // both panels are out of flow.
+  const lastHeight = useRef(0)
+  useEffect(() => {
+    const el = viewportRef.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(() => {
+      if (!el.dataset.sliding) lastHeight.current = el.offsetHeight
+    })
+    ro.observe(el)
+    lastHeight.current = el.offsetHeight
+    return () => ro.disconnect()
+  }, [])
 
   const sliding = outgoing !== null
+  useLayoutEffect(() => {
+    const el = viewportRef.current
+    if (!el) return
+    if (sliding) {
+      el.dataset.sliding = '1'
+      el.style.height = `${lastHeight.current}px`
+    } else {
+      delete el.dataset.sliding
+      el.style.height = ''
+    }
+  }, [sliding])
+
   const minH = fill ? 'min-h-0' : ''
 
   return (
@@ -69,12 +82,10 @@ export function TabSlider({
       className={`relative isolate flex flex-col ${minH} ${className ?? ''}`}
       style={
         sliding
-          ? // During the slide both panels are absolutely positioned, so the
-            // viewport has no in-flow content to size from. Lock it to the
-            // measured height — and force `flex: none` so the `flex-1` class
-            // (`flex-basis: 0%`) can't override this height back to 0 when an
-            // ancestor isn't height-bounded (e.g. the scrolling mobile page).
-            { height: outgoing.height, flex: 'none', overflow: 'clip' }
+          ? // Both panels are out of flow during the slide; the height set
+            // above holds the viewport open, and flex: none stops flex-1 from
+            // collapsing it on the scrolling phone page.
+            { flex: 'none', overflow: 'clip' }
           : { overflowX: 'clip' }
       }
     >

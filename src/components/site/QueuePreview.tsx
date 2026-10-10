@@ -78,16 +78,16 @@ export function QueuePreview() {
 
   return (
     <div className="relative mx-auto w-full max-w-sm" aria-label="Example lobby" role="img">
-      <div className="rounded-[28px] border border-white/10 bg-neutral-900 p-3 shadow-[0_30px_80px_-20px_rgba(0,0,0,0.8)]">
+      <div className="rounded-[32px] bg-[#121212] p-3 shadow-[0_30px_80px_-20px_rgba(0,0,0,0.8)] ring-1 ring-white/[0.06]">
         <div className="flex items-center justify-between px-2 pb-3 pt-1 text-xs">
-          <span className="font-mono font-medium tracking-[0.2em] text-neutral-300">4F9K2A</span>
-          <span className="inline-flex items-center gap-1.5 text-neutral-400">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />5 listening
+          <span className="font-mono text-[13px] font-semibold tracking-[0.2em] text-white">4F9K2A</span>
+          <span className="inline-flex h-6 items-center gap-1.5 rounded-full bg-white/[0.06] px-2.5 font-semibold text-neutral-300">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />5 here
           </span>
         </div>
 
-        <div key={now.id} className="ytmq-anim-fade flex items-center gap-3 rounded-2xl bg-neutral-800/70 p-3">
-          <Art colors={now.art} className="h-16 w-16 shrink-0 rounded-lg" />
+        <div key={now.id} className="ytmq-anim-fade flex items-center gap-3 rounded-[22px] bg-white/[0.06] p-3">
+          <Art colors={now.art} className="h-16 w-16 shrink-0 rounded-xl" />
           <div className="min-w-0 flex-1">
             <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-accent-400">Now playing</p>
             <p className="mt-0.5 truncate font-bold text-white">{now.title}</p>
@@ -101,9 +101,7 @@ export function QueuePreview() {
           </div>
         </div>
 
-        <p className="px-2 pb-1.5 pt-4 text-xs font-semibold uppercase tracking-[0.12em] text-neutral-500">
-          Up next
-        </p>
+        <p className="px-2 pb-1.5 pt-4 text-[15px] font-extrabold tracking-[-0.01em] text-white">Next in queue</p>
         <ul className="flex min-h-[13.75rem] flex-col">
           {queue.map((track, i) => (
             <li key={track.id} className="ytmq-anim-row flex items-center gap-3 rounded-xl px-2 py-2">
@@ -113,8 +111,8 @@ export function QueuePreview() {
                 <p className="flex items-center gap-2 truncate text-sm font-semibold text-neutral-100">
                   <span className="truncate">{track.title}</span>
                   {track.next && (
-                    <span className="shrink-0 rounded-full bg-accent-500/15 px-1.5 py-px text-[10px] font-bold uppercase tracking-wide text-accent-300">
-                      Next
+                    <span className="inline-flex h-5 shrink-0 items-center rounded-full bg-accent-500/15 px-2 text-[10px] font-bold text-accent-300">
+                      Play next
                     </span>
                   )}
                 </p>

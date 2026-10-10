@@ -6,9 +6,9 @@ type ToastStackProps = {
 }
 
 const VARIANT_STYLES: Record<ToastVariant, string> = {
-  success: 'border-white/10 bg-neutral-800 text-white',
-  info: 'border-white/10 bg-neutral-800 text-white',
-  error: 'border-accent-500/40 bg-[#2a1210] text-accent-100',
+  success: 'bg-[#2a2a2a] text-white',
+  info: 'bg-[#2a2a2a] text-white',
+  error: 'bg-[#3a1611] text-accent-100',
 }
 
 function ToastIcon({ variant }: { variant: ToastVariant }) {
@@ -50,7 +50,7 @@ export function ToastStack({ toasts, onDismiss }: ToastStackProps) {
 
   return (
     <div
-      className="pointer-events-none fixed inset-x-0 bottom-[calc(6.25rem+env(safe-area-inset-bottom))] z-50 flex flex-col items-center gap-2 px-4 md:bottom-[7rem]"
+      className="pointer-events-none fixed inset-x-0 bottom-[calc(5.75rem+env(safe-area-inset-bottom))] z-[60] flex flex-col items-center gap-2 px-4 md:bottom-[7rem]"
       aria-live="polite"
     >
       {toasts.map((toast) => (
@@ -63,7 +63,7 @@ export function ToastStack({ toasts, onDismiss }: ToastStackProps) {
               ? 'ytmq-toast-out 0.3s var(--ease-out-soft) both'
               : 'ytmq-toast-in 0.32s var(--ease-spring) both',
           }}
-          className={`pointer-events-auto flex max-w-[24rem] items-center gap-2.5 rounded-full border px-4 py-2.5 text-sm font-semibold shadow-[0_12px_32px_rgba(0,0,0,0.5)] ${VARIANT_STYLES[toast.variant]}`}
+          className={`pointer-events-auto flex h-11 max-w-[min(26rem,calc(100vw-2rem))] items-center gap-2.5 rounded-full pl-3.5 pr-4 text-sm font-semibold shadow-[0_14px_36px_rgba(0,0,0,0.55)] ring-1 ring-white/[0.07] ${VARIANT_STYLES[toast.variant]}`}
         >
           <ToastIcon variant={toast.variant} />
           <span className="truncate">{toast.text}</span>
