@@ -75,3 +75,39 @@ export function hasContent(result: ProviderResult | null): result is ProviderRes
     result && (result.syncedLrc || result.plain || result.instrumental),
   )
 }
+
+/** Lowercase, no accents, no "(2004 Remaster)" / "- Live" / "feat." tails, words only. */
+function core(text: string): string[] {
+  return text
+    .normalize('NFKD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/[([{].*?[)\]}]/g, ' ')
+    .replace(/\s-\s.*$/, ' ')
+    .replace(/\b(feat|ft|featuring|with)\b.*$/, ' ')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+}
+
+function overlap(a: string[], b: string[]): number {
+  if (a.length === 0 || b.length === 0) return 0
+  const set = new Set(b)
+  return a.filter((w) => set.has(w)).length / Math.min(a.length, b.length)
+}
+
+/**
+ * Whether a provider's hit is plausibly the song asked for. Providers' fuzzy
+ * matchers sometimes answer with a different song entirely (Musixmatch once
+ * matched "Dreams" by Fleetwood Mac to "NOKIA" by Drake), and wrong lyrics
+ * are worse than none. Title and artist must line up, or one of them plus
+ * the length; translated titles from NetEase/KuGou pass on artist + length.
+ */
+export function isPlausibleMatch(result: ProviderResult, query: LyricsQuery): boolean {
+  const titleOk = overlap(core(query.title), core(result.trackName)) >= 0.5
+  const artistOk = !query.artist || overlap(core(query.artist), core(result.artistName)) >= 0.5
+  const lengthOk =
+    query.duration != null && result.duration != null && Math.abs(query.duration - result.duration) <= 4
+  return (titleOk && artistOk) || (titleOk && lengthOk) || (artistOk && lengthOk && Boolean(query.artist))
+}

@@ -12,6 +12,7 @@ import { searchNetease } from './netease.ts'
 import { searchMusixmatch } from './musixmatch.ts'
 import {
   hasContent,
+  isPlausibleMatch,
   scoreResult,
   type LyricsQuery,
   type ProviderName,
@@ -87,7 +88,8 @@ async function readInput(req: Request): Promise<{
 
   const merged: Body = { ...fromQuery, ...body }
   const title = (merged.title ?? '').trim()
-  const artist = (merged.artist ?? '').trim()
+  // YouTube Music bylines read "Artist • Album • Year"; only the artist helps.
+  const artist = (merged.artist ?? '').split(/\s[•·]\s/)[0].trim()
   const album = merged.album?.trim() || undefined
   const duration = parseDuration(merged.duration)
 
@@ -145,13 +147,14 @@ async function aggregate(
     for (const r of results) if (hasContent(r)) pooled.push(r)
   }
 
-  const mxmTask = sources.has('musixmatch')
-    ? searchMusixmatch(query).catch(() => [])
-    : null
+  // Drop hits for a different song before anything gets ranked.
+  const checked = (task: Promise<ProviderResult[]>) =>
+    task.catch(() => [] as ProviderResult[]).then((rs) => rs.filter((r) => isPlausibleMatch(r, query)))
+  const mxmTask = sources.has('musixmatch') ? checked(searchMusixmatch(query)) : null
   const fallbackTasks: Promise<ProviderResult[]>[] = []
-  if (sources.has('lrclib')) fallbackTasks.push(searchLrclib(query).catch(() => []))
-  if (sources.has('netease')) fallbackTasks.push(searchNetease(query).catch(() => []))
-  if (sources.has('kugou')) fallbackTasks.push(searchKugou(query).catch(() => []))
+  if (sources.has('lrclib')) fallbackTasks.push(checked(searchLrclib(query)))
+  if (sources.has('netease')) fallbackTasks.push(checked(searchNetease(query)))
+  if (sources.has('kugou')) fallbackTasks.push(checked(searchKugou(query)))
 
   // Tier 1 — Musixmatch (primary). Use its synced lyrics straight away.
   if (mxmTask) {

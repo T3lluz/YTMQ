@@ -374,10 +374,12 @@ function readNowPlaying(): NowPlayingPayload | null {
     bar?.querySelector('.title')?.textContent?.trim() ??
     bar?.querySelector('[title]')?.textContent?.trim() ??
     ''
-  const artist =
+  // The byline reads "Artist • Album • Year"; guests only need the artist.
+  const artist = (
     bar?.querySelector('.byline')?.textContent?.trim() ??
     bar?.querySelector('.subtitle')?.textContent?.trim() ??
     ''
+  ).split(/\s[•·]\s/)[0].trim()
 
   let videoId = new URLSearchParams(location.search).get('v') ?? ''
   if (!videoId) {
