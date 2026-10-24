@@ -86,6 +86,8 @@ export type SpotifyPlayback = {
   progress_ms: number | null
   device?: SpotifyDevice
   shuffle_state?: boolean
+  /** The album or playlist playing, when there is one. */
+  context?: { uri?: string } | null
   /** Not in Spotify's docs, but sent: whether the app's own Smart Shuffle is on. */
   smart_shuffle?: boolean
   item: {
@@ -119,28 +121,33 @@ export async function fetchSpotifyPlayback(): Promise<SpotifyPlayback | null> {
 type QueueTrack = {
   type?: string
   id: string | null
+  uri?: string
   name: string
   artists?: { name: string }[]
   album?: { images?: { url: string }[] }
 }
 
-/** First upcoming track on the host's Spotify player, if the API has one. */
-export async function fetchSpotifyNextUp(): Promise<NowPlayingNextUp | null> {
-  try {
-    const data = await spotifyJson<{ queue?: QueueTrack[] }>('/me/player/queue')
-    const next = (data.queue ?? []).find(
-      (item) => item?.id && item.name && item.type !== 'episode',
-    )
-    if (!next?.id) return null
-    return {
-      videoId: `spotify:${next.id}`,
-      title: next.name,
-      artist: (next.artists ?? []).map((artist) => artist.name).join(', '),
-      thumbnailUrl: next.album?.images?.[0]?.url ?? '',
-    }
-  } catch {
-    return null
-  }
+export type SpotifyQueueTrack = NowPlayingNextUp & { uri: string }
+
+/**
+ * What the host's Spotify plays after the current track, in order: songs
+ * queued by hand first, then the rest of the album or playlist.
+ */
+export async function fetchSpotifyQueue(): Promise<SpotifyQueueTrack[]> {
+  const data = await spotifyJson<{ queue?: QueueTrack[] }>('/me/player/queue')
+  return (data?.queue ?? []).flatMap((item) =>
+    item?.id && item.uri && item.name && item.type !== 'episode'
+      ? [
+          {
+            uri: item.uri,
+            videoId: `spotify:${item.id}`,
+            title: item.name,
+            artist: (item.artists ?? []).map((artist) => artist.name).join(', '),
+            thumbnailUrl: item.album?.images?.[0]?.url ?? '',
+          },
+        ]
+      : [],
+  )
 }
 
 export async function pauseSpotifyPlayback() {
@@ -210,10 +217,4 @@ export async function searchSpotifyTracks(query: string, limit = 8): Promise<Spo
       albumArt: t.album?.images?.[0]?.url ?? '',
       durationMs: t.duration_ms,
     }))
-}
-
-/** The uris in Spotify's own queue after the current track. */
-export async function fetchSpotifyQueueUris(): Promise<string[]> {
-  const data = await spotifyJson<{ queue?: { uri?: string }[] }>('/me/player/queue')
-  return (data?.queue ?? []).map((t) => t?.uri ?? '').filter(Boolean)
 }

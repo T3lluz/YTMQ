@@ -13,18 +13,26 @@
  * YTMQ does it. With it on, every third song is a related one from YouTube
  * Music's radio for what is playing, added to the shared queue marked as a
  * smart shuffle pick, where anyone can remove it.
+ *
+ * Up next and "queued in Spotify": Spotify's queue is read every few
+ * seconds. The next song is the first one queued in Spotify by hand, else the
+ * shared song about to be handed over, else the rest of the album or
+ * playlist. A song that turns up ahead of what was already queued, while the
+ * same track keeps playing, was queued in Spotify itself and is announced to
+ * the room with the snapshot.
  */
 import { subscribePlaybackControl, type PlaybackControlPayload } from './bridgeChannel'
 import {
   PREV_RESTART_SECONDS,
   type NowPlaying,
   type NowPlayingNextUp,
+  type QueuedOnPlayer,
 } from './playback'
 import { forgetSource, getActiveSource, publishNowPlaying } from './playbackChannel'
 import {
   addToSpotifyQueue,
-  fetchSpotifyNextUp,
   fetchSpotifyPlayback,
+  fetchSpotifyQueue,
   isNoActiveDevice,
   isPremiumRequired,
   pauseSpotifyPlayback,
@@ -36,6 +44,7 @@ import {
   skipSpotifyNext,
   skipSpotifyPrevious,
   type SpotifyPlayback,
+  type SpotifyQueueTrack,
 } from './spotifyApi'
 import { buildSpotifySearchQueries, pickSpotifyMatch } from './spotifyMatch'
 import { addTrackToQueue, removeQueueItem, type QueueItem } from './queue'
@@ -64,6 +73,12 @@ const FEED_LEAD_MS = 25_000
 /** A handed-over song that has not started after this long is given up on. */
 const PUSH_EXPIRES_MS = 20 * 60_000
 const SMART_EVERY = 3
+/** How often Spotify's own queue is read, for up next and songs queued there. */
+const QUEUE_POLL_MS = 4_000
+/** A song queued in Spotify rides along in the snapshots this long. */
+const ANNOUNCE_MS = 12_000
+/** More new songs than this at once is a reshuffle, not someone queueing. */
+const MAX_QUEUED_AT_ONCE = 3
 const SMART_KEY = (roomId: string) => `ytmq_smart_shuffle_${roomId}`
 
 function log(message: string, ...rest: unknown[]) {
@@ -103,7 +118,6 @@ export function startSpotifyPlayer(options: SpotifyPlayerOptions): () => void {
   let inFlight = false
   let lastStatusKey = ''
   let lastTrackId: string | null = null
-  let nextUp: NowPlayingNextUp | undefined
   let lastPlayback: SpotifyPlayback | null = null
   let smart = readSmart(roomId)
   let tracksSinceSmart = 0
@@ -114,6 +128,16 @@ export function startSpotifyPlayer(options: SpotifyPlayerOptions): () => void {
   // Rows whose Spotify twin was looked up: video id → uri, or null for none.
   const resolved = new Map<string, string | null>()
   let feeding = false
+
+  // Spotify's queue after the current track, as last read.
+  let spotifyQueue: SpotifyQueueTrack[] = []
+  let queueReadAt = 0
+  // What the queue was read against: a song that appears while this stays
+  // the same was queued by hand. Track, album or shuffle changes reset it.
+  let queueKey = ''
+  // Songs seen being queued in Spotify itself, still waiting to play.
+  const queuedByHand = new Set<string>()
+  const announced: (QueuedOnPlayer & { at: number })[] = []
 
   function setStatus(status: SpotifyPlayerStatus) {
     const key = `${status.state}|${status.message ?? ''}|${status.deviceName ?? ''}`
@@ -138,12 +162,97 @@ export function startSpotifyPlayer(options: SpotifyPlayerOptions): () => void {
         typeof playback.device?.volume_percent === 'number' ? playback.device.volume_percent : undefined,
       source: 'spotify',
       thumbnailUrl: item.album?.images?.[0]?.url || undefined,
-      nextUp,
+      nextUp: computeNextUp(playback),
+      queued: recentQueued(),
       shuffle: Boolean(playback.shuffle_state),
       smartShuffle: smart || Boolean(playback.smart_shuffle),
       deviceName: playback.device?.name,
     }
     publishNowPlaying(roomId, snapshot)
+  }
+
+  function isOurs(playback: SpotifyPlayback) {
+    return playback.is_playing || getActiveSource(roomId) === 'spotify'
+  }
+
+  function rowTrack(row: QueueItem): NowPlayingNextUp {
+    return {
+      videoId: row.video_id,
+      title: row.title,
+      artist: artistOf(row),
+      thumbnailUrl: row.thumbnail_url,
+      queueItemId: row.id,
+    }
+  }
+
+  /** The song Spotify will really play next. */
+  function computeNextUp(playback: SpotifyPlayback): NowPlayingNextUp | undefined {
+    const first = spotifyQueue[0]
+    const pushedUris = new Set([...pushed.values()].map((p) => p.uri))
+    const shared = getQueue()
+    if (first && pushedUris.has(first.uri)) {
+      const rowId = [...pushed].find(([, p]) => p.uri === first.uri)?.[0]
+      const row = shared.find((r) => r.id === rowId)
+      return row ? { ...rowTrack(row), thumbnailUrl: first.thumbnailUrl || row.thumbnail_url } : first
+    }
+    // Songs queued in Spotify by hand play before anything YTMQ hands over.
+    // Anything ahead of a handed-over song was queued by hand too.
+    const byHand =
+      first && (queuedByHand.has(first.uri) || spotifyQueue.some((t) => pushedUris.has(t.uri)))
+    if (byHand) return first
+    // A handed-over song Spotify's queue does not show yet, or the shared
+    // song that goes in near the end of this one.
+    const handed = shared.find((r) => pushed.has(r.id))
+    if (handed) return rowTrack(handed)
+    if (isOurs(playback)) {
+      const upcoming = shared.find((r) => resolved.get(r.video_id) !== null)
+      if (upcoming) return rowTrack(upcoming)
+    }
+    return first
+  }
+
+  function recentQueued(): QueuedOnPlayer[] | undefined {
+    const now = Date.now()
+    while (announced.length > 0 && now - announced[0]!.at > ANNOUNCE_MS) announced.shift()
+    return announced.length > 0 ? announced.map(({ id, track }) => ({ id, track })) : undefined
+  }
+
+  async function readQueue(playback: SpotifyPlayback, id: string) {
+    let next: SpotifyQueueTrack[]
+    try {
+      next = await fetchSpotifyQueue()
+    } catch (err) {
+      log('Could not read the Spotify queue', err)
+      return
+    }
+    queueReadAt = Date.now()
+    const key = `${id}|${playback.context?.uri ?? ''}|${playback.shuffle_state ? 1 : 0}`
+    const before = queueKey === key ? new Set(spotifyQueue.map((t) => t.uri)) : null
+    queueKey = key
+    spotifyQueue = next
+
+    const uris = new Set(next.map((t) => t.uri))
+    for (const uri of queuedByHand) if (!uris.has(uri)) queuedByHand.delete(uri)
+    if (!before || before.size === 0) return
+
+    // The album or playlist only moves on when the track changes, so a new
+    // song ahead of ones already there was queued in Spotify itself.
+    const pushedUris = new Set([...pushed.values()].map((p) => p.uri))
+    let lastKnown = -1
+    next.forEach((t, i) => {
+      if (before.has(t.uri)) lastKnown = i
+    })
+    const added = next.filter(
+      (t, i) => i < lastKnown && !before.has(t.uri) && !pushedUris.has(t.uri) && !queuedByHand.has(t.uri),
+    )
+    if (added.length === 0 || added.length > MAX_QUEUED_AT_ONCE) return
+    const now = Date.now()
+    for (const track of added) {
+      queuedByHand.add(track.uri)
+      const { uri, ...rest } = track
+      announced.push({ id: `${uri}@${now}`, track: rest, at: now })
+      log('Queued in Spotify', track.title)
+    }
   }
 
   async function resolveRow(row: QueueItem): Promise<string | null> {
@@ -182,8 +291,16 @@ export function startSpotifyPlayer(options: SpotifyPlayerOptions): () => void {
           await dropRow(row)
           continue
         }
-        await addToSpotifyQueue(uri)
+        // Marked before the request, so a queue read in between does not
+        // take it for a song queued in Spotify.
         pushed.set(row.id, { uri, at: Date.now(), title: row.title })
+        try {
+          await addToSpotifyQueue(uri)
+        } catch (err) {
+          pushed.delete(row.id)
+          throw err
+        }
+        queueReadAt = 0
         log('Handed to Spotify', row.title, uri)
         return true
       }
@@ -361,23 +478,23 @@ export function startSpotifyPlayer(options: SpotifyPlayerOptions): () => void {
       if (id !== lastTrackId) {
         const first = lastTrackId === null
         lastTrackId = id
-        nextUp = (await fetchSpotifyNextUp()) ?? undefined
         if (!first) await onTrackStarted(playback)
+        queueReadAt = 0
       }
+      if (Date.now() - queueReadAt >= QUEUE_POLL_MS) await readQueue(playback, id)
       if (stopped) return
       publish(playback)
       setStatus({ state: 'running', deviceName: playback.device?.name })
 
       // Spotify plays the shared queue only while it is the room's player.
-      const ours = playback.is_playing || getActiveSource(roomId) === 'spotify'
-      if (!ours) return
+      if (!isOurs(playback)) return
       for (const [rowId, entry] of pushed) {
         if (Date.now() - entry.at > PUSH_EXPIRES_MS) pushed.delete(rowId)
       }
       const waiting = pushed.size > 0
       const remaining = (playback.item?.duration_ms ?? 0) - (playback.progress_ms ?? 0)
       if (!waiting && playback.is_playing && remaining > 0 && remaining < FEED_LEAD_MS) {
-        if (await feedNext().catch(() => false)) nextUp = (await fetchSpotifyNextUp()) ?? nextUp
+        await feedNext().catch(() => false)
       }
     } finally {
       inFlight = false

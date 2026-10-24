@@ -7,6 +7,7 @@ import { LyricsView } from '../components/LyricsView'
 import { TabBar, type RoomTab } from '../components/TabBar'
 import { TabSlider } from '../components/TabSlider'
 import { ToastStack } from '../components/ToastStack'
+import { PlayerQueuedDrop } from '../components/PlayerQueuedDrop'
 import { AvatarStack } from '../components/ParticipantList'
 import { SearchPanel } from '../components/search/SearchPanel'
 import { QueueTab } from '../components/room/QueueTab'
@@ -770,6 +771,7 @@ export function Room() {
           onCopied={(msg) => showToast(msg, 'info')}
         />
         <ToastStack toasts={toasts} onDismiss={dismiss} />
+        <PlayerQueuedDrop roomId={activeRoomId} />
       </main>
     </RoomChromeContext.Provider>
   )

@@ -1,4 +1,6 @@
-import { useEffect, useId, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { holdDropSlot } from '../lib/dropSlot'
+import { LiquidDrop } from './LiquidDrop'
 
 export type UpNextTrack = {
   videoId: string
@@ -30,11 +32,9 @@ type RenderState = {
 }
 
 /**
- * "Up next" on the lyrics screen, as a drop of liquid: it gathers at the top
- * edge, drips down and swells into a card that hangs from the edge by a
- * neck, then a second before the next song it dips, stretches and snaps
- * back up into the edge. The liquid is a gooey SVG filter over two plain
- * shapes (the edge and the drop); the card's text sits on top, unfiltered.
+ * "Up next" on the lyrics screen, as a drop of liquid that drips from the top
+ * edge in the song's last stretch and snaps back up a second before the next
+ * song starts.
  */
 export function LyricsUpNext({ track, remaining, live, enabled }: LyricsUpNextProps) {
   const shouldShow =
@@ -45,7 +45,6 @@ export function LyricsUpNext({ track, remaining, live, enabled }: LyricsUpNextPr
     remaining <= SHOW_WITHIN_S &&
     remaining > LEAVE_BEFORE_S
 
-  const filterId = `ytmq-goo-${useId().replace(/:/g, '')}`
   const trackId = track?.videoId ?? ''
   const trackRef = useRef(track)
   useEffect(() => {
@@ -83,6 +82,9 @@ export function LyricsUpNext({ track, remaining, live, enabled }: LyricsUpNextPr
     [],
   )
 
+  const hanging = render !== null
+  useEffect(() => (hanging ? holdDropSlot() : undefined), [hanging])
+
   if (!render) return null
 
   const { track: shown, phase } = render
@@ -90,62 +92,5 @@ export function LyricsUpNext({ track, remaining, live, enabled }: LyricsUpNextPr
   const span = SHOW_WITHIN_S - LEAVE_BEFORE_S
   const progress = Math.min(1, Math.max(0, (SHOW_WITHIN_S - remaining) / span))
 
-  return (
-    <div
-      className={`ytmq-drop pointer-events-none absolute inset-x-0 top-0 z-30 flex justify-center ${phase === 'leave' ? 'is-leaving' : ''}`}
-      aria-live="polite"
-    >
-      <svg aria-hidden className="absolute h-0 w-0">
-        <defs>
-          <filter id={filterId}>
-            <feGaussianBlur in="SourceGraphic" stdDeviation="9" result="blur" />
-            <feColorMatrix in="blur" mode="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 22 -10" result="goo" />
-            <feComposite in="SourceGraphic" in2="goo" operator="atop" />
-          </filter>
-        </defs>
-      </svg>
-
-      {/* The liquid: the top edge and the drop, melted together. */}
-      <div aria-hidden className="ytmq-drop-liquid absolute inset-x-0 top-0 h-40" style={{ filter: `url(#${filterId})` }}>
-        <span className="ytmq-drop-edge" />
-        <span className="ytmq-drop-blob" />
-      </div>
-
-      {/* The card's contents, over the drop once it has swollen. */}
-      <div className="ytmq-drop-card relative flex items-center gap-3 overflow-hidden px-3.5">
-        {shown.thumbnailUrl ? (
-          <img
-            src={shown.thumbnailUrl}
-            alt=""
-            referrerPolicy="no-referrer"
-            onError={(event) => {
-              const img = event.currentTarget
-              if (img.dataset.fallback === '1') return
-              if (img.src.includes('/maxresdefault.jpg')) {
-                img.dataset.fallback = '1'
-                img.src = img.src.replace('/maxresdefault.jpg', '/mqdefault.jpg')
-              }
-            }}
-            className="h-11 w-11 shrink-0 rounded-[10px] object-cover shadow-lg"
-          />
-        ) : (
-          <div className="h-11 w-11 shrink-0 rounded-[10px] bg-white/10" />
-        )}
-        <div className="min-w-0 flex-1">
-          <p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-white/60">Up next</p>
-          <p className="truncate text-sm font-bold leading-tight text-white">{shown.title}</p>
-          {shown.artist && <p className="truncate text-xs text-white/65">{shown.artist}</p>}
-        </div>
-        <span
-          aria-hidden
-          className="absolute inset-x-6 bottom-1.5 h-[3px] overflow-hidden rounded-full bg-white/15"
-        >
-          <span
-            className="block h-full origin-left rounded-full bg-white/80 transition-transform duration-300 ease-linear"
-            style={{ transform: `scaleX(${1 - progress})` }}
-          />
-        </span>
-      </div>
-    </div>
-  )
+  return <LiquidDrop label="Up next" track={shown} leaving={phase === 'leave'} progress={progress} />
 }

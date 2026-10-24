@@ -221,7 +221,8 @@ export function QueueTab({
   const history = useRecentlyPlayed(roomId).filter((t, i) => !(i === 0 && t.videoId === nowPlaying?.videoId))
   const source = nowPlaying?.source ?? 'ytm'
   const next = nowPlaying?.nextUp
-  const nextIsShared = next && items.some((item) => item.video_id === next.videoId)
+  const nextIsShared =
+    next && items.some((item) => item.id === next.queueItemId || item.video_id === next.videoId)
 
   return (
     <div className="ytmq-tab-panel flex flex-col pb-4">

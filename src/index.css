@@ -1292,6 +1292,14 @@ body {
     transform: none;
   }
 }
+@keyframes ytmq-drop-bar {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
+}
 .ytmq-drop.is-leaving .ytmq-drop-blob {
   animation: ytmq-drop-out 0.76s cubic-bezier(0.5, 0, 0.3, 1) both;
 }

@@ -2,6 +2,7 @@ import type { RealtimeChannel } from './ytmqClient'
 import {
   playbackChannelName,
   type NowPlaying,
+  type NowPlayingNextUp,
   type NowPlayingSource,
   type PlaybackState,
 } from './playback'
@@ -48,6 +49,19 @@ const sourceListeners = new Set<() => void>()
 let healthInterval: number | undefined
 let visibilityBound = false
 
+function parseTrack(value: unknown): NowPlayingNextUp | undefined {
+  if (!value || typeof value !== 'object') return undefined
+  const t = value as Partial<NowPlayingNextUp>
+  if (!t.videoId) return undefined
+  return {
+    videoId: t.videoId,
+    title: t.title ?? '',
+    artist: t.artist ?? '',
+    thumbnailUrl: t.thumbnailUrl ?? '',
+    queueItemId: typeof t.queueItemId === 'string' ? t.queueItemId : undefined,
+  }
+}
+
 function parseNowPlayingPayload(payload: unknown): NowPlaying | null {
   if (!payload || typeof payload !== 'object') return null
   const p = payload as Partial<NowPlaying> & { state?: PlaybackState }
@@ -72,15 +86,13 @@ function parseNowPlayingPayload(payload: unknown): NowPlaying | null {
       typeof p.volume === 'number' && Number.isFinite(p.volume)
         ? Math.min(100, Math.max(0, p.volume))
         : undefined,
-    nextUp:
-      p.nextUp && typeof p.nextUp === 'object' && p.nextUp.videoId
-        ? {
-            videoId: p.nextUp.videoId,
-            title: p.nextUp.title ?? '',
-            artist: p.nextUp.artist ?? '',
-            thumbnailUrl: p.nextUp.thumbnailUrl ?? '',
-          }
-        : undefined,
+    nextUp: parseTrack(p.nextUp),
+    queued: Array.isArray(p.queued)
+      ? p.queued.flatMap((entry) => {
+          const track = parseTrack(entry?.track)
+          return track && typeof entry.id === 'string' ? [{ id: entry.id, track }] : []
+        })
+      : undefined,
     // Bridges from before sources existed are YouTube Music.
     source: p.source === 'spotify' ? 'spotify' : 'ytm',
     thumbnailUrl:

@@ -5,6 +5,13 @@ type Entry = { date: string; version?: string; items: string[] }
 const ENTRIES: Entry[] = [
   {
     date: 'October 2026',
+    items: [
+      'Up next follows the player that is playing. On Spotify it shows what Spotify really plays next: a song queued in the Spotify app, then the shared song about to go over, then the rest of the album or playlist.',
+      'A song queued in the Spotify app drips down from the top of the screen for everyone in the lobby, like Up next does.',
+    ],
+  },
+  {
+    date: 'October 2026',
     version: 'Extension 1.12',
     items: [
       'New search, built like Spotify\'s: a top result, songs with every artist on them, albums, explicit marks and lengths, plus artists, albums, playlists and videos. Artist, album and playlist pages, and trending songs and moods before you type.',

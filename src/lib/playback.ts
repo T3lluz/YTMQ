@@ -1,11 +1,20 @@
 export type PlaybackState = 'playing' | 'paused' | 'unknown'
 
-/** The track YouTube Music will play after the current one. */
+/** The track the player will play after the current one. */
 export type NowPlayingNextUp = {
   videoId: string
   title: string
   artist: string
   thumbnailUrl: string
+  /** Set when the next song is a row of the shared queue. */
+  queueItemId?: string
+}
+
+/** A song someone put in the player's own queue, outside YTMQ. */
+export type QueuedOnPlayer = {
+  /** Unique per add, so every phone shows it once. */
+  id: string
+  track: NowPlayingNextUp
 }
 
 export type NowPlayingSource = 'ytm' | 'spotify'
@@ -23,11 +32,13 @@ export type NowPlaying = {
   /** Host player volume, 0–100 (0 reflects a muted player). */
   volume?: number
   /**
-   * YouTube Music's own next-up track, read from its live queue by the bridge.
-   * Lets the lyrics "Up next" banner work even when the app's shared queue is
-   * empty (e.g. playing an album/radio directly in YT Music).
+   * The player's own next-up track: YouTube Music's live queue (read by the
+   * bridge) or Spotify's (read by the host tab). Lets the lyrics "Up next"
+   * banner work even when the app's shared queue is empty.
    */
   nextUp?: NowPlayingNextUp
+  /** Songs just queued in the player itself (Spotify), for the "Queued" drop. */
+  queued?: QueuedOnPlayer[]
   /** Which connected player published this snapshot. */
   source?: NowPlayingSource
   /** Album art when the player is not YouTube Music. */

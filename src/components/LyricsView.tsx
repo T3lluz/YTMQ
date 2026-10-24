@@ -13,7 +13,7 @@ import { useImagePalette } from '../hooks/useImagePalette'
 import { useLyrics, prefetchLyrics, type LyricsStatus } from '../hooks/useLyrics'
 import { activeLineIndex, type LyricLine, type Lyrics } from '../lib/lyrics'
 import { paletteCssVars } from '../lib/imagePalette'
-import type { NowPlayingSource, PlaybackAction } from '../lib/playback'
+import { isYoutubeVideoId, type NowPlayingSource, type PlaybackAction } from '../lib/playback'
 import { LyricsUpNext, type UpNextTrack } from './LyricsUpNext'
 import { PlaybackControls, type ShuffleState } from './PlaybackControls'
 import { SquigglyProgress } from './SquigglyProgress'
@@ -109,26 +109,25 @@ export function LyricsView({
       : null,
   )
 
-  // "Up next" mirrors the YT Music on-page banner: prefer YT Music's own live
-  // queue (broadcast by the bridge as `nextUp`) so it works even when the app's
-  // shared queue is empty, and fall back to the shared queue otherwise.
-  const ytmNextUp = nowPlaying?.nextUp
+  // "Up next" is whatever the room's active player says comes next: YouTube
+  // Music's live queue (read by the bridge) or Spotify's (read by the host
+  // tab, which already counts the shared song it is about to hand over).
+  // Only YouTube Music falls back to the shared queue.
+  const playerNextUp = nowPlaying?.nextUp
   const upNext = useMemo<UpNextTrack | null>(() => {
     const currentId = nowPlaying?.videoId
 
-    if (ytmNextUp && (ytmNextUp.title || ytmNextUp.videoId) && ytmNextUp.videoId !== currentId) {
+    if (playerNextUp && (playerNextUp.title || playerNextUp.videoId) && playerNextUp.videoId !== currentId) {
       return {
-        videoId: ytmNextUp.videoId,
-        title: ytmNextUp.title,
-        artist: ytmNextUp.artist,
+        videoId: playerNextUp.videoId,
+        title: playerNextUp.title,
+        artist: playerNextUp.artist,
         thumbnailUrl:
-          ytmNextUp.thumbnailUrl ||
-          (ytmNextUp.videoId ? hqThumbnail(ytmNextUp.videoId) : ''),
+          playerNextUp.thumbnailUrl ||
+          (isYoutubeVideoId(playerNextUp.videoId) ? hqThumbnail(playerNextUp.videoId) : ''),
       }
     }
 
-    // Spotify next-up is whatever the player already has queued. Don't fall
-    // back to the shared YTMQ list — those tracks are for YouTube Music.
     if (nowPlaying?.source === 'spotify') return null
 
     const next = queueItems.find((item) => item.video_id !== currentId)
@@ -139,7 +138,7 @@ export function LyricsView({
       artist: next.channel_title ?? '',
       thumbnailUrl: next.thumbnail_url || hqThumbnail(next.video_id),
     }
-  }, [queueItems, nowPlaying?.videoId, nowPlaying?.source, ytmNextUp])
+  }, [queueItems, nowPlaying?.videoId, nowPlaying?.source, playerNextUp])
 
   // Warm the lyrics cache for the upcoming track so it renders instantly the
   // moment it becomes the now-playing song.
