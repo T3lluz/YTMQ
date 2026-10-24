@@ -771,7 +771,7 @@ export function Room() {
           onCopied={(msg) => showToast(msg, 'info')}
         />
         <ToastStack toasts={toasts} onDismiss={dismiss} />
-        <PlayerQueuedDrop roomId={activeRoomId} />
+        <PlayerQueuedDrop roomId={activeRoomId} placement="page" />
       </main>
     </RoomChromeContext.Provider>
   )

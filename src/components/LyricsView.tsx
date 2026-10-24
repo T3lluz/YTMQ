@@ -6,6 +6,7 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type ReactNode,
 } from 'react'
 import { hqThumbnail, nowPlayingArtwork, type QueueItem } from '../lib/queue'
 import { usePlayer } from '../hooks/usePlayer'
@@ -15,6 +16,7 @@ import { activeLineIndex, type LyricLine, type Lyrics } from '../lib/lyrics'
 import { paletteCssVars } from '../lib/imagePalette'
 import { isYoutubeVideoId, type NowPlayingSource, type PlaybackAction } from '../lib/playback'
 import { LyricsUpNext, type UpNextTrack } from './LyricsUpNext'
+import { PlayerQueuedDrop } from './PlayerQueuedDrop'
 import { PlaybackControls, type ShuffleState } from './PlaybackControls'
 import { SquigglyProgress } from './SquigglyProgress'
 import { SourceBadge } from './ui/brands'
@@ -173,6 +175,7 @@ export function LyricsView({
       lyrics={lyrics}
       fullscreen={fullscreen}
       upNext={upNext}
+      queuedDrop={<PlayerQueuedDrop roomId={roomId} placement="lyrics" />}
       remaining={remaining}
       isPlaying={isPlaying}
       controlsEnabled={player.controlsEnabled}
@@ -252,6 +255,8 @@ export type LyricsScreenProps = {
   lyrics: Lyrics | null
   fullscreen?: boolean
   upNext?: UpNextTrack | null
+  /** The "Queued in Spotify" drop, hung here so native fullscreen shows it. */
+  queuedDrop?: ReactNode
   remaining?: number
   isPlaying?: boolean
   controlsEnabled?: boolean
@@ -288,6 +293,7 @@ export function LyricsScreen({
   lyrics,
   fullscreen = false,
   upNext = null,
+  queuedDrop,
   remaining = Number.POSITIVE_INFINITY,
   isPlaying = false,
   controlsEnabled = false,
@@ -436,6 +442,7 @@ export function LyricsScreen({
       aria-label={`Lyrics for ${title}`}
     >
       <LyricsUpNext track={upNext} remaining={remaining} live={live} enabled />
+      {queuedDrop}
       {fullscreen && <FullscreenButton targetRef={sectionRef} />}
       <LyricsBackdrop art={art} live={live} paletteReady={paletteReady} />
       {showLyrics && (

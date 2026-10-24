@@ -227,24 +227,40 @@ export function startSpotifyPlayer(options: SpotifyPlayerOptions): () => void {
     }
     queueReadAt = Date.now()
     const key = `${id}|${playback.context?.uri ?? ''}|${playback.shuffle_state ? 1 : 0}`
-    const before = queueKey === key ? new Set(spotifyQueue.map((t) => t.uri)) : null
+    const prev = queueKey === key ? spotifyQueue : null
     queueKey = key
     spotifyQueue = next
 
     const uris = new Set(next.map((t) => t.uri))
     for (const uri of queuedByHand) if (!uris.has(uri)) queuedByHand.delete(uri)
-    if (!before || before.size === 0) return
+    if (!prev) return
 
-    // The album or playlist only moves on when the track changes, so a new
-    // song ahead of ones already there was queued in Spotify itself.
+    // While the same track plays, the album or playlist does not move, so a
+    // song that shows up ahead of it was queued in Spotify itself. Spotify
+    // puts those right before the album's next song, so that song is the
+    // anchor; it also works when the rest of the list comes back in another
+    // order. With nothing queued before, any new song counts.
+    const before = new Set(prev.map((t) => t.uri))
     const pushedUris = new Set([...pushed.values()].map((p) => p.uri))
-    let lastKnown = -1
-    next.forEach((t, i) => {
-      if (before.has(t.uri)) lastKnown = i
-    })
-    const added = next.filter(
-      (t, i) => i < lastKnown && !before.has(t.uri) && !pushedUris.has(t.uri) && !queuedByHand.has(t.uri),
-    )
+    const isNew = (t: SpotifyQueueTrack) =>
+      !before.has(t.uri) && !pushedUris.has(t.uri) && !queuedByHand.has(t.uri)
+    let added: SpotifyQueueTrack[]
+    if (prev.length === 0) {
+      added = next.filter(isNew)
+    } else {
+      const anchor = prev.find((t) => !pushedUris.has(t.uri) && !queuedByHand.has(t.uri))?.uri
+      const anchorAt = anchor ? next.findIndex((t) => t.uri === anchor) : -1
+      added = anchorAt > 0 ? next.slice(0, anchorAt).filter(isNew) : []
+      if (added.length === 0) {
+        // Songs queued by hand before YTMQ was watching sit ahead of the
+        // anchor too: fall back to anything slotted in ahead of known songs.
+        let lastKnown = -1
+        next.forEach((t, i) => {
+          if (before.has(t.uri)) lastKnown = i
+        })
+        added = next.filter((t, i) => i < lastKnown && isNew(t))
+      }
+    }
     if (added.length === 0 || added.length > MAX_QUEUED_AT_ONCE) return
     const now = Date.now()
     for (const track of added) {
