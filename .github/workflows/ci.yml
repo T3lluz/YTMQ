@@ -23,7 +23,7 @@ jobs:
 
       - uses: denoland/setup-deno@v2
         with:
-          deno-version: v2.9.6
+          deno-version: v2.9.8
 
       - name: Typecheck server
         working-directory: server

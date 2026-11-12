@@ -11,7 +11,7 @@ name: ytmq
 services:
   # The app, its API, the realtime hub and the search/lyrics functions.
   ytmq:
-    image: denoland/deno:2.9.6
+    image: denoland/deno:2.9.8
     container_name: ytmq
     restart: unless-stopped
     user: "${YTMQ_UID:-1000}:${YTMQ_GID:-1000}"
